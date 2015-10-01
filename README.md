@@ -27,3 +27,6 @@ For older compilers, use:
     make
     make install
 
+In addition, to use the compiled code you have to download the APIs for KeY and LARVA:
+
+www.cse.chalmers.se/~chimento/starvoors/files/StaRVOOrS APIs.zip
