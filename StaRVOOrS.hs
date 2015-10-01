@@ -29,6 +29,13 @@ options =
     , Option "p" ["only_parse"] (ReqArg OnlyParse "address") "only parse the ppDATE script"    
     ]
 
+-------------
+-- Version --
+-------------
+
+version :: String
+version = "StaRVOOrS version 1.25"
+
 ----------
 -- Main --
 ----------
@@ -38,7 +45,7 @@ main =
   do
     args <- SE.getArgs
     case getOpt Permute options args of 
-      ([Version],[],[]) -> putStrLn "StaRVOOrS version 1.25"
+      ([Version],[],[]) -> putStrLn version
       ([OnlyParse ppdate_fn],[],[]) -> 
         do s <- isPPDATEfile ppdate_fn
            if (s == "")
