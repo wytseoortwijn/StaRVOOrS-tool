@@ -92,6 +92,13 @@ getListOfTypesAndVars cl ((main, cl',ts):xs) = if (cl == cl')
                                                then ts
                                                else getListOfTypesAndVars cl xs
 
+
+addComma :: [String] -> String
+addComma []       = ""
+addComma [xs]     = xs
+addComma (xs:xss) = xs ++ "," ++ addComma xss
+
+
 ---------------------------------------
 -- Manipulating the parsed .xml file --
 ---------------------------------------

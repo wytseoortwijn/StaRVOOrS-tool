@@ -88,13 +88,14 @@ methodForPost c env ctnewvars =
  let (argsPost, argsPostwt) = lookForAllExitEventArgs env (snd $ methodCN c)
      tnvs    = getConstTnv c ctnewvars
      tnvs'   = auxNewVars tnvs
-     newargs = init $ foldr (\ x xs -> x ++ "," ++ xs) "" tnvs'
+     newargs = addComma tnvs'
      nargs   = if (null tnvs) then "" else "," ++ newargs
  in 
   "  // " ++ (contractName c) ++ "\n"
   ++ "  public static boolean " ++ (contractName c) ++ "_post(" ++ argsPost ++ nargs ++ ") {\n" 
   ++ "    return " ++ (post c) ++ ";\n" 
   ++ "  }\n\n"
+
 
 getConstTnv :: Contract ->  [(Contract, Variables)] -> Variables
 getConstTnv c []             = []

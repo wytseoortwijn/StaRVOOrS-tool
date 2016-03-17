@@ -421,13 +421,16 @@ lookForAllEntryEventArgs env mn =
            let classPre     = words $ varClass'
                varClass     = last classPre
                argsPrewt    = map getArgsId argsPre    
-               argsPrewt'   = init $ foldr (\ x xs -> x ++ "," ++ xs) "" argsPrewt
+               argsPrewt'   = addComma argsPrewt
                argsPrewt''  = if (elem varClass argsPrewt) 
                               then argsPrewt'
                               else varClass ++ "," ++ argsPrewt'
+               flatArgsPre  = flattenArgs argsPre
                argsPre'     = if (elem varClass argsPrewt) 
                               then flattenArgs argsPre
-                              else (trim varClass')  ++ "," ++ flattenArgs argsPre
+                              else if (null flatArgsPre)
+                                   then trim varClass'
+                                   else (trim varClass')  ++ "," ++ flattenArgs argsPre
            in (argsPre', argsPrewt'')
 
 lookForAllExitEventArgs :: Env -> MethodName -> (String, String)
@@ -438,13 +441,16 @@ lookForAllExitEventArgs env mn =
            let classPost    = words $ varClass'
                varClass     = last classPost
                argsPostwt   = map getArgsId argsPost
-               argsPostwt'  = init $ foldr (\ x xs -> x ++ "," ++ xs) "" argsPostwt
+               argsPostwt'  = addComma argsPostwt
                argsPostwt'' = if (elem varClass argsPostwt) 
                               then argsPostwt'
                               else varClass ++ "," ++ argsPostwt'
+               flatArgsPost = flattenArgs argsPost
                argsPost'    = if (elem varClass argsPostwt) 
-                              then flattenArgs argsPost
-                              else (trim varClass')  ++ "," ++ flattenArgs argsPost
+                              then flatArgsPost
+                              else if (null flatArgsPost)
+                                   then trim varClass'
+                                   else (trim varClass')  ++ "," ++ flattenArgs argsPost
            in (argsPost', argsPostwt'')
 
 flattenArgs :: [Args] -> String
