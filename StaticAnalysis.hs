@@ -64,14 +64,14 @@ staticAnalysis' jpath ppd output_add =
                let ppdate'  = ppd >>= (\x -> return $ refinePPDATE x xml')
                info <- report xml'
                writeFile (output_add ++ "/report.txt") info
-               putStrLn "\nStatic analysis completed."
+               putStrLn "\nStatic verification completed."
                putStrLn "Generating Java files to control the (partially proven) contracts."                  
                methods <- publicMethodsNames ppdate' jpath
                let (ppdate'', tnewvars) = operationalizeOldResultBind ppdate' methods
                let add = output_add ++ "/ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
-               createDirectoryIfMissing True (output_add ++ "/" ++ annotated_add)
+               createDirectoryIfMissing True (output_add ++ "/" ++ annotated_add) 
                contractsJavaFileGen ppdate'' add tnewvars
                idFileGen add
                copyFiles jpath (output_add ++ "/" ++ annotated_add)

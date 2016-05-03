@@ -150,10 +150,8 @@ idGen :: String
 idGen =
  "package ppArtifacts;\n\n"
   ++ "public class Id {\n\n"
-  ++ "  private static int count; \n\n"
-  ++ "  public Id () {\n"
-  ++ "     count = 0;\n"
-  ++ "  }\n\n"
+  ++ "  private static int count = 0; \n\n"
+  ++ "  public Id () { }\n\n"
   ++ "public Integer getNewId() {\n"
   ++ "  Integer r = new Integer(count);\n"
   ++ "  count++;\n\n"
