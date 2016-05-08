@@ -9,7 +9,7 @@ import ErrM
 
 
 translate :: UpgradePPD PPDATE -> FilePath -> IO ()
-translate ppd fpath = 
+translate ppd fpath =
  do let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
     putStrLn "Translating ppDATE to DATE."
     writeFile fpath (writeImports (importsGet ppdate))
@@ -49,8 +49,8 @@ writeGlobal ppdate env = let global = ctxtGet $ globalGet ppdate
                              vars'  = if (null consts)
                                       then if (null vars) then "" else "VARIABLES {\n" ++ writeVariables vars ++ "}\n\n"
                                       else "VARIABLES {\n" ++ makeChannels (length consts) ++ writeVariables vars ++ "}\n\n"
-                         in "GLOBAL {\n\n"                            
-                            ++ vars'                            
+                         in "GLOBAL {\n\n"
+                            ++ vars'
                             ++ writeEvents es consts
                             ++ writeProperties prop consts es env
                             ++ writeForeach fors consts env
@@ -95,16 +95,16 @@ generateChannels n = generateChannels (n-1) ++ " Channel h" ++ show n ++ " = new
 
 writeEvents :: Events -> Contracts -> String
 writeEvents [] _      = ""
-writeEvents es consts = "EVENTS {\n" 
-                        ++ writeAllEvents (instrumentEvents es consts) 
+writeEvents es consts = "EVENTS {\n"
+                        ++ writeAllEvents (instrumentEvents es consts)
                         ++ "}\n\n"
 
 writeAllEvents :: Events -> String
 writeAllEvents []     = ""
-writeAllEvents (e:es) = (getEvent e) ++ writeAllEvents es 
+writeAllEvents (e:es) = (getEvent e) ++ writeAllEvents es
 
 getEvent :: EventDef -> String
-getEvent (EventDef e arg cpe wc) = 
+getEvent (EventDef e arg cpe wc) =
  let wc' = if (wc == "") then "" else " where {" ++ wc ++ "}"
  in e ++ "(" ++ getBindArgs' arg ++ ") = " ++ getCpe cpe ++ wc' ++ "\n"
 
@@ -128,12 +128,12 @@ getCollectionCpeCompoundEvent :: [CompoundEvent] -> String
 getCollectionCpeCompoundEvent []   = ""
 getCollectionCpeCompoundEvent [ce] = getCpeCompoundEvent ce
 getCollectionCpeCompoundEvent (ce:y:ys) = getCpeCompoundEvent ce ++ " | " ++ getCollectionCpeCompoundEvent (y:ys)
- 
+
 getCpeCompoundEvent :: CompoundEvent -> String
 getCpeCompoundEvent (OnlyIdPar id)                 = "{" ++ id ++ "()" ++ "}"
 getCpeCompoundEvent (OnlyId id)                    = "{" ++ id ++ "}"
 getCpeCompoundEvent (ClockEvent id n)              = "{" ++ id ++ "@" ++ show n ++ "}"
-getCpeCompoundEvent (NormalEvent bind id bs ev)    = "{" ++ getBinding bind ++ id ++ "(" ++ getBindArgs bs ++ ")" 
+getCpeCompoundEvent (NormalEvent bind id bs ev)    = "{" ++ getBinding bind ++ id ++ "(" ++ getBindArgs bs ++ ")"
                                                      ++ getEventVariation' ev ++ "}"
 getCpeCompoundEvent _                              = ""
 
@@ -160,8 +160,8 @@ auxGetEventVariation' [BindId ret] = ret
 
 
 -- Checks if the event to control has to be the auxiliary one (in case of optimization by key)
-instrumentEvents :: Events -> Contracts -> Events 
-instrumentEvents [] cs     = [] 
+instrumentEvents :: Events -> Contracts -> Events
+instrumentEvents [] cs     = []
 instrumentEvents (e:es) cs = let (b,mn,bs) = lookupContractForEvent e cs in
                              if b
                              then let e'  = updateMethodCallName e (mn++"Aux")
@@ -171,8 +171,8 @@ instrumentEvents (e:es) cs = let (b,mn,bs) = lookupContractForEvent e cs in
 
 lookupContractForEvent :: EventDef -> Contracts -> (Bool, MethodName, [Bind])
 lookupContractForEvent e []     = (False,"", [])
-lookupContractForEvent e (c:cs) = case compEvent e of 
-                                       NormalEvent _ id bs _ -> if (id == snd (methodCN c)) 
+lookupContractForEvent e (c:cs) = case compEvent e of
+                                       NormalEvent _ id bs _ -> if (id == snd (methodCN c))
                                                                 then (True, id, bs)
                                                                 else lookupContractForEvent e cs
                                        otherwise             -> lookupContractForEvent e cs
@@ -183,10 +183,10 @@ lookupContractForEvent e (c:cs) = case compEvent e of
 
 writeProperties :: Property -> Contracts -> Events -> Env -> String
 writeProperties PNIL _ _ _         = ""
-writeProperties prop consts es env = 
+writeProperties prop consts es env =
  let fors   = forsVars env --list of foreach variables
      xs     = getProperties prop consts es
-     ra     = generateReplicatedAutomata consts fors es     
+     ra     = generateReplicatedAutomata consts fors es
  in if (null fors)
     then xs ++ ra ++ "\n}\n"
     else xs ++ ra ++ "\n}\n}\n"
@@ -197,15 +197,15 @@ getProperties prop cs es = writeProperty prop cs es
 
 writeProperty :: Property -> Contracts -> Events -> String
 writeProperty PNIL _ _                                 = ""
-writeProperty (Property name states trans props) cs es = 
+writeProperty (Property name states trans props) cs es =
   "PROPERTY " ++ name ++ " \n{\n\n"
   ++ writeStates states
-  ++ writeTransitions trans cs states es 
+  ++ writeTransitions trans cs states es
   ++ "}\n\n"
   ++ writeProperty props cs es
 
 writeStates :: States -> String
-writeStates (States acc bad normal start) = 
+writeStates (States acc bad normal start) =
  let acc'    = getStates acc
      bad'    = getStates bad
      normal' = getStates normal
@@ -219,7 +219,7 @@ writeStates (States acc bad normal start) =
 
 writeState :: String -> String -> String
 writeState iden xs = if (clean xs == "")
-                     then "" 
+                     then ""
                      else iden ++ " { " ++ xs ++ "}\n"
 
 getStates :: [State] -> String
@@ -229,22 +229,22 @@ getStates (State n _:xs) = n ++ " " ++ getStates xs
 --Contracts [] -> Replicated Automata
 --Contracts non-empty -> Property transitions instrumentation
 writeTransitions :: Transitions -> Contracts -> States -> Events -> String
-writeTransitions ts [] _ _ = 
- "TRANSITIONS \n{ \n" 
+writeTransitions ts [] _ _ =
+ "TRANSITIONS \n{ \n"
  ++ concat (map getTransition ts)
  ++ "}\n\n"
 writeTransitions ts (c:cs) states es =
- "TRANSITIONS \n{ \n" 
+ "TRANSITIONS \n{ \n"
   ++ (concat (map getTransition (getTransitionsGeneral (c:cs) states ts es)))
   ++ "}\n\n"
 
 getTransition :: Transition -> String
-getTransition (Transition q (Arrow e c act) q') = 
+getTransition (Transition q (Arrow e c act) q') =
      q ++ " -> " ++ q' ++ " [" ++ e ++ " \\ "  ++ c ++ " \\ " ++ act ++ "]\n"
 
 getTransitionsGeneral :: Contracts -> States -> Transitions -> Events -> Transitions
-getTransitionsGeneral cs (States acc bad nor star) ts es = 
- let ts1 = generateTransitions acc cs ts es 
+getTransitionsGeneral cs (States acc bad nor star) ts es =
+ let ts1 = generateTransitions acc cs ts es
      ts2 = generateTransitions bad cs ts1 es
      ts3 = generateTransitions nor cs ts2 es
      ts4 = generateTransitions star cs ts3 es
@@ -258,7 +258,7 @@ generateTransitions ((State ns l@(_:_)):xs) cs ts es  = let ts' = accumTransitio
 
 accumTransitions :: [ContractName] -> NameState -> Contracts -> Transitions -> Events -> Transitions
 accumTransitions [] _ _ ts _              = ts
-accumTransitions (cn:cns) ns consts ts es = 
+accumTransitions (cn:cns) ns consts ts es =
  let ts' = generateTransition cn ns consts ts es
  in accumTransitions cns ns consts ts' es
 
@@ -272,16 +272,16 @@ generateTransition p ns cs ts es = let c             = lookForContract p cs
                                       else let ext = makeExtraTransitionAlg2 lts c e es ns
                                                xs  = map (\x -> instrumentTransitionAlg2 c x e es) lts
                                            in nonlts ++ xs ++ [ext]
-    
+
 
 makeTransitionAlg1Cond :: NameState -> Event -> Events -> Contract -> Transition
-makeTransitionAlg1Cond ns e events c = 
+makeTransitionAlg1Cond ns e events c =
  let p     = pre c
      p'    = post c
-     cn    = contractName c 
+     cn    = contractName c
      xs    = splitOnIdentifier cn p'
-     esinf = map getInfoEvent events   
-     arg   = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e  
+     esinf = map getInfoEvent events
+     arg   = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
      c'    = "Contracts." ++ cn ++ "_pre(" ++ arg ++ ")"
      act   = "h" ++ show (chGet c) ++ ".send(id);"
  in if (length xs == 1)
@@ -296,7 +296,7 @@ makeTransitionAlg1Cond ns e events c =
 
 makeExtraTransitionAlg2Cond :: Transitions -> String
 makeExtraTransitionAlg2Cond []     = ""
-makeExtraTransitionAlg2Cond (t:ts) =  
+makeExtraTransitionAlg2Cond (t:ts) =
  let cond'  = cond $ arrow t
      cond'' = if (null $ clean cond') then "true" else cond'
  in
@@ -311,13 +311,13 @@ makeExtraTransitionAlg2 ts c e es ns = let esinf = map getInfoEvent es
 
 
 instrumentTransitionAlg2 :: Contract -> Transition -> Event -> Events -> Transition
-instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e events = 
+instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e events =
  let p  = pre c
      p' = post c
-     cn = contractName c 
+     cn = contractName c
      xs = splitOnIdentifier cn p'
      esinf = map getInfoEvent events
-     arg = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e  
+     arg = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
  in if (length xs == 1)
     then let semicol = if (act == "") then "" else ";"
              act'    = " if (Contracts." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(id);}"
@@ -364,15 +364,16 @@ generateReplicatedAutomata cs fs es = let n      = length cs
 generateProp :: [(String,String)] -> String
 generateProp []            = ""
 generateProp ((es,ps):eps) = "FOREACH (Integer id) {\n\n"
+                             ++ "VARIABLES {\n" ++ "Integer idAux ;\n " ++ "}\n\n"
                              ++ "EVENTS {\n" ++ es ++ "}\n\n"
                              ++ ps
                              ++ "}\n\n"
                              ++ generateProp eps
 
 getInfoEvent :: EventDef -> (Event, [String])
-getInfoEvent (EventDef en args ce w) = case ce of 
-                                            NormalEvent (BindingVar bind) _ _ _ -> 
-                                                case bind of 
+getInfoEvent (EventDef en args ce w) = case ce of
+                                            NormalEvent (BindingVar bind) _ _ _ ->
+                                                case bind of
                                                      BindType t id -> (en, splitOnIdentifier "," $ getBindArgs' ((BindType t id):args))
                                                      otherwise     -> (en, splitOnIdentifier "," $ getBindArgs' args)
                                             otherwise -> error "Error: Trying to generate a replicated automaton for an incorrect event.\n"
@@ -387,15 +388,15 @@ generateEventsRA :: String -> Int -> [String]
 generateEventsRA fs n = map (generateEventRA fs) [1..n]
 
 generateEventRA :: String -> Int -> String
-generateEventRA fs n = 
-  "rh" ++ show n ++ "(Integer idfrom) = {h"++ show n ++ ".receive(idfrom)} where {id=idfrom;" 
+generateEventRA fs n =
+  "rh" ++ show n ++ "(Integer idfrom) = {h"++ show n ++ ".receive(idfrom)} where {id=idfrom;"
    ++ fs ++  "}\n"
 
 generateRAString :: [(Event, [String])] -> Events -> Contract -> Int -> String
-generateRAString esinf es c n = 
+generateRAString esinf es c n =
   let ra = generateRA esinf es c n
       cn = pName ra
-  in "PROPERTY " ++ cn ++ "\n{\n\n" 
+  in "PROPERTY " ++ cn ++ "\n{\n\n"
      ++ writeStates (pStates ra)
      ++ writeTransitions (pTransitions ra) [] (States [] [] [] []) []
      ++ "}\n\n"
@@ -407,7 +408,7 @@ generateRAString esinf es c n =
 
 writeForeach :: Foreaches -> Contracts -> Env -> String
 writeForeach [] _ _                         = ""
-writeForeach [Foreach args ctxt] consts env = 
+writeForeach [Foreach args ctxt] consts env =
  let vars   = variables ctxt
      es     = events ctxt
      prop   = property ctxt
@@ -416,7 +417,7 @@ writeForeach [Foreach args ctxt] consts env =
               then ""
               else "VARIABLES {\n" ++ writeVariables vars ++ "}\n\n"
  in "FOREACH (" ++ getForeachArgs args ++ ") {\n\n"
-    ++ vars'    
+    ++ vars'
     ++ writeEvents es consts
     ++ writeProperties prop consts es env
     ++ writeForeach fors consts env
