@@ -54,7 +54,7 @@ removeStatesProp cn prop = let States acc bad nor star = pStates prop
                            in Property (pName prop) states (pTransitions prop) (removeStatesProp cn (pProps prop))
 
 removeStateProp :: State -> ContractName -> State
-removeStateProp (State ns cns) cn = State ns (removePropInState cn cns)
+removeStateProp (State ns ic cns) cn = State ns ic (removePropInState cn cns)
 
 removePropInState :: ContractName -> [ContractName] -> [ContractName]
 removePropInState cn []        = []

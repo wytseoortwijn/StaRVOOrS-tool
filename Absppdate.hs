@@ -127,7 +127,7 @@ data Starting =
   deriving (Eq,Ord,Show,Read)
 
 data State =
-   State NameState ContractNames
+   State NameState InitialCode ContractNames
   deriving (Eq,Ord,Show,Read)
 
 data NameState =
@@ -141,6 +141,11 @@ data ContractNames =
 
 data ContractName =
    CN Id
+  deriving (Eq,Ord,Show,Read)
+
+data InitialCode =
+   InitNil
+ | InitProg Java
   deriving (Eq,Ord,Show,Read)
 
 data Transitions =

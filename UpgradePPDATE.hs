@@ -271,8 +271,12 @@ getStarting' :: Abs.Starting -> Starting
 getStarting' (Abs.StartingDef ss) = map getState ss
 
 getState :: Abs.State -> State
-getState (Abs.State (Abs.NameState id) Abs.CNSNil) = State (getIdAbs id) []
-getState (Abs.State (Abs.NameState id) (Abs.CNS cns)) = State (getIdAbs id) (map (getIdAbs.getConstNameAbs) cns)
+getState (Abs.State (Abs.NameState id) ic Abs.CNSNil) = State (getIdAbs id) (getInitCode ic) []
+getState (Abs.State (Abs.NameState id) ic (Abs.CNS cns)) = State (getIdAbs id) (getInitCode ic) (map (getIdAbs.getConstNameAbs) cns)
+
+getInitCode :: Abs.InitialCode -> InitialCode
+getInitCode Abs.InitNil      = InitNil
+getInitCode (Abs.InitProg p) = InitProg (getJava p)
 
 getTransitions :: Abs.Transitions -> Transitions
 getTransitions (Abs.Transitions ts) = map getTransition' ts
@@ -386,6 +390,9 @@ getConstNameAbs (Abs.CN id) = id
 
 getJML :: Abs.JML -> JML
 getJML jml = printTree jml
+
+getJava :: Abs.Java -> Java
+getJava java = printTree java
 
 getMethodClassInfo :: Abs.Method -> ClassInfo
 getMethodClassInfo (Abs.Method ci _) = getIdAbs ci

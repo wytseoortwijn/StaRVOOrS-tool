@@ -108,7 +108,7 @@ eitherResIdent tv s = treeFind resWords
                               | s == a = t
 
 resWords :: BTree
-resWords = b "METHODS" 22 (b "ACCEPTING" 11 (b "." 6 (b "*" 3 (b ")" 2 (b "(" 1 N N) N) (b "->" 5 (b "," 4 N N) N)) (b "=" 9 (b ";" 8 (b "/" 7 N N) N) (b "@" 10 N N))) (b "EVENTS" 17 (b "CINVARIANTS" 14 (b "BAD" 13 (b "ASSIGNABLE" 12 N N) N) (b "CONTRACTS" 16 (b "CONTRACT" 15 N N) N)) (b "IMPORTS" 20 (b "GLOBAL" 19 (b "FOREACH" 18 N N) N) (b "METHOD" 21 N N)))) (b "]" 33 (b "STATES" 28 (b "PRE" 25 (b "POST" 24 (b "NORMAL" 23 N N) N) (b "STARTING" 27 (b "PROPERTY" 26 N N) N)) (b "[" 31 (b "VARIABLES" 30 (b "TRANSITIONS" 29 N N) N) (b "\\" 32 N N))) (b "uponThrowing" 38 (b "uponHandling" 36 (b "import" 35 (b "final" 34 N N) N) (b "uponReturning" 37 N N)) (b "|" 41 (b "{" 40 (b "where" 39 N N) N) (b "}" 42 N N))))
+resWords = b "METHODS" 22 (b "ACCEPTING" 11 (b "." 6 (b "*" 3 (b ")" 2 (b "(" 1 N N) N) (b "->" 5 (b "," 4 N N) N)) (b "=" 9 (b ";" 8 (b "/" 7 N N) N) (b "@" 10 N N))) (b "GLOBAL" 17 (b "CINVARIANTS" 14 (b "BAD" 13 (b "ASSIGNABLE" 12 N N) N) (b "FOREACH" 16 (b "EVENTS" 15 N N) N)) (b "IMPORTS" 20 (b "HTRIPLES" 19 (b "HT" 18 N N) N) (b "METHOD" 21 N N)))) (b "]" 33 (b "STATES" 28 (b "PRE" 25 (b "POST" 24 (b "NORMAL" 23 N N) N) (b "STARTING" 27 (b "PROPERTY" 26 N N) N)) (b "[" 31 (b "VARIABLES" 30 (b "TRANSITIONS" 29 N N) N) (b "\\" 32 N N))) (b "uponThrowing" 38 (b "uponHandling" 36 (b "import" 35 (b "final" 34 N N) N) (b "uponReturning" 37 N N)) (b "|" 41 (b "{" 40 (b "where" 39 N N) N) (b "}" 42 N N))))
    where b s n = let bs = id s
                   in B bs (TS bs n)
 

@@ -163,7 +163,7 @@ transStarting x = case x of
 
 transState :: State -> Result
 transState x = case x of
-  State namestate contractnames  -> failure x
+  State namestate initialcode contractnames  -> failure x
 
 
 transNameState :: NameState -> Result
@@ -180,6 +180,12 @@ transContractNames x = case x of
 transContractName :: ContractName -> Result
 transContractName x = case x of
   CN id  -> failure x
+
+
+transInitialCode :: InitialCode -> Result
+transInitialCode x = case x of
+  InitNil  -> failure x
+  InitProg java  -> failure x
 
 
 transTransitions :: Transitions -> Result

@@ -44,7 +44,7 @@ makeTransitions c n esinf es =
 
 makeReplicateAutomaton :: [(Event, [String])] -> Events -> Contract -> Int -> Property
 makeReplicateAutomaton esinf es c n = Property (contractName c)
-                                               (States [State "postOK" []] [State "bad" []] [State "idle" []] [State "start" []])
+                                               (States [State "postOK" InitNil []] [State "bad" InitNil []] [State "idle" InitNil []] [State "start" InitNil []])
                                                (makeTransitions c n esinf es)
                                                PNIL
 

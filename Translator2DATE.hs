@@ -224,7 +224,11 @@ writeState iden xs = if (clean xs == "")
 
 getStates :: [State] -> String
 getStates []              = ""
-getStates (State n _:xs) = n ++ " " ++ getStates xs
+getStates (State n ic _:xs) = n ++ " " ++ getInitCode' ic ++ " " ++ getStates xs
+
+getInitCode' :: InitialCode -> String
+getInitCode' InitNil         = ""
+getInitCode' (InitProg java) = "{" ++ init java ++ "}"
 
 --Contracts [] -> Replicated Automata
 --Contracts non-empty -> Property transitions instrumentation
@@ -251,10 +255,10 @@ getTransitionsGeneral cs (States acc bad nor star) ts es =
  in ts4
 
 generateTransitions :: [State] -> Contracts -> Transitions -> Events -> Transitions
-generateTransitions [] _ ts _                         = ts
-generateTransitions ((State ns []):xs) cs ts es       = generateTransitions xs cs ts es
-generateTransitions ((State ns l@(_:_)):xs) cs ts es  = let ts' = accumTransitions l ns cs ts es
-                                                        in generateTransitions xs cs ts' es
+generateTransitions [] _ ts _                            = ts
+generateTransitions ((State ns ic []):xs) cs ts es       = generateTransitions xs cs ts es
+generateTransitions ((State ns ic l@(_:_)):xs) cs ts es  = let ts' = accumTransitions l ns cs ts es
+                                                           in generateTransitions xs cs ts' es
 
 accumTransitions :: [ContractName] -> NameState -> Contracts -> Transitions -> Events -> Transitions
 accumTransitions [] _ _ ts _              = ts

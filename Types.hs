@@ -159,16 +159,24 @@ type ErrorMsg = String
 -- PROPERTY --
 --------------
 
+data InitialCode =
+   InitNil
+ | InitProg Java
+  deriving (Eq,Ord,Show,Read)
+
 type PropertyName = String
 type NameState = String
 
-data State = State NameState [ContractName] deriving (Show, Eq,Read)
+data State = State NameState InitialCode [ContractName] deriving (Show, Eq,Read)
 
 getCNList :: State -> [ContractName]
-getCNList (State ns cns) = cns
+getCNList (State ns ic cns) = cns
 
 getNS :: State -> NameState
-getNS (State ns cns) = ns
+getNS (State ns ic cns) = ns
+
+getInitialCode :: State -> InitialCode
+getInitialCode (State ns ic cns) = ic
 
 type Accepting = [State]
 type Bad = [State]

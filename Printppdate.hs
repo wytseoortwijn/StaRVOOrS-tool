@@ -278,7 +278,7 @@ instance Print Starting where
 
 instance Print State where
   prt i e = case e of
-   State namestate contractnames -> prPrec i 0 (concatD [prt 0 namestate , prt 0 contractnames])
+   State namestate initialcode contractnames -> prPrec i 0 (concatD [prt 0 namestate , prt 0 initialcode , prt 0 contractnames])
 
   prtList es = case es of
    [] -> (concatD [])
@@ -302,6 +302,12 @@ instance Print ContractName where
   prtList es = case es of
    [x] -> (concatD [prt 0 x])
    x:xs -> (concatD [prt 0 x , doc (showString ",") , prt 0 xs])
+
+instance Print InitialCode where
+  prt i e = case e of
+   InitNil  -> prPrec i 0 (concatD [])
+   InitProg java -> prPrec i 0 (concatD [doc (showString "{") , prt 0 java , doc (showString "}")])
+
 
 instance Print Transitions where
   prt i e = case e of
@@ -360,13 +366,13 @@ instance Print CInvariant where
 
 instance Print Contracts where
   prt i e = case e of
-   Contracts contracts -> prPrec i 0 (concatD [doc (showString "CONTRACTS") , doc (showString "{") , prt 0 contracts , doc (showString "}")])
+   Contracts contracts -> prPrec i 0 (concatD [doc (showString "HTRIPLES") , doc (showString "{") , prt 0 contracts , doc (showString "}")])
    Constempty  -> prPrec i 0 (concatD [])
 
 
 instance Print Contract where
   prt i e = case e of
-   Contract id pre method post assignable -> prPrec i 0 (concatD [doc (showString "CONTRACT") , prt 0 id , doc (showString "{") , prt 0 pre , prt 0 method , prt 0 post , prt 0 assignable , doc (showString "}")])
+   Contract id pre method post assignable -> prPrec i 0 (concatD [doc (showString "HT") , prt 0 id , doc (showString "{") , prt 0 pre , prt 0 method , prt 0 post , prt 0 assignable , doc (showString "}")])
 
   prtList es = case es of
    [x] -> (concatD [prt 0 x])
