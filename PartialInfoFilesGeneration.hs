@@ -7,7 +7,7 @@ import CommonFunctions
 import OperationalizationPP
 import UpgradePPDATE
 import ErrM
-
+import Data.List
 
 --------------------
 -- Contracts.java --
@@ -83,16 +83,18 @@ auxNewVars :: Variables -> [String]
 auxNewVars []                          = []
 auxNewVars (Var _ t [VarDecl id _]:xs) = (t ++ " " ++ id):auxNewVars xs
 
+
 methodForPost :: Contract -> Env -> [(Contract, Variables)] -> String
 methodForPost c env ctnewvars =
  let (argsPost, argsPostwt) = lookForAllExitEventArgs env (snd $ methodCN c)
-     tnvs    = getConstTnv c ctnewvars
-     tnvs'   = auxNewVars tnvs
-     newargs = addComma tnvs'
-     nargs   = if (null tnvs) then "" else "," ++ newargs
+     tnvs      = getConstTnv c ctnewvars
+     tnvs'     = auxNewVars tnvs
+     newargs   = addComma tnvs'
+     nargs     = if (null tnvs) then "" else "," ++ newargs
+     argsPost' = if (isInfixOf "ret" argsPost) then init argsPost else argsPost
  in 
   "  // " ++ (contractName c) ++ "\n"
-  ++ "  public static boolean " ++ (contractName c) ++ "_post(" ++ argsPost ++ nargs ++ ") {\n" 
+  ++ "  public static boolean " ++ (contractName c) ++ "_post(" ++ argsPost' ++ nargs ++ ") {\n" 
   ++ "    return " ++ (post c) ++ ";\n" 
   ++ "  }\n\n"
 
