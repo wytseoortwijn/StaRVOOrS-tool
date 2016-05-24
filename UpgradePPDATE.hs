@@ -423,7 +423,7 @@ joinImport (xs:ys:iss) = xs ++ "." ++ joinImport (ys:iss)
 lookForAllEntryEventArgs :: Env -> MethodName -> (String, String)
 lookForAllEntryEventArgs env mn = 
  case Map.lookup mn (entryEventsInfo env) of
-      Nothing -> error ""
+      Nothing -> error $ "Problem when looking for arguments of an entry event associated to method " ++ mn ++ ".\n" 
       Just (_, varClass', argsPre) -> 
            let classPre     = words $ varClass'
                varClass     = last classPre
@@ -443,7 +443,7 @@ lookForAllEntryEventArgs env mn =
 lookForAllExitEventArgs :: Env -> MethodName -> (String, String)
 lookForAllExitEventArgs env mn =
  case Map.lookup mn (exitEventsInfo env) of
-      Nothing -> error ""
+      Nothing -> error $ "Problem when looking for arguments of an exit event associated to method " ++ mn ++ ".\n" 
       Just (_, varClass', argsPost) -> 
            let classPost    = words $ varClass'
                varClass     = last classPost

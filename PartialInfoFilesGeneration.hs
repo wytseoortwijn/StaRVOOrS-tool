@@ -32,7 +32,7 @@ contractsJavaFileGen ppd output_add tnewvars =
        let address = output_add ++ "Contracts.java"
        writeFile address (genPackageInfo ++ genImports' imp ++ "\n\n")
        appendFile address "public class Contracts {\n\n  Contracts () {}\n\n"
-       if (null consts) then return () else appendFile address body
+       if (null consts) then return () else appendFile address body       
        appendFile address "\n}"
 
 joinInfo :: ((String, String), String, String) -> String
@@ -108,7 +108,7 @@ getConstTnv c ((c',tnvs):cs) = if (c == c')
 --check opt for new predicates for the precondition due to partial proof
 methodForPre :: Contract -> Env -> String
 methodForPre c env =
- let (argsPre, argsPrewt) = lookForAllEntryEventArgs env (snd $ methodCN c)     
+ let (argsPre, _) = lookForAllEntryEventArgs env (snd $ methodCN c)     
  in 
   "  // " ++ (contractName c) ++ "\n"
   ++ "  public static boolean " ++ (contractName c) ++ "_pre(" ++ argsPre ++ ") {\n" 
