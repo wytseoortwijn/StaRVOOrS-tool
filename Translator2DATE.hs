@@ -141,6 +141,7 @@ getBindArgs :: [Bind] -> String
 getBindArgs []                 = ""
 getBindArgs [BindId id]        = id
 getBindArgs ((BindId id):y:ys) = id ++ "," ++ getBindArgs (y:ys)
+getBindArgs (BindStar:ys)      = "*," ++ getBindArgs ys
 
 getBinding :: Binding -> String
 getBinding (BindingVar BindStar)        = "*."

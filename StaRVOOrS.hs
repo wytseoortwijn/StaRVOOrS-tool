@@ -34,7 +34,7 @@ options =
 -------------
 
 version :: String
-version = "StaRVOOrS version 1.25"
+version = "StaRVOOrS version 1.3"
 
 ----------
 -- Main --
