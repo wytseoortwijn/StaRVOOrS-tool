@@ -1,4 +1,4 @@
-# StaRVOOrS-tool
+# StaRVOOrS
 
 In order to work with the source code you have to install the following packages:
 
