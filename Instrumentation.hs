@@ -40,7 +40,7 @@ instrumentFile i consts jpath output_add =
     let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")
     r <- readFile file_add
     let java = (\(Right x) -> x) $ parseJavaFile r
-    let mns  = getMethodsNames cl consts
+    let mns  = removeDuplicates $ getMethodsNames cl consts
     let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
     let decls  = (getDecls.getClassBody) java_aux
     let decls' = instrumentMethodMemberDecl' decls mns

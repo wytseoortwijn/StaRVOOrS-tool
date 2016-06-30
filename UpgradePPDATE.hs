@@ -3,6 +3,7 @@ module UpgradePPDATE where
 import Types
 import CommonFunctions
 import Control.Monad
+import Data.Maybe
 import qualified Control.Monad.State as CM
 import qualified Data.Map as Map
 import qualified Absppdate as Abs
@@ -51,18 +52,18 @@ getCtxt (Abs.Ctxt vars es prop foreaches) =
     es' <- getEvents es
     fors <- getForeaches foreaches
     let vars' = getVars vars
-    let prop' = getProperty prop
-    let pn    = pName prop'
+    let prop' = getProperty prop (allEventsId env)
     case prop' of
-         PNIL                              -> return (Ctxt vars' es' prop' fors)
-         Property pname states trans props -> let accep  = checkAllContractsExist (getAccepting states) cns pn
-                                                  bad    = checkAllContractsExist (getBad states) cns pn
-                                                  normal = checkAllContractsExist (getNormal states) cns pn
-                                                  start  = checkAllContractsExist (getStarting states) cns pn 
-                                                  errs   = accep ++ bad ++ normal ++ start
-                                              in if (null errs)
-                                                 then return (Ctxt vars' es' prop' fors)
-                                                 else fail $ concat errs
+         Just PNIL                                -> return (Ctxt vars' es' PNIL fors)
+         Just (Property pname states trans props) -> let pn = pName (fromJust prop')
+                                                         accep  = checkAllContractsExist (getAccepting states) cns pn
+                                                         bad    = checkAllContractsExist (getBad states) cns pn
+                                                         normal = checkAllContractsExist (getNormal states) cns pn
+                                                         start  = checkAllContractsExist (getStarting states) cns pn 
+                                                         errs   = accep ++ bad ++ normal ++ start
+                                                     in if (null errs)
+                                                        then return (Ctxt vars' es' (fromJust prop') fors)
+                                                        else fail $ concat errs
 
 
 checkAllContractsExist :: [State] -> [ContractName] -> PropertyName -> [String]
@@ -266,14 +267,18 @@ getWhereClause (Abs.WhereClauseDef wexp) = (concat.lines.printTree) wexp
 
 -- Properties --
 
-getProperty :: Abs.Properties -> Property
-getProperty Abs.PropertiesNil                        = PNIL
-getProperty (Abs.ProperiesDef id states trans props) = 
- Property { pName        = getIdAbs id
-          , pStates      = getStates' states
-          , pTransitions = getTransitions trans
-          , pProps       = getProperty props
-          }
+getProperty :: Abs.Properties -> [Id] -> Maybe Property
+getProperty Abs.PropertiesNil _                           = Just PNIL
+getProperty (Abs.ProperiesDef id states trans props) enms = 
+ let props' = getProperty props enms
+     trans' = getTransitions trans in
+ if (props' == Nothing) then Nothing
+ else 
+    Just (Property { pName        = getIdAbs id
+                   , pStates      = getStates' states
+                   , pTransitions = trans'
+                   , pProps       = fromJust props'
+                   })
 
 getStates' :: Abs.States -> States
 getStates' (Abs.States accep bad norm start) = States { getAccepting = getAccepting' accep
@@ -350,9 +355,9 @@ getCInvs []                    = []
 getCInvs (Abs.CI id jml:cinvs) = CI (getIdAbs id) (getJML jml):getCInvs cinvs
 
 
----------------
--- Contracts --
----------------
+-------------------
+-- Hoare Triples --
+-------------------
 
 genContracts :: Abs.Contracts -> UpgradePPD Contracts
 genContracts Abs.Constempty     = return []

@@ -21,8 +21,8 @@ makeTransitions c n esinf es =
        xs       = splitOnIdentifier consName p'
    in if (length xs == 1)
       then let checkId = "id.equals(idAux) && "
-               idle_to_postok = Arrow event (checkId ++ "Contracts." ++ consName ++ "_post(" ++ init arg ++ ")") ("System.out.println(\"    " ++ consName ++ "_postOK \\n \");")
-               idle_to_bad    = Arrow event (checkId ++ "!Contracts." ++ consName ++ "_post(" ++ init arg ++ ")") ("System.out.println(\"    " ++ consName ++ "_bad \\n \");")
+               idle_to_postok = Arrow event (checkId ++ "HoareTriples." ++ consName ++ "_post(" ++ init arg ++ ")") ("System.out.println(\"    " ++ consName ++ "_postOK \\n \");")
+               idle_to_bad    = Arrow event (checkId ++ "!HoareTriples." ++ consName ++ "_post(" ++ init arg ++ ")") ("System.out.println(\"    " ++ consName ++ "_bad \\n \");")
                start_to_idle  = Arrow ("rh" ++ show n) "" ("idAux = new Integer(idfrom) ; " ++ "System.out.println(\"    " ++ consName ++ "_preOK \\n\");")
            in [Transition "start" start_to_idle "idle",
               Transition "idle" idle_to_postok "postOK",
@@ -33,8 +33,8 @@ makeTransitions c n esinf es =
                ys'   = removeDuplicates $ map head ys
                zs    = concat $ map (\xs ->  "," ++ consName ++ xs ++ ident) ys'
                zs'   = if (null zs) then zs else init zs
-               idle_to_postok = Arrow event ("Contracts." ++ consName ++ "_post(" ++ init arg ++ zs ++ ")") ("System.out.println(\"    " ++ consName ++ "_postOK \\n \");")
-               idle_to_bad    = Arrow event ("!Contracts." ++ consName ++ "_post(" ++ init arg ++ zs ++ ")") ("System.out.println(\"    " ++ consName ++ "_bad \\n \");")
+               idle_to_postok = Arrow event ("HoareTriples." ++ consName ++ "_post(" ++ init arg ++ zs ++ ")") ("System.out.println(\"    " ++ consName ++ "_postOK \\n \");")
+               idle_to_bad    = Arrow event ("!HoareTriples." ++ consName ++ "_post(" ++ init arg ++ zs ++ ")") ("System.out.println(\"    " ++ consName ++ "_bad \\n \");")
                start_to_idle  = Arrow ("rh" ++ show n) "" ("System.out.println(\"    " ++ consName ++ "_preOK \\n\");")
            in [Transition "start" start_to_idle "idle",
               Transition "idle" idle_to_postok "postOK",

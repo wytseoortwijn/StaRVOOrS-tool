@@ -12,7 +12,7 @@ translate :: UpgradePPD PPDATE -> FilePath -> IO ()
 translate ppd fpath =
  do let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
     putStrLn "Translating ppDATE to DATE."
-    writeFile fpath (writeImports (importsGet ppdate))
+    writeFile fpath (writeImports (importsGet ppdate) (contractsGet ppdate))
     let consts = assocChannel2Contracts 1 $ (contractsGet ppdate)
     let ppdate' = updateContractsPP ppdate consts
     appendFile fpath (writeGlobal ppdate' env)
@@ -31,9 +31,11 @@ getImports :: Imports -> String
 getImports []            = ""
 getImports (Import s:xs) = "import " ++ s ++ ";\n" ++ getImports xs
 
-writeImports :: Imports -> String
-writeImports xss = let newImp = "import ppArtifacts.Contracts;\nimport ppArtifacts.Id;\n"
-                   in "IMPORTS {\n" ++ getImports xss ++ newImp  ++ "}\n\n"
+writeImports :: Imports -> Contracts -> String
+writeImports xss const = let newImp = "import ppArtifacts.HoareTriples;\nimport ppArtifacts.Id;\n"
+                         in if null const 
+                            then "IMPORTS {\n" ++ getImports xss ++ "}\n\n"
+                            else "IMPORTS {\n" ++ getImports xss ++ newImp  ++ "}\n\n"
 
 --------------------
 -- GLOBAL section --
@@ -287,7 +289,7 @@ makeTransitionAlg1Cond ns e events c =
      xs    = splitOnIdentifier cn p'
      esinf = map getInfoEvent events
      arg   = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
-     c'    = "Contracts." ++ cn ++ "_pre(" ++ arg ++ ")"
+     c'    = "HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")"
      act   = "h" ++ show (chGet c) ++ ".send(id);"
  in if (length xs == 1)
     then Transition ns (Arrow e c' act) ns
@@ -310,7 +312,7 @@ makeExtraTransitionAlg2Cond (t:ts) =
 makeExtraTransitionAlg2 :: Transitions -> Contract -> Event -> Events -> NameState -> Transition
 makeExtraTransitionAlg2 ts c e es ns = let esinf = map getInfoEvent es
                                            arg   = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
-                                           pre'  = "Contracts." ++ (contractName c) ++ "_pre(" ++ arg ++ ")"
+                                           pre'  = "HoareTriples." ++ (contractName c) ++ "_pre(" ++ arg ++ ")"
                                            c'    = makeExtraTransitionAlg2Cond ts ++ pre'
                                        in Transition ns (Arrow e c' ("h" ++ show (chGet c) ++ ".send(id);")) ns
 
@@ -325,7 +327,7 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e events =
      arg = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
  in if (length xs == 1)
     then let semicol = if (act == "") then "" else ";"
-             act'    = " if (Contracts." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(id);}"
+             act'    = " if (HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(id);}"
          in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
     else let ident   = "_nyckelord"
              ys      = map (splitOnIdentifier ident) (tail xs)
@@ -333,7 +335,7 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e events =
              ys'     = removeDuplicates $ map head ys
              zs      = map (\xs -> cn ++ xs ++ ident ++ " = " ++ bindn ++ "." ++ (tail xs) ++ ";") ys'
              semicol = if (act == "") then "" else ";"
-             act'    = " if (Contracts." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(id); " ++ concat zs ++ "}"
+             act'    = " if (HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(id); " ++ concat zs ++ "}"
          in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
 
 lookForContract :: PropertyName -> Contracts -> Contract

@@ -58,8 +58,9 @@ requires' :: Pre -> ContractName -> String
 requires' p cn = "requires " ++ cn ++ " && " ++ p ++ ";\n"
 
 
-
--- For one by one analysis of the contracts version
+------------------------------------------------------
+-- For one by one analysis of the contracts version --
+------------------------------------------------------
 
 getContract :: Contract -> JML
 getContract (Contract _ _ precon postcon assig _ _) =
