@@ -99,7 +99,7 @@ getVarModif Abs.VarModifierNil   = VarModifierNil
 getVarDecl :: Abs.VarDecl -> VarDecl
 getVarDecl (Abs.VarDecl id varinit) = VarDecl (getIdAbs id) (getVarInitAbs varinit)
 
--- Events --
+-- Triggers --
 
 getEvents :: Abs.Events -> UpgradePPD Events
 getEvents Abs.EventsNil      = return []
@@ -130,26 +130,37 @@ getEvent' (Abs.Event id binds ce wc)      =
                        let argss = map getBindTypeId bs in
                        case ce' of 
                             NormalEvent (BindingVar bind) mn args' eventv
-                                 -> let allArgs = map getBindIdId args' in
+                                 -> let allArgs = map getBindIdId (filter (\ c -> c /= BindStar) args') in
                                     case eventv of
-                                         EVEntry  -> if (checkAllArgs argss allArgs bind)
-                                                     then do put env'' { entryEventsInfo = Map.insert mn (id'', getEventClass bind, (map bindToArgs bs)) (entryEventsInfo env'') 
-                                                                       , allEventsId = id'' : allEventsId env'' }
-                                                             return EventDef { eName = id''
-                                                                             , args  = bs
-                                                                             , compEvent = ce'
-                                                                             , whereClause = getWhereClause wc
-                                                                             }
-                                                     else fail ("Error: Wrong value is used as an argument in an event declaration.\n" ++ "Event " ++ id'' ++ ".\n")
-                                         EVExit rs -> if ((checkAllArgs argss allArgs bind) && (checkRetVar rs argss))
-                                                      then do put env'' { exitEventsInfo = Map.insert mn (id'', getEventClass bind, (map bindToArgs bs)) (exitEventsInfo env'')  
-                                                                        , allEventsId = id'' : allEventsId env'' }
-                                                              return EventDef { eName = id''
-                                                                              , args  = bs
-                                                                              , compEvent = ce'
-                                                                              , whereClause = getWhereClause wc
-                                                                              }
-                                                      else fail (show argss ++ "\n" ++ "Error: Wrong value is used as an argument in an event declaration.\n" ++ "Event " ++ id'' ++ ".\n")
+                                         EVEntry  -> let id  = getIdBind bind
+                                                         wc' = getWhereClause wc 
+                                                         wcs = [x | x <- argss, not(elem x allArgs)]
+                                                         vs  = filter (\ x -> (x /= "ret") && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
+                                                      in if ((not.null) vs) then fail ("Error: Missing Initialization of variable(s): " ++ show vs ++  ".\n" ++ "Event " ++ id'' ++ ".\n")
+                                                         else if (checkAllArgs argss allArgs bind)
+                                                              then do put env'' { entryEventsInfo = Map.insert mn (id'', getEventClass bind, (map bindToArgs bs)) (entryEventsInfo env'') 
+                                                                                , allEventsId = id'' : allEventsId env'' }
+                                                                      return EventDef { eName = id''
+                                                                                      , args  = bs
+                                                                                      , compEvent = ce'
+                                                                                      , whereClause = getWhereClause wc
+                                                                                      }
+                                                              else fail ("Error: Wrong value is used as an argument in an event declaration.\n" ++ "Event " ++ id'' ++ ".\n")
+                                         EVExit rs -> let id  = getIdBind bind
+                                                          wc' = getWhereClause wc 
+                                                          wcs = [x | x <- argss, not(elem x allArgs)]
+                                                          vs  = filter (\ x -> (x /= "ret") && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
+                                                      in if ((not.null) vs) then fail ("Error: Missing Initialization of variable(s): " ++ show vs ++  ".\n" ++ "Event " ++ id'' ++ ".\n")
+                                                         else 
+                                                          if ((checkAllArgs argss allArgs bind) && (checkRetVar rs argss))
+                                                          then do put env'' { exitEventsInfo = Map.insert mn (id'', getEventClass bind, (map bindToArgs bs)) (exitEventsInfo env'')  
+                                                                            , allEventsId = id'' : allEventsId env'' }
+                                                                  return EventDef { eName = id''
+                                                                                  , args  = bs
+                                                                                  , compEvent = ce'
+                                                                                  , whereClause = wc'
+                                                                                  }
+                                                          else fail (show argss ++ "\n" ++ "Error: Wrong value is used as an argument in an event declaration.\n" ++ "Event " ++ id'' ++ ".\n")
                                          _        -> return EventDef { eName = id''
                                                                      , args  = bs
                                                                      , compEvent = ce'
@@ -180,6 +191,20 @@ checkRetVar xs ids = case length xs of
                           0 -> True 
                           1 -> elem (getBindIdId (head xs)) ids
                           otherwise -> False
+
+getVarsWC :: Abs.WhereClause -> [Id]
+getVarsWC Abs.WhereClauseNil      = []
+getVarsWC (Abs.WhereClauseDef xs) = map (\ (Abs.WhereExp bind _) -> (getBindIdId.getBind_) bind) xs
+
+checkVarsInitialisation :: [Id] -> [Id] -> [Id]
+checkVarsInitialisation [] _      = []
+checkVarsInitialisation (x:xs) wc = if (elem x wc)
+                                    then checkVarsInitialisation xs wc
+                                    else x:checkVarsInitialisation xs wc
+
+getIdBind :: Bind -> Id
+getIdBind (BindType _ id) = id
+getIdBind (BindId id)     = id
 
 getCompEvent :: Abs.CompoundEvent -> UpgradePPD CompoundEvent
 getCompEvent ce = 
@@ -218,6 +243,8 @@ getBindsBody []     = return []
 getBindsBody (b:bs) = case b of                      
                           Abs.BindId id -> do xs <- getBindsBody bs
                                               return ((BindId (getIdAbs id)):xs)
+                          Abs.BindStar  -> do xs <- getBindsBody bs
+                                              return (BindStar:xs)
                           _             -> fail "Error: Wrong value is used as an argument in an event declaration.\n"
 
 getBind_ :: Abs.Bind -> Bind
@@ -470,7 +497,7 @@ flattenArgs ((Args t id):xs) = t ++ " " ++ id ++ "," ++ flattenArgs xs
 getEventClass :: Bind -> String
 getEventClass bn = case bn of 
                         BindType t id' -> t ++ " " ++ id'
-                        BindId id'     -> error "Error: Missing class name in an event definition.\n"
+                        BindId id'     -> id'
                         BindStar       -> error "Error: Missing class name in an event definition.\n"
  
 ------------------------------------------------------------------

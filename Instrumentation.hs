@@ -105,7 +105,7 @@ addMethodInFile (id,methodaux,method) (xs:xss) =
             else xs:addMethodInFile (id,methodaux,method) xss
 
 
---add to the upgraded ppDATE's env the variables of all the java files involved in the verification process
+--Adds to the upgraded ppDATE's env the variables of all the java files involved in the verification process
 programVariables :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
 programVariables ppd jpath = 
  do let imports = T.importsGet (fst . (\(Ok x) -> x) $ runStateT ppd emptyEnv)
