@@ -33,6 +33,7 @@ type Post           = String
 type Assignable     = String
 type MethodCN       = (ClassInfo, MethodName)
 
+-- Contracts = Hoare Triples
 data Contract = Contract
   { contractName :: ContractName
   , methodCN :: MethodCN
@@ -221,6 +222,8 @@ data Property = Property
 ------------
 -- EVENTS --
 ------------
+
+-- Events = Triggers
 
 type WhereClause = String
 

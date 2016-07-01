@@ -42,3 +42,6 @@ partitionErr (x:xs) = let (ls,rs) = partitionErr xs
                       in case x of
                              Ok a  -> (ls,x:rs)
                              Bad s -> (x:ls,rs)
+
+fromOK :: Err a -> a
+fromOK (Ok a) = a 
