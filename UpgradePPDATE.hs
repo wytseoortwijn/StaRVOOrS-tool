@@ -120,18 +120,17 @@ getEvent' :: Abs.Event -> UpgradePPD EventDef
 getEvent' (Abs.Event id binds ce wc)      = 
  do env  <- get
     let id'' = getIdAbs id
-    if (elem id'' (allEventsId env))
-    then fail $ "Error: Multiple definitions for trigger " ++ id'' ++ ".\n"
-    else case runWriter (getBindsArgs binds) of
-            (bs, s) ->
-              if (not.null) s then fail ("Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s ++ "].\n")
-              else 
-               case runWriter (getCompEvents ce) of
-                    (ce',s') -> 
-                      if (not.null) s' then fail ("Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s' ++ "] in the method component.\n")
-                      else 
-                       let argss = map getBindTypeId bs in
-                       case ce' of 
+    let err  = if (elem id'' (allEventsId env)) then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") else ""
+    case runWriter (getBindsArgs binds) of
+         (bs, s) ->
+           let err0 = if (not.null) s then (err ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s ++ "].\n") else err
+           in case runWriter (getCompEvents ce) of
+                   (ce',s') ->
+                     let err1 = if (not.null) s' 
+                                then err0 ++ ("Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s' ++ "] in the method component.\n")
+                                else err0 
+                         argss = map getBindTypeId bs
+                     in case ce' of 
                             NormalEvent (BindingVar bind) mn args' eventv
                                  -> let allArgs = map getBindIdId (filter (\ c -> c /= BindStar) args') in
                                     case eventv of
@@ -139,55 +138,66 @@ getEvent' (Abs.Event id binds ce wc)      =
                                                          wc' = getWhereClause wc 
                                                          wcs = [x | x <- argss, not(elem x allArgs)]
                                                          vs  = filter (\ x -> (x /= "ret") && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
-                                                      in if ((not.null) vs) then fail ("Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
-                                                         else if (checkAllArgs argss allArgs bind)
-                                                              then do put env { entryEventsInfo = Map.insert mn (id'', getEventClass bind, (map bindToArgs bs)) (entryEventsInfo env) 
+                                                      in if ((not.null) vs) then fail (err1 ++ "Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
+                                                         else                                                            
+                                                           case runWriter ((checkAllArgs argss allArgs bind)) of
+                                                            (b,zs) -> 
+                                                              if b
+                                                              then if (not.null) err1 then fail err1 else
+                                                                   do put env { entryEventsInfo = Map.insert mn (id'', getEventClass bind, (map bindToArgs bs)) (entryEventsInfo env) 
                                                                                 , allEventsId = id'' : allEventsId env }
                                                                       return EventDef { eName = id''
                                                                                       , args  = bs
                                                                                       , compEvent = ce'
                                                                                       , whereClause = getWhereClause wc
                                                                                       }
-                                                              else fail ("Error: Wrong value is used as an argument in trigger declaration [" ++ id'' ++ "].\n")
+                                                              else fail (err1 ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n")
                                          EVExit rs -> let id  = getIdBind bind
                                                           wc' = getWhereClause wc 
                                                           wcs = [x | x <- argss, not(elem x allArgs)]
                                                           vs  = filter (\ x -> (x /= "ret") && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
                                                       in if ((not.null) vs) then fail ("Error: Missing Initialization of variable(s): " ++ show vs ++  ".\n" ++ "Trigger " ++ id'' ++ ".\n")
                                                          else 
-                                                          if ((checkAllArgs argss allArgs bind) && (checkRetVar rs argss))
-                                                          then do put env { exitEventsInfo = Map.insert mn (id'', getEventClass bind, (map bindToArgs bs)) (exitEventsInfo env)  
-                                                                            , allEventsId = id'' : allEventsId env }
-                                                                  return EventDef { eName = id''
-                                                                                  , args  = bs
-                                                                                  , compEvent = ce'
-                                                                                  , whereClause = wc'
-                                                                                  }
-                                                          else fail (show argss ++ "\n" ++ "Error: Wrong value is used as an argument in a trigger declaration.\n" ++ "Trigger " ++ id'' ++ ".\n")
+                                                          case runWriter ((checkAllArgs argss allArgs bind)) of
+                                                            (b,zs) -> 
+                                                              if (b && (checkRetVar rs argss))
+                                                              then if (not.null) err1 then fail err1 else
+                                                                   do put env { exitEventsInfo = Map.insert mn (id'', getEventClass bind, (map bindToArgs bs)) (exitEventsInfo env)  
+                                                                              , allEventsId = id'' : allEventsId env }
+                                                                      return EventDef { eName = id''
+                                                                                      , args  = bs
+                                                                                      , compEvent = ce'
+                                                                                      , whereClause = wc'
+                                                                                      }
+                                                              else fail (err1 ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n")
                                          _        -> return EventDef { eName = id''
                                                                      , args  = bs
                                                                      , compEvent = ce'
                                                                      , whereClause = getWhereClause wc
                                                                      }
-                            _  -> do put env { allEventsId = id'' : allEventsId env }
+                            _  -> if (not.null) err1 then fail err1 else
+                                  do put env { allEventsId = id'' : allEventsId env }
                                      return EventDef { eName = id''
                                                      , args  = bs
                                                      , compEvent = ce'
                                                      , whereClause = getWhereClause wc
                                                      }
 
-checkAllArgs :: [Id] -> [Id] -> Bind -> Bool
+checkAllArgs :: [Id] -> [Id] -> Bind -> Writer [String] Bool
 checkAllArgs argss allArgs bind = 
  case bind of
       BindId id -> if (elem id argss)
                    then checkArgs argss allArgs
-                   else False
+                   else return False
       _         -> checkArgs argss allArgs
 
 
-checkArgs :: [Id] -> [Id] -> Bool
-checkArgs _ []              = True
-checkArgs argss (a:allArgs) = elem a argss && checkArgs argss allArgs
+checkArgs :: [Id] -> [Id] -> Writer [String] Bool
+checkArgs _ []              = return True
+checkArgs argss (a:allArgs) = 
+ do b <- checkArgs argss allArgs
+    let s = if not(elem a argss) then [a] else []
+    writer ((elem a argss && b),s)
 
 checkRetVar :: [Bind] -> [Id] -> Bool
 checkRetVar xs ids = case length xs of 
