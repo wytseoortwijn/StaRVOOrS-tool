@@ -214,7 +214,9 @@ data Assignable =
   deriving (Eq,Ord,Show,Read)
 
 data Assig =
-   Assig JML
+   AssigJML JML
+ | AssigE
+ | AssigN
   deriving (Eq,Ord,Show,Read)
 
 data Methods =
@@ -327,11 +329,24 @@ data JML =
  | JMLParent JML JML
  | JMLCorchete JML JML
  | JMLSemiColon JML
- | JMLBSlash JML
  | JMLEq JML
  | JMLComma JML
  | JMLSlash JML
  | JMLBar JML
+ | JMLBackS JML
+ | JMLOld JML JML
+ | JMLRes JML
+ | JMLForallRT Id Id BodyF JML
+ | JMLExistsRT Id Id BodyF JML
  | JMLNil
+  deriving (Eq,Ord,Show,Read)
+
+data BodyF =
+   BodyF RangeTerm
+  deriving (Eq,Ord,Show,Read)
+
+data RangeTerm =
+   RangeTerm JML
+ | OnlyRange JML
   deriving (Eq,Ord,Show,Read)
 

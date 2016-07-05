@@ -270,7 +270,9 @@ transAssignable x = case x of
 
 transAssig :: Assig -> Result
 transAssig x = case x of
-  Assig jml  -> failure x
+  AssigJML jml  -> failure x
+  AssigE  -> failure x
+  AssigN  -> failure x
 
 
 transMethods :: Methods -> Result
@@ -398,12 +400,27 @@ transJML x = case x of
   JMLParent jml1 jml2  -> failure x
   JMLCorchete jml1 jml2  -> failure x
   JMLSemiColon jml  -> failure x
-  JMLBSlash jml  -> failure x
   JMLEq jml  -> failure x
   JMLComma jml  -> failure x
   JMLSlash jml  -> failure x
   JMLBar jml  -> failure x
+  JMLBackS jml  -> failure x
+  JMLOld jml1 jml2  -> failure x
+  JMLRes jml  -> failure x
+  JMLForallRT id1 id2 bodyf3 jml4  -> failure x
+  JMLExistsRT id1 id2 bodyf3 jml4  -> failure x
   JMLNil  -> failure x
+
+
+transBodyF :: BodyF -> Result
+transBodyF x = case x of
+  BodyF rangeterm  -> failure x
+
+
+transRangeTerm :: RangeTerm -> Result
+transRangeTerm x = case x of
+  RangeTerm jml  -> failure x
+  OnlyRange jml  -> failure x
 
 
 

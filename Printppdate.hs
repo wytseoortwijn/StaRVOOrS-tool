@@ -166,7 +166,7 @@ instance Print VarModifier where
 instance Print Events where
   prt i e = case e of
    EventsNil  -> prPrec i 0 (concatD [])
-   EventsDef events -> prPrec i 0 (concatD [doc (showString "EVENTS") , doc (showString "{") , prt 0 events , doc (showString "}")])
+   EventsDef events -> prPrec i 0 (concatD [doc (showString "TRIGGERS") , doc (showString "{") , prt 0 events , doc (showString "}")])
 
 
 instance Print Event where
@@ -400,7 +400,9 @@ instance Print Assignable where
 
 instance Print Assig where
   prt i e = case e of
-   Assig jml -> prPrec i 0 (concatD [prt 0 jml])
+   AssigJML jml -> prPrec i 0 (concatD [prt 0 jml])
+   AssigE  -> prPrec i 0 (concatD [doc (showString "\\everything")])
+   AssigN  -> prPrec i 0 (concatD [doc (showString "\\nothing")])
 
   prtList es = case es of
    [x] -> (concatD [prt 0 x])
@@ -541,12 +543,27 @@ instance Print JML where
    JMLParent jml0 jml -> prPrec i 0 (concatD [doc (showString "(") , prt 0 jml0 , doc (showString ")") , prt 0 jml])
    JMLCorchete jml0 jml -> prPrec i 0 (concatD [doc (showString "[") , prt 0 jml0 , doc (showString "]") , prt 0 jml])
    JMLSemiColon jml -> prPrec i 0 (concatD [doc (showString ";") , prt 0 jml])
-   JMLBSlash jml -> prPrec i 0 (concatD [doc (showString "\\") , prt 0 jml])
    JMLEq jml -> prPrec i 0 (concatD [doc (showString "=") , prt 0 jml])
    JMLComma jml -> prPrec i 0 (concatD [doc (showString ",") , prt 0 jml])
    JMLSlash jml -> prPrec i 0 (concatD [doc (showString "/") , prt 0 jml])
    JMLBar jml -> prPrec i 0 (concatD [doc (showString "|") , prt 0 jml])
+   JMLBackS jml -> prPrec i 0 (concatD [doc (showString "\\") , prt 0 jml])
+   JMLOld jml0 jml -> prPrec i 0 (concatD [doc (showString "\\old(") , prt 0 jml0 , doc (showString ")") , prt 0 jml])
+   JMLRes jml -> prPrec i 0 (concatD [doc (showString "\\result") , prt 0 jml])
+   JMLForallRT id0 id bodyf jml -> prPrec i 0 (concatD [doc (showString "(\\forall") , prt 0 id0 , prt 0 id , prt 0 bodyf , doc (showString ")") , prt 0 jml])
+   JMLExistsRT id0 id bodyf jml -> prPrec i 0 (concatD [doc (showString "(\\exists") , prt 0 id0 , prt 0 id , prt 0 bodyf , doc (showString ")") , prt 0 jml])
    JMLNil  -> prPrec i 0 (concatD [])
+
+
+instance Print BodyF where
+  prt i e = case e of
+   BodyF rangeterm -> prPrec i 0 (concatD [doc (showString ";") , prt 0 rangeterm])
+
+
+instance Print RangeTerm where
+  prt i e = case e of
+   RangeTerm jml -> prPrec i 0 (concatD [prt 0 jml , doc (showString ";")])
+   OnlyRange jml -> prPrec i 0 (concatD [prt 0 jml])
 
 
 

@@ -33,7 +33,7 @@ upgradePPD (Abs.AbsPPDATE imports global cinvs consts methods) =
 
 duplicateHT :: [ContractName] -> String
 duplicateHT []     = ""
-duplicateHT (c:cs) = "Multiple definitions for Hoare triple " ++ c ++ ".\n" ++ duplicateHT cs
+duplicateHT (c:cs) = "Error: Multiple definitions for Hoare triple " ++ c ++ ".\n" ++ duplicateHT cs
 
 getDuplicate :: [ContractName] -> [ContractName]
 getDuplicate []     = []
@@ -92,7 +92,7 @@ checkAllContractsExist (s:ss) cns pn = let ns   = getNS s
                                        in if (null aux)
                                           then checkAllContractsExist ss cns pn
                                           else ("Error: On property " ++ pn 
-                                                ++ ", in state " ++ ns ++ ", the contract(s) " 
+                                                ++ ", in state " ++ ns ++ ", the Hoare triples(s) " 
                                                 ++ commaAdd aux
                                                 ++ " do(es) not exist.\n") : checkAllContractsExist ss cns pn
                                                           where commaAdd []       = ""
@@ -174,7 +174,7 @@ getEvent' (Abs.Event id binds ce wc)      =
                                                         wc' = getWhereClause wc 
                                                         wcs = [x | x <- argss, not(elem x allArgs)]
                                                         vs  = filter (\ x -> (x /= "ret") && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
-                                                    in if ((not.null) vs) then fail ("Error: Missing Initialization of variable(s): " ++ show vs ++  ".\n" ++ "Trigger " ++ id'' ++ ".\n")
+                                                    in if ((not.null) vs) then fail (err1 ++ "Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
                                                        else 
                                                         case runWriter ((checkAllArgs argss allArgs bind)) of
                                                           (b,zs) -> 
@@ -416,14 +416,18 @@ getContract (Abs.Contract id pre' method post' (Abs.Assignable ass)) =
                      , methodCN     = (getMethodClassInfo method, getMethodMethodName method)
                      , pre          = filter (/='\n') $ getPre pre'
                      , post         = filter (/='\n') $ getPost post'
-                     , assignable   = joinAssignable ass
+                     , assignable   = joinAssignable $ map assig ass
                      , optimized    = []
                      , chGet        = 0
                      })
 
---joinAssignable :: 
-joinAssignable [x]    = (getJML.getAssig) x
-joinAssignable (x:xs) = (getJML.getAssig) x ++ ", " ++ joinAssignable xs
+assig :: Abs.Assig -> String
+assig (Abs.AssigJML jml) = getJML jml
+assig Abs.AssigE         = "\\everything"
+assig Abs.AssigN         = "\\nothing"
+
+joinAssignable [x]    = x
+joinAssignable (x:xs) = x ++ ", " ++ joinAssignable xs
 
 -------------
 -- Methods --
@@ -475,7 +479,7 @@ getMethodMethodName :: Abs.Method -> MethodName
 getMethodMethodName (Abs.Method _ mn) = getIdAbs mn
 
 getAssig :: Abs.Assig -> Abs.JML
-getAssig (Abs.Assig jml) = jml
+getAssig (Abs.AssigJML jml) = jml
 
 getPre :: Abs.Pre -> Pre
 getPre (Abs.Pre pre) = getJML pre
