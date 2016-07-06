@@ -65,7 +65,7 @@ staticAnalysis' jpath ppd output_add =
                info <- report xml'
                writeFile (output_add ++ "/report.txt") info
                putStrLn "\nStatic verification completed."
-               putStrLn "Generating Java files to control the (partially proven) contracts."                  
+               putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."                  
                methods <- publicMethodsNames ppdate' jpath
                let (ppdate'', tnewvars) = operationalizeOldResultBind ppdate' methods
                let add = output_add ++ "/ppArtifacts/"
@@ -79,7 +79,7 @@ staticAnalysis' jpath ppd output_add =
                return ppdate''
        else do putStrLn "\nWarning: KeY execution has failed." 
                writeFile (output_add ++ "/report.txt") "Warning: KeY execution has failed.\n"
-               putStrLn "Generating Java files to control the contracts."    
+               putStrLn "Generating Java files to control the Hoare triple(s)."    
                methods <- publicMethodsNames ppd jpath
                let (ppdate'', tnewvars) = operationalizeOldResultBind ppd methods
                let add = output_add ++ "/ppArtifacts/"

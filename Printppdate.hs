@@ -42,7 +42,7 @@ render d = rend 0 (map ($ "") $ d []) "" where
     "}"      :ts -> new (i-1) . showChar '}' . new (i-1) . rend (i-1) ts
     ";"      :ts -> showChar ';' . new i . rend i ts
     t  : "," :ts -> showString t . space "," . rend i ts
-    t  : ")" :ts -> showString t . showChar ')' . rend i ts
+    t  : ")" :ts -> showString t . showString ") " . rend i ts
     t  : "]" :ts -> showString t . showChar ']' . rend i ts
     "\""     :ts -> showChar '\"' . rend i ts
     t  :"\"" :ts -> if (t == " ") then showChar '\"' . rend i ts 
@@ -562,7 +562,7 @@ instance Print BodyF where
 
 instance Print RangeTerm where
   prt i e = case e of
-   RangeTerm jml -> prPrec i 0 (concatD [prt 0 jml , doc (showString ";")])
+   RangeTerm jml0 jml -> prPrec i 0 (concatD [prt 0 jml0 , doc (showString ";") , prt 0 jml])
    OnlyRange jml -> prPrec i 0 (concatD [prt 0 jml])
 
 

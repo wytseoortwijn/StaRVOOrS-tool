@@ -346,7 +346,7 @@ data BodyF =
   deriving (Eq,Ord,Show,Read)
 
 data RangeTerm =
-   RangeTerm JML
+   RangeTerm JML JML
  | OnlyRange JML
   deriving (Eq,Ord,Show,Read)
 

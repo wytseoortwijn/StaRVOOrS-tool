@@ -419,7 +419,7 @@ transBodyF x = case x of
 
 transRangeTerm :: RangeTerm -> Result
 transRangeTerm x = case x of
-  RangeTerm jml  -> failure x
+  RangeTerm jml1 jml2  -> failure x
   OnlyRange jml  -> failure x
 
 

@@ -427,7 +427,7 @@ assig Abs.AssigE         = "\\everything"
 assig Abs.AssigN         = "\\nothing"
 
 joinAssignable [x]    = x
-joinAssignable (x:xs) = x ++ ", " ++ joinAssignable xs
+joinAssignable (x:xs) = x ++ "," ++ joinAssignable xs
 
 -------------
 -- Methods --

@@ -8,11 +8,11 @@ import Data.Char
 import UpgradePPDATE
 import ErrM
 
------------------------------------------------
--- Injecting JML annotations for Contracts --
------------------------------------------------
+-------------------------------------------------
+-- Injecting JML annotations for Hoare triples --
+-------------------------------------------------
 
-generateTmpFilesAllConsts :: UpgradePPD PPDATE -> [(MethodName, ClassInfo, JML)] -> FilePath -> FilePath -> IO ()
+generateTmpFilesAllConsts :: UpgradePPD PPDATE -> [(MethodName, ClassInfo, String)] -> FilePath -> FilePath -> IO ()
 generateTmpFilesAllConsts ppd consts_jml output_add jpath =
  do let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
     let imports       = importsGet ppdate
@@ -26,7 +26,7 @@ generateTmpFilesAllConsts ppd consts_jml output_add jpath =
              ]
     return ()
 
-genTmpFilesConst :: (String, ClassInfo) -> FilePath -> [(MethodName, ClassInfo, JML)] -> String -> IO ()
+genTmpFilesConst :: (String, ClassInfo) -> FilePath -> [(MethodName, ClassInfo, String)] -> String -> IO ()
 genTmpFilesConst (main, cl) output_add [] r                   = writeFile (output_add ++ "/" ++ main ++ "/" ++ (cl ++ ".java")) r
 genTmpFilesConst (main, cl) output_add ((mn, cl', jml):xs)  r = 
  do 
