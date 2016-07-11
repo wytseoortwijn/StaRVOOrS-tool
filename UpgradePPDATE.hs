@@ -155,7 +155,7 @@ getEvent' (Abs.Event id binds ce wc)      =
                                        EVEntry  -> let id  = getIdBind bind
                                                        wc' = getWhereClause wc 
                                                        wcs = [x | x <- argss, not(elem x allArgs)]
-                                                       vs  = filter (\ x -> (x /= "ret") && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
+                                                       vs  = filter (\ x -> x /= id) $ checkVarsInitialisation wcs (getVarsWC wc)
                                                     in if ((not.null) vs) then fail (err1 ++ "Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
                                                        else                                                            
                                                          case runWriter ((checkAllArgs argss allArgs bind)) of
@@ -173,7 +173,8 @@ getEvent' (Abs.Event id binds ce wc)      =
                                        EVExit rs -> let id  = getIdBind bind
                                                         wc' = getWhereClause wc 
                                                         wcs = [x | x <- argss, not(elem x allArgs)]
-                                                        vs  = filter (\ x -> (x /= "ret") && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
+                                                        rs' = map getIdBind rs
+                                                        vs  = filter (\ x -> (not (elem x rs')) && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
                                                     in if ((not.null) vs) then fail (err1 ++ "Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
                                                        else 
                                                         case runWriter ((checkAllArgs argss allArgs bind)) of
@@ -236,6 +237,7 @@ checkVarsInitialisation (x:xs) wc = if (elem x wc)
 getIdBind :: Bind -> Id
 getIdBind (BindType _ id) = id
 getIdBind (BindId id)     = id
+getIdBind _                 = ""
 
 getCompEvent :: Abs.CompoundEvent -> Writer String CompoundEvent
 getCompEvent ce = 

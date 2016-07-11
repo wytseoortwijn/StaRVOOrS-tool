@@ -28,7 +28,7 @@ methodsInstrumentation' ppd jpath output_add =
      let consts        = T.contractsGet ppdate
      let imp           = T.importsGet ppdate
      sequence [ instrumentFile i consts jpath output_add
-              | i <- imp
+              | i <- imp, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
               ]
      putStrLn "Java files generation completed."
 
@@ -109,7 +109,7 @@ programVariables :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
 programVariables ppd jpath = 
  do let imports = T.importsGet (fst . (\(Ok x) -> x) $ runStateT ppd emptyEnv)
     vars <- sequence [ getVariables i jpath
-                     | i <- imports
+                     | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
                      ]
     return $ updateVarsEnv ppd vars
 
@@ -133,7 +133,7 @@ publicMethodsNames ppd jpath =
  do let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
     let imports       = T.importsGet ppdate
     mnames <- sequence [ getMethodName i jpath
-                       | i <- imports
+                       | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
                        ]
     return mnames
 

@@ -17,7 +17,8 @@ generateTmpFilesAllConsts :: UpgradePPD PPDATE -> [(MethodName, ClassInfo, Strin
 generateTmpFilesAllConsts ppd consts_jml output_add jpath =
  do let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
     let imports       = importsGet ppdate
-    let ys = map makeAddFile imports
+    let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
+    let ys = map makeAddFile imports'
     sequence [ do 
                   (main, cl) <- y
                   createDirectoryIfMissing True (output_add ++ "/" ++ main) 
@@ -86,7 +87,8 @@ updateTmpFilesCInvs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 updateTmpFilesCInvs ppd output_add jpath = 
  do let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
     let imports       = importsGet ppdate
-    sequence $ map (\ i -> updateTmpFileCInv i output_add jpath (varsInFiles env)) imports
+    let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
+    sequence $ map (\ i -> updateTmpFileCInv i output_add jpath (varsInFiles env)) imports'
 
 updateTmpFileCInv :: Import -> FilePath -> FilePath -> [(String, String, [(String,String)])] -> IO ()
 updateTmpFileCInv i output_add jpath vars =
@@ -131,7 +133,8 @@ generateTmpFilesCInvs ppd output_add jpath =
      imports       = importsGet ppdate
      cinvs         = cinvariantsGet ppdate
      xs            = splitCInvariants cinvs []
- in sequence $ map (\ i -> generateTmpFileCInv i output_add jpath xs) imports
+     imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
+ in sequence $ map (\ i -> generateTmpFileCInv i output_add jpath xs) imports'
 
 splitCInvariants :: CInvariants -> [(Class, CInvariants)] -> [(Class, CInvariants)]
 splitCInvariants [] acum           = acum
@@ -194,7 +197,8 @@ generateDummyBoolVars ppd output_add jpath =
      consts        = contractsGet ppdate
      xs            = splitClassContract consts
      join_xs       = joinClassContract xs []
-  in sequence $ map (\ i -> generateDBMFile i output_add jpath join_xs) imports
+     imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
+  in sequence $ map (\ i -> generateDBMFile i output_add jpath join_xs) imports'
 
 
 generateDBMFile :: Import -> FilePath -> FilePath -> [(ClassInfo, [ContractName])] -> IO ()
