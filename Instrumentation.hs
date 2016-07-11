@@ -3,12 +3,11 @@ module Instrumentation (programVariables, methodsInstrumentation, publicMethodsN
 import qualified Types as T
 import CommonFunctions
 import JavaParser
-import JMLInjection
 import System.Directory
 import Data.Char
 import UpgradePPDATE
 import ErrM
-
+import JavaLanguage
 
 --------------------------
 -- Code Instrumentation --

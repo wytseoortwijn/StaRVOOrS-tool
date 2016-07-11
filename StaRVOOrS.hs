@@ -82,6 +82,7 @@ isPPDATEfile ppdate_fn =
             else return $ "\nError: File " ++ ppdate_fn ++ " is not a ppDATE file.\n"
 
 
+--Runs StaRVOOrS
 run :: [Flag] -> FilePath -> FilePath -> FilePath -> IO ()
 run flags java_fn_add ppdate_fn output_add =  
  do putStrLn "\nWelcome to StaRVOOrS\n"

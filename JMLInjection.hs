@@ -1,4 +1,4 @@
-module JMLInjection(generateTmpFilesAllConsts,generateTmpFilesCInvs,updateTmpFilesCInvs,generateDummyBoolVars,makeAddFile) where
+module JMLInjection(generateTmpFilesAllConsts,generateTmpFilesCInvs,updateTmpFilesCInvs,generateDummyBoolVars) where
 
 import Types
 import ParserJML as PJML
@@ -7,6 +7,7 @@ import System.Directory
 import Data.Char
 import UpgradePPDATE
 import ErrM
+import JavaLanguage
 
 -------------------------------------------------
 -- Injecting JML annotations for Hoare triples --
@@ -42,8 +43,6 @@ genTmpFilesConst (main, cl) output_add ((mn, cl', jml):xs)  r =
             genTmpFilesConst (main, cl') output_add xs r'
     else genTmpFilesConst (main, cl) output_add xs  r
 
-
-javaModifiers = ["public", "private", "protected"]
 
 lookForMethodDef :: MethodName -> [String] -> ([String], [String])
 lookForMethodDef mn []       = error $ "Something went wrong when checking the method " ++ mn ++ ".\n"
@@ -82,10 +81,6 @@ lookForConstructorDef mn (xs:xss) =
 -------------------------------------
 -- Add nullable to class variables --
 -------------------------------------
-
-primitiveJavaTypes :: [String]
-primitiveJavaTypes = ["byte", "short", "int", "long", "float", "double", "char", "boolean"]
-
 
 updateTmpFilesCInvs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 updateTmpFilesCInvs ppd output_add jpath = 
@@ -187,14 +182,6 @@ getCInvs' [] _           = []
 getCInvs' ((cl', cinvs):xs) cl = if (cl' == cl)
                                 then cinvs
                                 else getCInvs' xs cl
-
-makeAddFile :: Import -> IO (String, ClassInfo)
-makeAddFile (Import s) = let xs = splitOnIdentifier "." s
-                         in if (length xs == 1)
-                            then return ("", head xs)
-                            else let val = last xs
-                                     ys = (init $ foldr (\ xs xss -> xs ++ "/" ++ xss) "" (init xs))
-                                 in return (ys, val)
 
 ---------------------------------------
 -- Injecting dummy boolean variables --

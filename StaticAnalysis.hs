@@ -79,7 +79,7 @@ staticAnalysis' jpath ppd output_add =
                return ppdate''
        else do putStrLn "\nWarning: KeY execution has failed." 
                writeFile (output_add ++ "/report.txt") "Warning: KeY execution has failed.\n"
-               putStrLn "Generating Java files to control the Hoare triple(s)."    
+               putStrLn "Generating Java files to control the Hoare triple(s) at runtime."    
                methods <- publicMethodsNames ppd jpath
                let (ppdate'', tnewvars) = operationalizeOldResultBind ppd methods
                let add = output_add ++ "/ppArtifacts/"

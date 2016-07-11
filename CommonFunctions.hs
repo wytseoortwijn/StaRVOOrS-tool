@@ -164,4 +164,11 @@ getEventsCtxt (Ctxt vars es prop [])    = es
 getEventsCtxt (Ctxt vars es prop [Foreach args ctxt]) = es ++ getEventsCtxt ctxt
 
 
+makeAddFile :: Import -> IO (String, ClassInfo)
+makeAddFile (Import s) = let xs = splitOnIdentifier "." s
+                         in if (length xs == 1)
+                            then return ("", head xs)
+                            else let val = last xs
+                                     ys = (init $ foldr (\ xs xss -> xs ++ "/" ++ xss) "" (init xs))
+                                 in return (ys, val)
 
