@@ -9,9 +9,9 @@ import UpgradePPDATE
 import ErrM
 import Data.List
 
---------------------
--- Contracts.java --
---------------------
+-----------------------
+-- HoareTriples.java --
+-----------------------
 
 contractsJavaFileGen :: UpgradePPD PPDATE -> FilePath -> [(Contract, Variables)] -> IO ()
 contractsJavaFileGen ppd output_add tnewvars = 
@@ -29,9 +29,9 @@ contractsJavaFileGen ppd output_add tnewvars =
      methods       = map (\ c -> (methodForPre c env, methodForPost c env tnewvars)) consts''
      body          = concat $ map joinInfo $ zip3 methods new_methods new_methods'
  in do 
-       let address = output_add ++ "Contracts.java"
+       let address = output_add ++ "HoareTriples.java"
        writeFile address (genPackageInfo ++ genImports' imp ++ "\n\n")
-       appendFile address "public class Contracts {\n\n  Contracts () {}\n\n"
+       appendFile address "public class HoareTriples {\n\n  HoareTriples () {}\n\n"
        if (null consts) then return () else appendFile address body       
        appendFile address "\n}"
 

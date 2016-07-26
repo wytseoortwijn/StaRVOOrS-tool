@@ -111,7 +111,7 @@ removeNoneContracts (p:ps) cns = let cn = getContractNameErrConst (contractText 
                                  else removeNoneContracts ps cns
 
 
-getInfoFromProof :: Proof -> (MethodName, ContractName, [Pre])
+getInfoFromProof :: Proof -> (MethodName, ContractName, [String])
 getInfoFromProof proof = let mn    = getMethodName' (target proof)
                              cn    = getContractNameErrConst (contractText proof) (typee proof)
                              npres = getNewPreConds (executionPath proof)
@@ -144,7 +144,7 @@ getContractNameErrVar ctext = let (_, xs) = splitAtIdentifier ':' ctext
                                  else let (cn, _) = splitAtIdentifier '=' $ tail ys 
                                       in trim cn
 
-getNewPreConds :: [EPath] -> [Pre]
+getNewPreConds :: [EPath] -> [String]
 getNewPreConds []       = []
 getNewPreConds (ep:eps) = if (verified ep == "false") 
                           then pathCondition ep:getNewPreConds eps
@@ -164,4 +164,11 @@ getEventsCtxt (Ctxt vars es prop [])    = es
 getEventsCtxt (Ctxt vars es prop [Foreach args ctxt]) = es ++ getEventsCtxt ctxt
 
 
+makeAddFile :: Import -> IO (String, ClassInfo)
+makeAddFile (Import s) = let xs = splitOnIdentifier "." s
+                         in if (length xs == 1)
+                            then return ("", head xs)
+                            else let val = last xs
+                                     ys = (init $ foldr (\ xs xss -> xs ++ "/" ++ xss) "" (init xs))
+                                 in return (ys, val)
 

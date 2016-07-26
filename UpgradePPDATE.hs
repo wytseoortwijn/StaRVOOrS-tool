@@ -3,6 +3,7 @@ module UpgradePPDATE where
 import Types
 import CommonFunctions
 import Control.Monad
+import Control.Monad.Writer  
 import qualified Control.Monad.State as CM
 import qualified Data.Map as Map
 import qualified Absppdate as Abs
@@ -18,11 +19,27 @@ upgradePPD (Abs.AbsPPDATE imports global cinvs consts methods) =
     let methods' = genMethods methods
     case runStateT (genContracts consts) emptyEnv of
               Bad s             -> fail s
-              Ok (consts', env) -> case runStateT (genGlobal global) env of
-                                         Bad s              -> fail s
-                                         Ok (global', env') -> do put env'
-                                                                  return (PPDATE imports' global' cinvs' consts' methods')
+              Ok (consts', env) -> let cns = contractsNames env
+                                       dcs = getDuplicate cns
+                                   in case runStateT (genGlobal global) env of
+                                           Bad s              -> if (not.null) dcs
+                                                                 then fail $ s ++ duplicateHT dcs
+                                                                 else fail s
+                                           Ok (global', env') -> if (not.null) dcs
+                                                                 then fail $ duplicateHT dcs
+                                                                 else do put env'
+                                                                         return (PPDATE imports' global' cinvs' consts' methods')
 
+
+duplicateHT :: [ContractName] -> String
+duplicateHT []     = ""
+duplicateHT (c:cs) = "Error: Multiple definitions for Hoare triple " ++ c ++ ".\n" ++ duplicateHT cs
+
+getDuplicate :: [ContractName] -> [ContractName]
+getDuplicate []     = []
+getDuplicate (c:cs) = if elem c cs
+                      then c:getDuplicate cs
+                      else getDuplicate cs 
 
 -------------
 -- Imports --
@@ -51,18 +68,20 @@ getCtxt (Abs.Ctxt vars es prop foreaches) =
     es' <- getEvents es
     fors <- getForeaches foreaches
     let vars' = getVars vars
-    let prop' = getProperty prop
-    let pn    = pName prop'
-    case prop' of
-         PNIL                              -> return (Ctxt vars' es' prop' fors)
-         Property pname states trans props -> let accep  = checkAllContractsExist (getAccepting states) cns pn
-                                                  bad    = checkAllContractsExist (getBad states) cns pn
-                                                  normal = checkAllContractsExist (getNormal states) cns pn
-                                                  start  = checkAllContractsExist (getStarting states) cns pn 
-                                                  errs   = accep ++ bad ++ normal ++ start
-                                              in if (null errs)
-                                                 then return (Ctxt vars' es' prop' fors)
-                                                 else fail $ concat errs
+    let prop' = getProperty prop (map eName es')
+    case runWriter prop' of
+         (PNIL,_)                              -> return (Ctxt vars' es' PNIL fors)
+         (Property pname states trans props,s) -> let accep  = checkAllContractsExist (getAccepting states) cns pname
+                                                      bad    = checkAllContractsExist (getBad states) cns pname
+                                                      normal = checkAllContractsExist (getNormal states) cns pname
+                                                      start  = checkAllContractsExist (getStarting states) cns pname 
+                                                      errs   = concat $ accep ++ bad ++ normal ++ start
+                                                      s'     = if (not.null) s 
+                                                               then "Error: Triggers [" ++ s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" ++ errs
+                                                               else errs
+                                                  in if (null s')
+                                                     then return (Ctxt vars' es' (Property pname states trans props) fors)
+                                                     else fail s'
 
 
 checkAllContractsExist :: [State] -> [ContractName] -> PropertyName -> [String]
@@ -73,7 +92,7 @@ checkAllContractsExist (s:ss) cns pn = let ns   = getNS s
                                        in if (null aux)
                                           then checkAllContractsExist ss cns pn
                                           else ("Error: On property " ++ pn 
-                                                ++ ", in state " ++ ns ++ ", the contract(s) " 
+                                                ++ ", in state " ++ ns ++ ", the Hoare triples(s) " 
                                                 ++ commaAdd aux
                                                 ++ " do(es) not exist.\n") : checkAllContractsExist ss cns pn
                                                           where commaAdd []       = ""
@@ -119,72 +138,85 @@ getEvent' :: Abs.Event -> UpgradePPD EventDef
 getEvent' (Abs.Event id binds ce wc)      = 
  do env  <- get
     let id'' = getIdAbs id
-    if (elem id'' (allEventsId env))
-    then fail $ "Error: Multiple definitions for event " ++ id'' ++ ".\n"
-    else case runStateT (getBindsArgs binds) env of
-            Bad s         -> fail (s ++ "Event " ++ id'' ++ ".\n")
-            Ok (bs, env') -> 
-               case runStateT (getCompEvents ce) env' of
-                    Bad s             -> fail (s ++ "Event " ++ id'' ++ ".\n")
-                    Ok (ce', env'') -> 
-                       let argss = map getBindTypeId bs in
-                       case ce' of 
-                            NormalEvent (BindingVar bind) mn args' eventv
-                                 -> let allArgs = map getBindIdId (filter (\ c -> c /= BindStar) args') in
-                                    case eventv of
-                                         EVEntry  -> let id  = getIdBind bind
-                                                         wc' = getWhereClause wc 
-                                                         wcs = [x | x <- argss, not(elem x allArgs)]
-                                                         vs  = filter (\ x -> (x /= "ret") && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
-                                                      in if ((not.null) vs) then fail ("Error: Missing Initialization of variable(s): " ++ show vs ++  ".\n" ++ "Event " ++ id'' ++ ".\n")
-                                                         else if (checkAllArgs argss allArgs bind)
-                                                              then do put env'' { entryEventsInfo = Map.insert mn (id'', getEventClass bind, (map bindToArgs bs)) (entryEventsInfo env'') 
-                                                                                , allEventsId = id'' : allEventsId env'' }
-                                                                      return EventDef { eName = id''
-                                                                                      , args  = bs
-                                                                                      , compEvent = ce'
-                                                                                      , whereClause = getWhereClause wc
-                                                                                      }
-                                                              else fail ("Error: Wrong value is used as an argument in an event declaration.\n" ++ "Event " ++ id'' ++ ".\n")
-                                         EVExit rs -> let id  = getIdBind bind
-                                                          wc' = getWhereClause wc 
-                                                          wcs = [x | x <- argss, not(elem x allArgs)]
-                                                          vs  = filter (\ x -> (x /= "ret") && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
-                                                      in if ((not.null) vs) then fail ("Error: Missing Initialization of variable(s): " ++ show vs ++  ".\n" ++ "Event " ++ id'' ++ ".\n")
-                                                         else 
-                                                          if ((checkAllArgs argss allArgs bind) && (checkRetVar rs argss))
-                                                          then do put env'' { exitEventsInfo = Map.insert mn (id'', getEventClass bind, (map bindToArgs bs)) (exitEventsInfo env'')  
-                                                                            , allEventsId = id'' : allEventsId env'' }
-                                                                  return EventDef { eName = id''
-                                                                                  , args  = bs
-                                                                                  , compEvent = ce'
-                                                                                  , whereClause = wc'
-                                                                                  }
-                                                          else fail (show argss ++ "\n" ++ "Error: Wrong value is used as an argument in an event declaration.\n" ++ "Event " ++ id'' ++ ".\n")
-                                         _        -> return EventDef { eName = id''
-                                                                     , args  = bs
-                                                                     , compEvent = ce'
-                                                                     , whereClause = getWhereClause wc
-                                                                     }
-                            _  -> do put env'' { allEventsId = id'' : allEventsId env'' }
-                                     return EventDef { eName = id''
-                                                     , args  = bs
-                                                     , compEvent = ce'
-                                                     , whereClause = getWhereClause wc
-                                                     }
+    let err  = if (elem id'' (allEventsId env)) then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") else ""
+    do case runWriter (getBindsArgs binds) of
+         (bs, s) ->
+           let err0 = if (not.null) s then (err ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s ++ "].\n") else err
+           in case runWriter (getCompEvents ce) of
+                 (ce',s') ->
+                   let err1 = if (not.null) s' 
+                              then err0 ++ ("Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s' ++ "] in the method component.\n")
+                              else err0 
+                       argss = map getBindTypeId bs
+                   in case ce' of 
+                          NormalEvent (BindingVar bind) mn args' eventv
+                               -> let allArgs = map getBindIdId (filter (\ c -> c /= BindStar) args') in
+                                  case eventv of
+                                       EVEntry  -> let id  = getIdBind bind
+                                                       wc' = getWhereClause wc 
+                                                       wcs = [x | x <- argss, not(elem x allArgs)]
+                                                       vs  = filter (\ x -> x /= id) $ checkVarsInitialisation wcs (getVarsWC wc)
+                                                    in if ((not.null) vs) then fail (err1 ++ "Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
+                                                       else                                                            
+                                                         case runWriter ((checkAllArgs argss allArgs bind)) of
+                                                          (b,zs) -> 
+                                                            if b
+                                                             then if (not.null) err1 then fail err1 else
+                                                                 do put env { entryEventsInfo = Map.insert mn (id'', getEventClass bind, (map bindToArgs bs)) (entryEventsInfo env) 
+                                                                            , allEventsId = id'' : allEventsId env }
+                                                                    return EventDef { eName = id''
+                                                                                    , args  = bs
+                                                                                    , compEvent = ce'
+                                                                                    , whereClause = getWhereClause wc
+                                                                                    }
+                                                            else fail (err1 ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n")
+                                       EVExit rs -> let id  = getIdBind bind
+                                                        wc' = getWhereClause wc 
+                                                        wcs = [x | x <- argss, not(elem x allArgs)]
+                                                        rs' = map getIdBind rs
+                                                        vs  = filter (\ x -> (not (elem x rs')) && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
+                                                    in if ((not.null) vs) then fail (err1 ++ "Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
+                                                       else 
+                                                        case runWriter ((checkAllArgs argss allArgs bind)) of
+                                                          (b,zs) -> 
+                                                            if (b && (checkRetVar rs argss))
+                                                            then if (not.null) err1 then fail err1 else
+                                                                 do put env { exitEventsInfo = Map.insert mn (id'', getEventClass bind, (map bindToArgs bs)) (exitEventsInfo env)  
+                                                                            , allEventsId = id'' : allEventsId env }
+                                                                    return EventDef { eName = id''
+                                                                                    , args  = bs
+                                                                                    , compEvent = ce'
+                                                                                    , whereClause = wc'
+                                                                                    }
+                                                            else fail (err1 ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n")
+                                       _        -> return EventDef { eName = id''
+                                                                   , args  = bs
+                                                                   , compEvent = ce'
+                                                                   , whereClause = getWhereClause wc
+                                                                   }
+                          _  -> if (not.null) err1 then fail err1 else
+                                do put env { allEventsId = id'' : allEventsId env }
+                                   return EventDef { eName = id''
+                                                   , args  = bs
+                                                   , compEvent = ce'
+                                                   , whereClause = getWhereClause wc
+                                                   }
 
-checkAllArgs :: [Id] -> [Id] -> Bind -> Bool
+checkAllArgs :: [Id] -> [Id] -> Bind -> Writer [String] Bool
 checkAllArgs argss allArgs bind = 
  case bind of
       BindId id -> if (elem id argss)
                    then checkArgs argss allArgs
-                   else False
+                   else return False
       _         -> checkArgs argss allArgs
 
 
-checkArgs :: [Id] -> [Id] -> Bool
-checkArgs _ []              = True
-checkArgs argss (a:allArgs) = elem a argss && checkArgs argss allArgs
+checkArgs :: [Id] -> [Id] -> Writer [String] Bool
+checkArgs _ []              = return True
+checkArgs argss (a:allArgs) = 
+ do b <- checkArgs argss allArgs
+    let s = if not(elem a argss) then [a] else []
+    writer ((elem a argss && b),s)
 
 checkRetVar :: [Bind] -> [Id] -> Bool
 checkRetVar xs ids = case length xs of 
@@ -205,16 +237,17 @@ checkVarsInitialisation (x:xs) wc = if (elem x wc)
 getIdBind :: Bind -> Id
 getIdBind (BindType _ id) = id
 getIdBind (BindId id)     = id
+getIdBind _                 = ""
 
-getCompEvent :: Abs.CompoundEvent -> UpgradePPD CompoundEvent
+getCompEvent :: Abs.CompoundEvent -> Writer String CompoundEvent
 getCompEvent ce = 
  case ce of
      Abs.NormalEvent (Abs.BindingVar bind) id binds eventv -> 
-        do 
-           bs <- getBindsBody (map getVarsAbs binds)
-           let id' = getIdAbs id
-           let eventv' = getEventVariation eventv
-           return (NormalEvent (BindingVar (getBind_ bind)) id' bs eventv')
+        case runWriter (getBindsBody (map getVarsAbs binds)) of
+             (bs, s) -> do let id' = getIdAbs id
+                           let eventv' = getEventVariation eventv
+                           tell s
+                           return (NormalEvent (BindingVar (getBind_ bind)) id' bs eventv')
      Abs.ClockEvent id int -> do let id' = getIdAbs id
                                  return (ClockEvent id' int)
      Abs.OnlyId id         -> do let id' = getIdAbs id
@@ -222,7 +255,7 @@ getCompEvent ce =
      Abs.OnlyIdPar id      -> do let id' = getIdAbs id
                                  return (OnlyIdPar id')
       
-getCompEvents :: Abs.CompoundEvent -> UpgradePPD CompoundEvent
+getCompEvents :: Abs.CompoundEvent -> Writer String CompoundEvent
 getCompEvents ce@(Abs.NormalEvent _ _ _ _)            = getCompEvent ce
 getCompEvents ce@(Abs.ClockEvent _ _)                 = getCompEvent ce
 getCompEvents ce@(Abs.OnlyId _)                       = getCompEvent ce
@@ -231,21 +264,27 @@ getCompEvents (Abs.Collection (Abs.CECollection esl)) = do
                                                            let xs = map getCompEvent esl
                                                            ce <- sequence xs
                                                            return (Collection (CECollection ce))
-getBindsArgs :: [Abs.Bind] -> UpgradePPD [Bind]
+getBindsArgs :: [Abs.Bind] -> Writer String [Bind]
 getBindsArgs []     = return []
-getBindsArgs (b:bs) = case b of                      
-                          Abs.BindType t id -> do xs <- getBindsArgs bs
-                                                  return ((BindType (getTypeAbs t) (getIdAbs id)):xs)
-                          _                 -> fail "Error: Wrong value is used as an argument in an event declaration.\n"
+getBindsArgs (b:bs) = 
+ case runWriter (getBindsArgs bs) of
+      (bs', s) -> case b of                      
+                       Abs.BindType t id -> do tell s
+                                               return ((BindType (getTypeAbs t) (getIdAbs id)):bs')
+                       _                 -> do tell (mAppend (printTree b) s)
+                                               return bs'
 
-getBindsBody :: [Abs.Bind] -> UpgradePPD [Bind]
+getBindsBody :: [Abs.Bind] -> Writer String [Bind]
 getBindsBody []     = return []
-getBindsBody (b:bs) = case b of                      
-                          Abs.BindId id -> do xs <- getBindsBody bs
-                                              return ((BindId (getIdAbs id)):xs)
-                          Abs.BindStar  -> do xs <- getBindsBody bs
-                                              return (BindStar:xs)
-                          _             -> fail "Error: Wrong value is used as an argument in an event declaration.\n"
+getBindsBody (b:bs) = 
+ case runWriter (getBindsBody bs) of
+      (xs, s) -> case b of  
+                       Abs.BindId id -> do tell s
+                                           return ((BindId (getIdAbs id)):xs)
+                       Abs.BindStar  -> do tell s
+                                           return (BindStar:xs)
+                       _             -> do tell (mAppend (printTree b) s)
+                                           return xs
 
 getBind_ :: Abs.Bind -> Bind
 getBind_ Abs.BindStar        = BindStar
@@ -266,14 +305,26 @@ getWhereClause (Abs.WhereClauseDef wexp) = (concat.lines.printTree) wexp
 
 -- Properties --
 
-getProperty :: Abs.Properties -> Property
-getProperty Abs.PropertiesNil                        = PNIL
-getProperty (Abs.ProperiesDef id states trans props) = 
- Property { pName        = getIdAbs id
-          , pStates      = getStates' states
-          , pTransitions = getTransitions trans
-          , pProps       = getProperty props
-          }
+getProperty :: Abs.Properties -> [Id] -> Writer String Property
+getProperty Abs.PropertiesNil _                           = return PNIL
+getProperty (Abs.ProperiesDef id states trans props) enms = 
+ let props' = getProperty props enms
+     trans' = getTransitions trans
+     ts     = map (event.arrow) trans' in
+ case runWriter props' of 
+      (p, s)    -> let xs = [x | x <- ts, not(elem x enms)]
+                   in do tell (mAppend (addComma xs) s) 
+                         return (Property { pName        = getIdAbs id
+                                          , pStates      = getStates' states
+                                          , pTransitions = trans'
+                                          , pProps       = p
+                                          })
+
+mAppend :: String -> String -> String
+mAppend [] []     = ""
+mAppend [] (y:ys) = y:ys
+mAppend (x:xs) [] = x:xs
+mAppend xs ys     = xs ++ "," ++ ys
 
 getStates' :: Abs.States -> States
 getStates' (Abs.States accep bad norm start) = States { getAccepting = getAccepting' accep
@@ -350,9 +401,9 @@ getCInvs []                    = []
 getCInvs (Abs.CI id jml:cinvs) = CI (getIdAbs id) (getJML jml):getCInvs cinvs
 
 
----------------
--- Contracts --
----------------
+-------------------
+-- Hoare Triples --
+-------------------
 
 genContracts :: Abs.Contracts -> UpgradePPD Contracts
 genContracts Abs.Constempty     = return []
@@ -362,21 +413,23 @@ getContract :: Abs.Contract -> UpgradePPD Contract
 getContract (Abs.Contract id pre' method post' (Abs.Assignable ass)) = 
  do env <- get
     let cns = contractsNames env
-    if (elem (getIdAbs id) cns)
-    then fail $ "Error: Multiple definitions for contract " ++ getIdAbs id ++ ".\n"
-    else do put env { contractsNames = (getIdAbs id):(contractsNames env) }
-            return (Contract { contractName = getIdAbs id
-                             , methodCN     = (getMethodClassInfo method, getMethodMethodName method)
-                             , pre          = filter (/='\n') $ getPre pre'
-                             , post         = filter (/='\n') $ getPost post'
-                             , assignable   = joinAssignable ass
-                             , optimized    = []
-                             , chGet        = 0
-                             })
+    put env { contractsNames = (getIdAbs id):(contractsNames env) }
+    return (Contract { contractName = getIdAbs id
+                     , methodCN     = (getMethodClassInfo method, getMethodMethodName method)
+                     , pre          = filter (/='\n') $ getPre pre'
+                     , post         = filter (/='\n') $ getPost post'
+                     , assignable   = joinAssignable $ map assig ass
+                     , optimized    = []
+                     , chGet        = 0
+                     })
 
---joinAssignable :: 
-joinAssignable [x]    = (getJML.getAssig) x
-joinAssignable (x:xs) = (getJML.getAssig) x ++ ", " ++ joinAssignable xs
+assig :: Abs.Assig -> String
+assig (Abs.AssigJML jml) = getJML jml
+assig Abs.AssigE         = "\\everything"
+assig Abs.AssigN         = "\\nothing"
+
+joinAssignable [x]    = x
+joinAssignable (x:xs) = x ++ "," ++ joinAssignable xs
 
 -------------
 -- Methods --
@@ -428,7 +481,7 @@ getMethodMethodName :: Abs.Method -> MethodName
 getMethodMethodName (Abs.Method _ mn) = getIdAbs mn
 
 getAssig :: Abs.Assig -> Abs.JML
-getAssig (Abs.Assig jml) = jml
+getAssig (Abs.AssigJML jml) = jml
 
 getPre :: Abs.Pre -> Pre
 getPre (Abs.Pre pre) = getJML pre
@@ -450,7 +503,7 @@ joinImport (xs:ys:iss) = xs ++ "." ++ joinImport (ys:iss)
 lookForAllEntryEventArgs :: Env -> MethodName -> (String, String)
 lookForAllEntryEventArgs env mn = 
  case Map.lookup mn (entryEventsInfo env) of
-      Nothing -> error $ "Problem when looking for arguments of an entry event associated to method " ++ mn ++ ".\n" 
+      Nothing -> error $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ ".\n" 
       Just (_, varClass', argsPre) -> 
            let classPre     = words $ varClass'
                varClass     = last classPre
@@ -470,7 +523,7 @@ lookForAllEntryEventArgs env mn =
 lookForAllExitEventArgs :: Env -> MethodName -> (String, String)
 lookForAllExitEventArgs env mn =
  case Map.lookup mn (exitEventsInfo env) of
-      Nothing -> error $ "Problem when looking for arguments of an exit event associated to method " ++ mn ++ ".\n" 
+      Nothing -> error $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ ".\n" 
       Just (_, varClass', argsPost) -> 
            let classPost    = words $ varClass'
                varClass     = last classPost
@@ -498,7 +551,7 @@ getEventClass :: Bind -> String
 getEventClass bn = case bn of 
                         BindType t id' -> t ++ " " ++ id'
                         BindId id'     -> id'
-                        BindStar       -> error "Error: Missing class name in an event definition.\n"
+                        BindStar       -> error "Error: Missing class name in a trigger definition.\n"
  
 ------------------------------------------------------------------
 -- Environment with variables, events and foreaches information --
