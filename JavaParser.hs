@@ -164,4 +164,10 @@ makeNewArgsInCall []       = [MethodInv (MethodCall (Name [Ident "fid",Ident "ge
 makeNewArgsInCall ((FormalParam _ _ _ (VarId (Ident id))):fps) = 
  (ExpName (Name [Ident id])) : makeNewArgsInCall fps
 
+-------------------------
+-- Auxiliary Functions --
+-------------------------
 
+methodsDetails :: MemberDecl -> (String, String, [String])
+methodsDetails (MethodDecl _ _ Nothing (Ident mn) args _ _ )   = ("void",mn,map prettyPrint args)
+methodsDetails (MethodDecl _ _ (Just rt) (Ident mn) args _ _ ) = (prettyPrint rt,mn,map prettyPrint args)

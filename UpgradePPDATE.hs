@@ -559,11 +559,12 @@ getEventClass bn = case bn of
 
 data Env = Env
  { forsVars            :: [Id]
- , entryEventsInfo     :: Map.Map MethodName (Id, String, [Args])
+ , entryEventsInfo     :: Map.Map MethodName (Id, String, [Args]) --(name of the trigger,class variable,arguments of the trigger)
  , exitEventsInfo      :: Map.Map MethodName (Id, String, [Args])
  , allEventsId         :: [Id]
  , contractsNames      :: [ContractName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
+ , methodsInFiles      :: [(String, ClassInfo, [(Id,String,[String])])] --[(path_to_file,class_name,[(method_name,returned_type,arguments)])]
  }
   deriving (Show)
 
@@ -576,6 +577,7 @@ emptyEnv = Env { forsVars            = []
                , allEventsId         = []
                , contractsNames      = []
                , varsInFiles         = []
+               , methodsInFiles      = []
                }
 
 ----------------------------

@@ -1,4 +1,4 @@
-module Instrumentation (programVariables, methodsInstrumentation, methodsNames,updateVarsEnv) where
+module Instrumentation (programMethods,programVariables, methodsInstrumentation, methodsNames,updateVarsEnv) where
 
 import qualified Types as T
 import CommonFunctions
@@ -125,6 +125,29 @@ getVariables i jpath =
      let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
      let vars = map getTypeAndId $ (getVarDecl'.getMemberDecl.getDecls.getClassBody) java_aux
      return (main, cl, (splitVars vars))
+
+
+--Adds to the upgraded ppDATE's env the method declarations of all the java files involved in the verification process
+programMethods :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
+programMethods ppd jpath = 
+ do let imports = T.importsGet (fst . (\(Ok x) -> x) $ runStateT ppd emptyEnv)
+    ms <- sequence [ getMethods i jpath
+                   | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
+                   ]
+    return $ updateMethodsEnv ppd ms
+
+updateMethodsEnv :: UpgradePPD T.PPDATE -> [(String, T.ClassInfo, [(T.Id,String,[String])])] -> UpgradePPD T.PPDATE
+updateMethodsEnv ppd ms = ppd >>= (\x -> do env <- get; put (env { methodsInFiles = ms }); return x)                     
+
+getMethods :: T.Import -> FilePath -> IO (String, T.ClassInfo, [(T.Id,String,[String])])
+getMethods i jpath =
+  do (main, cl) <- makeAddFile i
+     let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")
+     r <- readFile file_add
+     let java     = (\(Right x) -> x) $ parseJavaFile r
+     let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
+     let methods = (getMethodDecl.getDecls.getClassBody) java_aux
+     return (main, cl, (map methodsDetails methods))
 
 
 --returns the name of all the public methods in the java files involved in the verification process

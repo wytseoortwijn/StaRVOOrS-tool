@@ -120,7 +120,8 @@ run flags java_fn_add ppdate_fn output_add =
                             let ppd = upgradePPD absppdate
                             case runStateT ppd emptyEnv of
                                  Bad s -> putStrLn s
-                                 Ok _  -> do ppdate <- programVariables ppd java_fn_add'
+                                 Ok _  -> do ppd' <- programVariables ppd java_fn_add'
+                                             ppdate <- programMethods ppd' java_fn_add'
                                              putStrLn "Initiating static verification of Hoare triples with KeY."
                                              ppdate' <- staticAnalysis java_fn_add' ppdate output_add'                                
                                              putStrLn "Initiating LARVA files generation."
