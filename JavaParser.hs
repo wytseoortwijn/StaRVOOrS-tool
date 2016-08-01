@@ -70,6 +70,7 @@ getMethodDecl (d:ds) =
                _                        -> getMethodDecl ds
       _             -> getMethodDecl ds
 
+--TODO: Update when dealing with private values
 getMethodDeclId :: [Decl] -> [String]
 getMethodDeclId []     = []
 getMethodDeclId (d:ds) = 

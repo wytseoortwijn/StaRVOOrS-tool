@@ -66,7 +66,7 @@ staticAnalysis' jpath ppd output_add =
                writeFile (output_add ++ "/report.txt") info
                putStrLn "\nStatic verification completed."
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."                  
-               methods <- publicMethodsNames ppdate' jpath
+               methods <- methodsNames ppdate' jpath
                let (ppdate'', tnewvars) = operationalizeOldResultBind ppdate' methods
                let add = output_add ++ "/ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
@@ -80,7 +80,7 @@ staticAnalysis' jpath ppd output_add =
        else do putStrLn "\nWarning: KeY execution has failed." 
                writeFile (output_add ++ "/report.txt") "Warning: KeY execution has failed.\n"
                putStrLn "Generating Java files to control the Hoare triple(s) at runtime."    
-               methods <- publicMethodsNames ppd jpath
+               methods <- methodsNames ppd jpath
                let (ppdate'', tnewvars) = operationalizeOldResultBind ppd methods
                let add = output_add ++ "/ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"

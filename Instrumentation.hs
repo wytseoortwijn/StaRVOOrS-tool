@@ -1,4 +1,4 @@
-module Instrumentation (programVariables, methodsInstrumentation, publicMethodsNames,updateVarsEnv) where
+module Instrumentation (programVariables, methodsInstrumentation, methodsNames,updateVarsEnv) where
 
 import qualified Types as T
 import CommonFunctions
@@ -128,8 +128,8 @@ getVariables i jpath =
 
 
 --returns the name of all the public methods in the java files involved in the verification process
-publicMethodsNames :: UpgradePPD T.PPDATE -> FilePath -> IO [(String, T.ClassInfo, [String])]
-publicMethodsNames ppd jpath = 
+methodsNames :: UpgradePPD T.PPDATE -> FilePath -> IO [(String, T.ClassInfo, [String])]
+methodsNames ppd jpath = 
  do let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
     let imports       = T.importsGet ppdate
     mnames <- sequence [ getMethodName i jpath
