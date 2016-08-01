@@ -150,6 +150,7 @@ getMethods i jpath =
      return (main, cl, (map methodsDetails methods))
 
 
+--TODO: Modify to use info in the enviroment (methodsInFiles) when dealing with private variables
 --returns the name of all the public methods in the java files involved in the verification process
 methodsNames :: UpgradePPD T.PPDATE -> FilePath -> IO [(String, T.ClassInfo, [String])]
 methodsNames ppd jpath = 
