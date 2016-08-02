@@ -262,6 +262,9 @@ data Bind =
 getBindTypeId :: Bind -> Id
 getBindTypeId (BindType t id) = id
 
+getBindTypeType :: Bind -> Type
+getBindTypeType (BindType t id) = t
+
 getBindIdId :: Bind -> Id
 getBindIdId (BindId id) = id
 

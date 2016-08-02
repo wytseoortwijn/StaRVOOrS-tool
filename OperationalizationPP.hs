@@ -174,10 +174,11 @@ operationalizeResult s =
 operationalizeForall :: Contract -> Env -> [(Contract, Variables)] -> ([Either (String, String) String], [Either (String, String) String])
 operationalizeForall c env ctnv = 
  let mn                 = snd $ methodCN c
+     cinfo              = fst $ methodCN c
      p                  = pre c
-     (enargs, enargswt) = lookForAllEntryEventArgs env mn
+     (enargs, enargswt) = lookForAllEntryEventArgs env cinfo mn
      p'                 = post c 
-     (exargs, exargswt) = lookForAllExitEventArgs env mn
+     (exargs, exargswt) = lookForAllExitEventArgs env cinfo mn
      xs                 = splitInQuantifiedExpression p "\\forall"
      ys                 = splitInQuantifiedExpression p' "\\forall"
      tnewvars           = lookForNewVarsConst c ctnv 
@@ -302,10 +303,11 @@ lookforEnd n acum (x:xs) = if (x == ')')
 operationalizeExists :: Contract -> Env -> [(Contract, Variables)] -> ([Either (String, String) String], [Either (String, String) String])
 operationalizeExists c es ctnv = 
  let mn                 = snd $ methodCN c
+     cinfo              = fst $ methodCN c
      p                  = pre c
-     (enargs, enargswt) = lookForAllEntryEventArgs es mn
+     (enargs, enargswt) = lookForAllEntryEventArgs es cinfo mn
      p'                 = post c 
-     (exargs, exargswt) = lookForAllExitEventArgs es mn
+     (exargs, exargswt) = lookForAllExitEventArgs es cinfo mn
      xs                 = splitInQuantifiedExpression p "\\exists"
      ys                 = splitInQuantifiedExpression p' "\\exists"
      tnewvars           = lookForNewVarsConst c ctnv

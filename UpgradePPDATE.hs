@@ -162,8 +162,8 @@ getEvent' (Abs.Event id binds ce wc)      =
                                                           (b,zs) ->
                                                             if b
                                                              then if (not.null) err1 then fail err1 else
-                                                                 do put env { entryEventsInfo = Map.insert mn (id'', getEventClass bind, (map bindToArgs bs)) (entryEventsInfo env)
-                                                                            , allEventsId = id'' : allEventsId env }
+                                                                 do let env' = updateEntryEventsInfo env (id'', getEventClass bind, (map bindToArgs bs)) bs mn bind
+                                                                    put env' { allEventsId = id'' : allEventsId env }
                                                                     return EventDef { eName = id''
                                                                                     , args  = bs
                                                                                     , compEvent = ce'
@@ -181,8 +181,8 @@ getEvent' (Abs.Event id binds ce wc)      =
                                                           (b,zs) ->
                                                             if (b && (checkRetVar rs argss))
                                                             then if (not.null) err1 then fail err1 else
-                                                                 do put env { exitEventsInfo = Map.insert mn (id'', getEventClass bind, (map bindToArgs bs)) (exitEventsInfo env)
-                                                                            , allEventsId = id'' : allEventsId env }
+                                                                 do let env' = updateExitEventsInfo env (id'', getEventClass bind, (map bindToArgs bs)) bs mn bind
+                                                                    put env' { allEventsId = id'' : allEventsId env }
                                                                     return EventDef { eName = id''
                                                                                     , args  = bs
                                                                                     , compEvent = ce'
@@ -500,45 +500,49 @@ joinImport [ys]   = ys
 joinImport (xs:ys:iss) = xs ++ "." ++ joinImport (ys:iss)
 
 
-lookForAllEntryEventArgs :: Env -> MethodName -> (String, String)
-lookForAllEntryEventArgs env mn =
- case Map.lookup mn (entryEventsInfo env) of
-      Nothing -> error $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ ".\n"
-      Just (_, varClass', argsPre) ->
-           let classPre     = words $ varClass'
-               varClass     = last classPre
-               argsPrewt    = map getArgsId argsPre
-               argsPrewt'   = addComma argsPrewt
-               argsPrewt''  = if (elem varClass argsPrewt)
-                              then argsPrewt'
-                              else varClass ++ "," ++ argsPrewt'
-               flatArgsPre  = flattenArgs argsPre
-               argsPre'     = if (elem varClass argsPrewt)
-                              then flattenArgs argsPre
-                              else if (null flatArgsPre)
-                                   then trim varClass'
-                                   else (trim varClass')  ++ "," ++ flattenArgs argsPre
-           in (argsPre', argsPrewt'')
+lookForAllEntryEventArgs :: Env -> ClassInfo -> MethodName -> (String, String)
+lookForAllEntryEventArgs env cinf mn =
+ case Map.lookup cinf (entryEventsInfo env) of
+      Nothing -> error $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+      Just m  -> case Map.lookup mn m of
+                      Nothing -> error $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                      Just (_, varClass', argsPre) ->
+                           let classPre     = words $ varClass'
+                               varClass     = last classPre
+                               argsPrewt    = map getArgsId argsPre
+                               argsPrewt'   = addComma argsPrewt
+                               argsPrewt''  = if (elem varClass argsPrewt)
+                                              then argsPrewt'
+                                              else varClass ++ "," ++ argsPrewt'
+                               flatArgsPre  = flattenArgs argsPre
+                               argsPre'     = if (elem varClass argsPrewt)
+                                              then flattenArgs argsPre
+                                              else if (null flatArgsPre)
+                                                   then trim varClass'
+                                                   else (trim varClass')  ++ "," ++ flattenArgs argsPre
+                           in (argsPre', argsPrewt'')
 
-lookForAllExitEventArgs :: Env -> MethodName -> (String, String)
-lookForAllExitEventArgs env mn =
- case Map.lookup mn (exitEventsInfo env) of
-      Nothing -> error $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ ".\n"
-      Just (_, varClass', argsPost) ->
-           let classPost    = words $ varClass'
-               varClass     = last classPost
-               argsPostwt   = map getArgsId argsPost
-               argsPostwt'  = addComma argsPostwt
-               argsPostwt'' = if (elem varClass argsPostwt)
-                              then argsPostwt'
-                              else varClass ++ "," ++ argsPostwt'
-               flatArgsPost = flattenArgs argsPost
-               argsPost'    = if (elem varClass argsPostwt)
-                              then flatArgsPost
-                              else if (null flatArgsPost)
-                                   then trim varClass'
-                                   else (trim varClass')  ++ "," ++ flattenArgs argsPost
-           in (argsPost', argsPostwt'')
+lookForAllExitEventArgs :: Env -> ClassInfo -> MethodName -> (String, String)
+lookForAllExitEventArgs env cinf mn =
+ case Map.lookup cinf (exitEventsInfo env) of
+      Nothing -> error $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+      Just m  -> case Map.lookup mn m of
+                      Nothing -> error $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                      Just (_, varClass', argsPost) ->
+                           let classPost    = words $ varClass'
+                               varClass     = last classPost
+                               argsPostwt   = map getArgsId argsPost
+                               argsPostwt'  = addComma argsPostwt
+                               argsPostwt'' = if (elem varClass argsPostwt)
+                                              then argsPostwt'
+                                              else varClass ++ "," ++ argsPostwt'
+                               flatArgsPost = flattenArgs argsPost
+                               argsPost'    = if (elem varClass argsPostwt)
+                                              then flatArgsPost
+                                              else if (null flatArgsPost)
+                                                   then trim varClass'
+                                                   else (trim varClass')  ++ "," ++ flattenArgs argsPost
+                           in (argsPost', argsPostwt'')
 
 flattenArgs :: [Args] -> String
 flattenArgs []               = ""
@@ -557,14 +561,17 @@ getEventClass bn = case bn of
 -- Environment with variables, triggers and foreaches information --
 --------------------------------------------------------------------
 
+type MapTrigger = Map.Map MethodName (Id, String, [Args]) --(trigger_name,type class_variable,trigger_arguments)
+
+--Triggers associated to methods in Hoare triples should include: type class_variable
 data Env = Env
  { forsVars            :: [Id]
- , entryEventsInfo     :: Map.Map MethodName (Id, String, [Args]) --(name of the trigger,class variable,arguments of the trigger)
- , exitEventsInfo      :: Map.Map MethodName (Id, String, [Args])
+ , entryEventsInfo     :: Map.Map ClassInfo MapTrigger
+ , exitEventsInfo      :: Map.Map ClassInfo MapTrigger
  , allEventsId         :: [Id]
  , contractsNames      :: [ContractName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
- , methodsInFiles      :: [(String, ClassInfo, [(Id,String,[String])])] --[(path_to_file,class_name,[(method_name,returned_type,arguments)])]
+ , methodsInFiles      :: [(String, ClassInfo, [(Id,String,[String])])] --[(path_to_class,class_name,[(method_name,returned_type,arguments)])]
  }
   deriving (Show)
 
@@ -580,6 +587,48 @@ emptyEnv = Env { forsVars            = []
                , methodsInFiles      = []
                }
 
+updateEntryEventsInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
+updateEntryEventsInfo env einfo args mn BindStar        = env
+updateEntryEventsInfo env einfo args mn (BindType t id) = 
+ case Map.lookup t (entryEventsInfo env) of
+      Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
+                 in env { entryEventsInfo = Map.insert t mapeinfo' (entryEventsInfo env) }
+      Just mapeinfo -> 
+           let mapeinfo' = Map.insert mn einfo mapeinfo
+           in env { entryEventsInfo = Map.insert t mapeinfo' (entryEventsInfo env) }
+updateEntryEventsInfo env einfo args mn (BindId id)     = 
+ let ts = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
+ in if (length ts /= 1)
+    then error $ "Problem when looking for arguments of a trigger associated to method " ++ mn ++ " .\n"
+    else case Map.lookup (head ts) (entryEventsInfo env) of
+              Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
+                         in env { entryEventsInfo = Map.insert (head ts) mapeinfo' (entryEventsInfo env) }
+              Just mapeinfo -> 
+                   let mapeinfo' = Map.insert mn einfo mapeinfo
+                   in env { entryEventsInfo = Map.insert (head ts) mapeinfo' (entryEventsInfo env) }
+
+
+updateExitEventsInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
+updateExitEventsInfo env einfo args mn BindStar        = env
+updateExitEventsInfo env einfo args mn (BindType t id) = 
+ case Map.lookup t (exitEventsInfo env) of
+      Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
+                 in env { exitEventsInfo = Map.insert t mapeinfo' (exitEventsInfo env) }
+      Just mapeinfo -> 
+           let mapeinfo' = Map.insert mn einfo mapeinfo
+           in env { exitEventsInfo = Map.insert t mapeinfo' (exitEventsInfo env) }
+updateExitEventsInfo env einfo args mn (BindId id)     = 
+ let ts = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
+ in if (length ts /= 1)
+    then error $ "Problem when looking for arguments of a trigger associated to method " ++ mn ++ " .\n"
+    else case Map.lookup (head ts) (exitEventsInfo env) of
+              Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
+                         in env { exitEventsInfo = Map.insert (head ts) mapeinfo' (exitEventsInfo env) }
+              Just mapeinfo -> 
+                   let mapeinfo' = Map.insert mn einfo mapeinfo
+                   in env { exitEventsInfo = Map.insert (head ts) mapeinfo' (exitEventsInfo env) }
+
+ 
 ----------------------------
 -- Monad State operations --
 ----------------------------
@@ -594,13 +643,13 @@ getValue uppd = fst . (\(Ok x) -> x) $ runStateT uppd emptyEnv
 getEnvVal :: UpgradePPD a -> Env
 getEnvVal uppd = snd . (\(Ok x) -> x) $ runStateT uppd emptyEnv
 
-getEntryEventsEnv :: UpgradePPD a -> Map.Map MethodName (Id, String, [Args])
+getEntryEventsEnv :: UpgradePPD a -> Map.Map ClassInfo MapTrigger
 getEntryEventsEnv ppd = let env = CM.execStateT ppd emptyEnv
                         in case env of
                                 Bad _ -> Map.empty
                                 Ok fs -> entryEventsInfo fs
 
-getExitEventsEnv :: UpgradePPD a -> Map.Map MethodName (Id, String, [Args])
+getExitEventsEnv :: UpgradePPD a -> Map.Map ClassInfo MapTrigger
 getExitEventsEnv ppd = let env = CM.execStateT ppd emptyEnv
                        in case env of
                                Bad _ -> Map.empty

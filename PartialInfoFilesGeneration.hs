@@ -86,7 +86,7 @@ auxNewVars (Var _ t [VarDecl id _]:xs) = (t ++ " " ++ id):auxNewVars xs
 
 methodForPost :: Contract -> Env -> [(Contract, Variables)] -> String
 methodForPost c env ctnewvars =
- let (argsPost, argsPostwt) = lookForAllExitEventArgs env (snd $ methodCN c)
+ let (argsPost, argsPostwt) = lookForAllExitEventArgs env (fst $ methodCN c) (snd $ methodCN c)
      tnvs      = getConstTnv c ctnewvars
      tnvs'     = auxNewVars tnvs
      newargs   = addComma tnvs'
@@ -108,7 +108,7 @@ getConstTnv c ((c',tnvs):cs) = if (c == c')
 --check opt for new predicates for the precondition due to partial proof
 methodForPre :: Contract -> Env -> String
 methodForPre c env =
- let (argsPre, _) = lookForAllEntryEventArgs env (snd $ methodCN c)     
+ let (argsPre, _) = lookForAllEntryEventArgs env (fst $ methodCN c) (snd $ methodCN c)     
  in 
   "  // " ++ (contractName c) ++ "\n"
   ++ "  public static boolean " ++ (contractName c) ++ "_pre(" ++ argsPre ++ ") {\n" 

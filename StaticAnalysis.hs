@@ -18,6 +18,7 @@ import PartialInfoFilesGeneration
 import Data.Functor ((<$>))
 import Data.List ((\\))
 import System.FilePath
+import qualified Data.Map as Map
 
 -------------------------------
 -- Static Analysis using KeY --
@@ -73,6 +74,7 @@ staticAnalysis' jpath ppd output_add =
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
                createDirectoryIfMissing True (output_add ++ "/" ++ annotated_add)
+               --putStrLn (show $ generateNewTriggers ppdate'')
                contractsJavaFileGen ppdate'' add tnewvars
                idFileGen add
                copyFiles jpath (output_add ++ "/" ++ annotated_add)
@@ -131,12 +133,15 @@ getSourceCodeFolderName :: FilePath -> String
 getSourceCodeFolderName s = let (xs,ys) = splitAtIdentifier '/' $ (reverse . init) s
                             in reverse xs
 
---Generates triggers whenever a method to be runtime verified is not associated
---to anyone
-generateNewTriggers :: UpgradePPD PPDATE -> UpgradePPD PPDATE
+--TODO: Fix this method if classes with the same name in different paths are allowed
+--Generates triggers whenever a method to be runtime verified is not associated to anyone
+--generateNewTriggers :: UpgradePPD PPDATE -> UpgradePPD PPDATE
 generateNewTriggers ppd =
   do let env    = getEnvVal ppd
      let ppdate = getValue ppd
      let consts = contractsGet ppdate
      let mns    = removeDuplicates [mn | mn <- map methodCN consts]
-     ppd
+     let entry  = filter (\(x,y) -> y == Nothing) $ map ((\x -> (x,Map.lookup x (entryEventsInfo env))).snd) mns
+     let exit   = filter (\(x,y) -> y == Nothing) $ map ((\x -> (x,Map.lookup x (exitEventsInfo env))).snd) mns
+     let minfo  = methodsInFiles env
+     (entryEventsInfo env)
