@@ -18,17 +18,17 @@ upgradePPD (Abs.AbsPPDATE imports global cinvs consts methods) =
     let cinvs'   = genClassInvariants cinvs
     let methods' = genMethods methods
     case runStateT (genContracts consts) emptyEnv of
-              Bad s             -> fail s
-              Ok (consts', env) -> let cns = contractsNames env
-                                       dcs = getDuplicate cns
-                                   in case runStateT (genGlobal global) env of
-                                           Bad s              -> if (not.null) dcs
-                                                                 then fail $ s ++ duplicateHT dcs
-                                                                 else fail s
-                                           Ok (global', env') -> if (not.null) dcs
-                                                                 then fail $ duplicateHT dcs
-                                                                 else do put env'
-                                                                         return (PPDATE imports' global' cinvs' consts' methods')
+         Bad s             -> fail s
+         Ok (consts', env) -> let cns = contractsNames env
+                                  dcs = getDuplicate cns
+                              in case runStateT (genGlobal global) env of
+                                      Bad s              -> if (not.null) dcs
+                                                            then fail $ s ++ duplicateHT dcs
+                                                            else fail s
+                                      Ok (global', env') -> if (not.null) dcs
+                                                            then fail $ duplicateHT dcs
+                                                            else do put env'
+                                                                    return (PPDATE imports' global' cinvs' consts' methods')
 
 
 duplicateHT :: [ContractName] -> String
@@ -553,17 +553,18 @@ getEventClass bn = case bn of
                         BindId id'     -> id'
                         BindStar       -> error "Error: Missing class name in a trigger definition.\n"
  
-------------------------------------------------------------------
--- Environment with variables, events and foreaches information --
-------------------------------------------------------------------
+--------------------------------------------------------------------
+-- Environment with variables, triggers and foreaches information --
+--------------------------------------------------------------------
 
 data Env = Env
  { forsVars            :: [Id]
- , entryEventsInfo     :: Map.Map MethodName (Id, String, [Args])
+ , entryEventsInfo     :: Map.Map MethodName (Id, String, [Args]) --(name of the trigger,class variable,arguments of the trigger)
  , exitEventsInfo      :: Map.Map MethodName (Id, String, [Args])
  , allEventsId         :: [Id]
  , contractsNames      :: [ContractName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
+ , methodsInFiles      :: [(String, ClassInfo, [(Id,String,[String])])] --[(path_to_file,class_name,[(method_name,returned_type,arguments)])]
  }
   deriving (Show)
 
@@ -576,6 +577,7 @@ emptyEnv = Env { forsVars            = []
                , allEventsId         = []
                , contractsNames      = []
                , varsInFiles         = []
+               , methodsInFiles      = []
                }
 
 ----------------------------
