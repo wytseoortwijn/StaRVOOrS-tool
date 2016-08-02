@@ -10,6 +10,7 @@ import JMLInjection
 import qualified ParserXMLKeYOut
 import RefinementPPDATE
 import ReportGen
+import ErrM
 import UpgradePPDATE
 import OperationalizationPP
 import Instrumentation
@@ -23,24 +24,24 @@ import System.FilePath
 -------------------------------
 
 staticAnalysis :: FilePath -> UpgradePPD PPDATE -> FilePath -> IO (UpgradePPD PPDATE)
-staticAnalysis jpath ppd output_add = 
+staticAnalysis jpath ppd output_add =
  let ppdate      = getValue ppd
      consts      = contractsGet ppdate
  in if (null consts)
-    then do putStrLn "\nThere are no Hoare triples to analyse." 
+    then do putStrLn "\nThere are no Hoare triples to analyse."
             return ppd
     else staticAnalysis' jpath ppd output_add
 
 staticAnalysis' :: FilePath -> UpgradePPD PPDATE -> FilePath -> IO (UpgradePPD PPDATE)
-staticAnalysis' jpath ppd output_add = 
+staticAnalysis' jpath ppd output_add =
  let output_add' = output_add ++ "/workspace/files2analyse"
      tmp_add     = output_add ++ "/workspace/files/"
      cinv_add    = output_add ++ "/workspace/filescinv"
      nulla_add   = output_add ++ "/workspace/filesnullable"
      ppdate      = getValue ppd
      consts      = contractsGet ppdate
- in do 
-       createDirectoryIfMissing False tmp_add 
+ in do
+       createDirectoryIfMissing False tmp_add
        createDirectoryIfMissing False output_add'
        createDirectoryIfMissing False nulla_add
        createDirectoryIfMissing False cinv_add
@@ -58,28 +59,28 @@ staticAnalysis' jpath ppd output_add =
        let xml_add = output_add ++ "/out.xml"
        b <- doesFileExist xml_add
        if b
-       then do xml <- ParserXMLKeYOut.parse xml_add  
-               let cns  = getContractNamesEnv ppd  
+       then do xml <- ParserXMLKeYOut.parse xml_add
+               let cns  = getContractNamesEnv ppd
                let xml' = removeNoneContracts xml cns
                let ppdate'  = ppd >>= (\x -> return $ refinePPDATE x xml')
                info <- report xml'
                writeFile (output_add ++ "/report.txt") info
                putStrLn "\nStatic verification completed."
-               putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."                  
+               putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
                methods <- methodsNames ppdate' jpath
                let (ppdate'', tnewvars) = operationalizeOldResultBind ppdate' methods
                let add = output_add ++ "/ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
-               createDirectoryIfMissing True (output_add ++ "/" ++ annotated_add) 
+               createDirectoryIfMissing True (output_add ++ "/" ++ annotated_add)
                contractsJavaFileGen ppdate'' add tnewvars
                idFileGen add
                copyFiles jpath (output_add ++ "/" ++ annotated_add)
                methodsInstrumentation ppdate'' jpath (output_add ++ "/" ++ annotated_add)
                return ppdate''
-       else do putStrLn "\nWarning: KeY execution has failed." 
+       else do putStrLn "\nWarning: KeY execution has failed."
                writeFile (output_add ++ "/report.txt") "Warning: KeY execution has failed.\n"
-               putStrLn "Generating Java files to control the Hoare triple(s) at runtime."    
+               putStrLn "Generating Java files to control the Hoare triple(s) at runtime."
                methods <- methodsNames ppd jpath
                let (ppdate'', tnewvars) = operationalizeOldResultBind ppd methods
                let add = output_add ++ "/ppArtifacts/"
@@ -88,13 +89,8 @@ staticAnalysis' jpath ppd output_add =
                createDirectoryIfMissing True (output_add ++ "/" ++ annotated_add)
                contractsJavaFileGen ppdate'' add tnewvars
                idFileGen add
-               methodsInstrumentation ppdate'' jpath (output_add ++ "/" ++ annotated_add)           
+               methodsInstrumentation ppdate'' jpath (output_add ++ "/" ++ annotated_add)
                return ppdate''
-
-getSourceCodeFolderName :: FilePath -> String
-getSourceCodeFolderName s = let (xs,ys) = splitAtIdentifier '/' $ (reverse . init) s
-                            in reverse xs
-
 
 --------------------------------------------------------------
 -- Copy all the files within a Directory to a new directory --
@@ -119,13 +115,28 @@ getSubitems' path = getSubitemsRec ""
         let relChildren = [relPath </> p | p <- children]
         ((isDir, relPath) :) . concat <$> mapM getSubitemsRec relChildren
 
-copyItem' baseSourcePath baseTargetPath (isDir, relativePath) = 
- do 
+copyItem' baseSourcePath baseTargetPath (isDir, relativePath) =
+ do
     let sourcePath = baseSourcePath </> relativePath
     let targetPath = baseTargetPath </> relativePath
     if isDir
     then createDirectoryIfMissing False targetPath
     else copyFile sourcePath targetPath
 
+-------------------------
+-- Auxiliary functions --
+-------------------------
 
+getSourceCodeFolderName :: FilePath -> String
+getSourceCodeFolderName s = let (xs,ys) = splitAtIdentifier '/' $ (reverse . init) s
+                            in reverse xs
 
+--Generates triggers whenever a method to be runtime verified is not associated
+--to anyone
+generateNewTriggers :: UpgradePPD PPDATE -> UpgradePPD PPDATE
+generateNewTriggers ppd =
+  do let env    = getEnvVal ppd
+     let ppdate = getValue ppd
+     let consts = contractsGet ppdate
+     let mns    = removeDuplicates [mn | mn <- map methodCN consts]
+     ppd
