@@ -599,7 +599,7 @@ updateEntryEventsInfo env einfo args mn (BindType t id) =
 updateEntryEventsInfo env einfo args mn (BindId id)     = 
  let ts = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
  in if (length ts /= 1)
-    then error $ "Problem when looking for arguments of a trigger associated to method " ++ mn ++ " .\n"
+    then error $ "The entry trigger associated to method " ++ mn ++ " does not include a class variable declaration.\n"
     else case Map.lookup (head ts) (entryEventsInfo env) of
               Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
                          in env { entryEventsInfo = Map.insert (head ts) mapeinfo' (entryEventsInfo env) }
@@ -620,7 +620,7 @@ updateExitEventsInfo env einfo args mn (BindType t id) =
 updateExitEventsInfo env einfo args mn (BindId id)     = 
  let ts = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
  in if (length ts /= 1)
-    then error $ "Problem when looking for arguments of a trigger associated to method " ++ mn ++ " .\n"
+    then error $ "The exit trigger associated to method " ++ mn ++ " does not include a class variable declaration.\n"
     else case Map.lookup (head ts) (exitEventsInfo env) of
               Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
                          in env { exitEventsInfo = Map.insert (head ts) mapeinfo' (exitEventsInfo env) }
