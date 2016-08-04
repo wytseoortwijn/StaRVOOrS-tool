@@ -43,16 +43,15 @@ operationalizePrePostORB c vars events methods =
 -- TODO: if classes with the same name in different folders, then fix this method
 bindCV :: Contract -> [(String, ClassInfo, [(String, String)])] -> Events -> [(String, ClassInfo, [String])] -> Contract
 bindCV c vars es methods =
- let bindn = getClassVar c es     
- in if (bindn == "")
-    then c
-    else let varsc  = getVarsToControl (fst $ methodCN c) vars
-             mnames = getMethodsToControl (fst $ methodCN c) methods
-             pre'   = concat $ bindVars bindn varsc (pre c)
-             post'  = concat $ bindVars bindn varsc (post c)
-             pre''  = concat $ bindMethods bindn mnames pre'
-             post'' = concat $ bindMethods bindn mnames post'
-         in updatePre (updatePost c post'') pre''
+ let bindEntry = getClassVar c es EVEntry
+     bindExit  = getClassVar c es (EVExit [])
+     varsc  = getVarsToControl (fst $ methodCN c) vars
+     mnames = getMethodsToControl (fst $ methodCN c) methods
+     pre'   = concat $ bindVars bindEntry varsc (pre c)
+     post'  = concat $ bindVars bindExit varsc (post c)
+     pre''  = concat $ bindMethods bindEntry mnames pre'
+     post'' = concat $ bindMethods bindExit mnames post'
+ in updatePre (updatePost c post'') pre''
 
 
 bindMethods :: String -> [String] -> String -> [String]
