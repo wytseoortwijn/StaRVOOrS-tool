@@ -1,4 +1,4 @@
-module RefinementPPDATE (refinePPDATE, getClassVar,generateNewTriggers) where
+module RefinementPPDATE (refinePPDATE, getClassVar,generateNewTriggers,filterDefinedTriggers) where
 
 import Types
 import CommonFunctions
@@ -131,6 +131,7 @@ compareEV _ _                     = False
 -----------------------------------------------------------------------------------------
 
 --TODO: Fix this method if classes with the same name in different paths are allowed
+--If trigger associated to *, it will be considered as defined even if the the class is wrong
 generateNewTriggers :: UpgradePPD PPDATE -> Contracts -> UpgradePPD PPDATE
 generateNewTriggers ppd consts =
   do let env     = getEnvVal ppd
@@ -141,8 +142,8 @@ generateNewTriggers ppd consts =
      let exit    = filterDefinedTriggers (exitEventsInfo env) mns
      let entry'  = [(x,y,head $ filter (\(a,b,c) -> y == b) z) | (x,y) <- entry, (_,d,z) <- mfiles,d==x]
      let exit'   = [(x,y,head $ filter (\(a,b,c) -> y == b) z) | (x,y) <- exit, (_,d,z) <- mfiles,d==x]
-     let (env',ppdate')   = addNewTriggerEntry env ppdate entry'
-     let (env'',ppdate'') = addNewTriggerExit env' ppdate' 0 exit'
+     let (env',ppdate')   = addNewTriggerEntry env ppdate 0 entry'
+     let (env'',ppdate'') = addNewTriggerExit env' ppdate' (length entry') exit'
      put env''
      return ppdate''
 
@@ -151,55 +152,65 @@ filterDefinedTriggers :: Map.Map ClassInfo MapTrigger -> [(ClassInfo,MethodName)
 filterDefinedTriggers mci []           = []
 filterDefinedTriggers mci ((ci,mn):xs) = 
  case Map.lookup ci mci of
-      Nothing -> (ci,mn):filterDefinedTriggers mci xs
-      Just m  -> case Map.lookup mn m of
+      Nothing -> case Map.lookup "*" mci of
                       Nothing -> (ci,mn):filterDefinedTriggers mci xs
+                      Just m'  -> case Map.lookup mn m' of
+                                       Nothing -> (ci,mn):filterDefinedTriggers mci xs
+                                       Just _  -> filterDefinedTriggers mci xs
+      Just m  -> case Map.lookup mn m of
+                      Nothing -> case Map.lookup "*" mci of
+                                      Nothing -> (ci,mn):filterDefinedTriggers mci xs
+                                      Just m'  -> case Map.lookup mn m' of
+                                                       Nothing -> (ci,mn):filterDefinedTriggers mci xs
+                                                       Just _  -> filterDefinedTriggers mci xs
                       Just _  -> filterDefinedTriggers mci xs
 
 --Creates the info to be added in the environment and the ppDATE about the new entry trigger
-createTriggerEntry :: (ClassInfo,MethodName,(String,MethodName,[String])) -> ((ClassInfo,MethodName,(Id, String, [Args])),EventDef)
-createTriggerEntry (cn,mn,(rt,mn',xs)) = 
+createTriggerEntry :: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> ((ClassInfo,MethodName,(Id, String, [Args])),EventDef)
+createTriggerEntry (cn,mn,(rt,mn',xs)) n = 
  if (mn == mn')
  then let trnm = mn ++ "_en"
-          cn'  = cn ++ " cv"
-          cpe  = NormalEvent (BindingVar (BindType cn "cv")) mn (map ((\[x,y] -> BindId y).words) xs) EVEntry
+          nvar = "cv" ++ "_" ++ (show n)
+          cn'  = cn ++ nvar
+          cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) EVEntry
           tr   = EventDef trnm (map ((\[x,y] -> BindType x y).words) xs) cpe ""
       in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words) xs)),tr)
  else error $ "Problem when creating an entry trigger. Mismatch between method names " ++ mn ++ " and " ++ mn' ++ ".\n"
 
-addNewTriggerEntry :: Env -> PPDATE -> [(ClassInfo,MethodName,(String,MethodName,[String]))] -> (Env,PPDATE)
-addNewTriggerEntry env ppdate []     = (env,ppdate)
-addNewTriggerEntry env ppdate (x:xs) =
- let (p,tr) = createTriggerEntry x
+addNewTriggerEntry :: Env -> PPDATE -> Int -> [(ClassInfo,MethodName,(String,MethodName,[String]))] -> (Env,PPDATE)
+addNewTriggerEntry env ppdate _ []     = (env,ppdate)
+addNewTriggerEntry env ppdate n (x:xs) =
+ let (p,tr) = createTriggerEntry x n
      cn     = (\(x,y,z) -> x) p 
      mn     = (\(x,y,z) -> y) p 
      v      = (\(x,y,z) -> z) p 
   in case Map.lookup cn (entryEventsInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn v Map.empty
                      ppdate'   = addTrigger2ppDATE tr ppdate 
-                 in addNewTriggerEntry (env { entryEventsInfo = Map.insert cn mapeinfo' (entryEventsInfo env) }) ppdate' xs
+                 in addNewTriggerEntry (env { entryEventsInfo = Map.insert cn mapeinfo' (entryEventsInfo env) }) ppdate' (n+1) xs
       Just mapeinfo -> 
            let mapeinfo' = Map.insert mn v mapeinfo
                ppdate'   = addTrigger2ppDATE tr ppdate 
-           in addNewTriggerEntry (env { entryEventsInfo = Map.insert cn mapeinfo' (entryEventsInfo env) }) ppdate' xs
+           in addNewTriggerEntry (env { entryEventsInfo = Map.insert cn mapeinfo' (entryEventsInfo env) }) ppdate' (n+1) xs
 
 --Creates the info to be added in the environment and the ppDATE about the new exit trigger
-createTriggerExit:: (ClassInfo,MethodName,(String,MethodName,[String])) -> Integer -> ((ClassInfo,MethodName,(Id, String, [Args])), EventDef)
+createTriggerExit:: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> ((ClassInfo,MethodName,(Id, String, [Args])), EventDef)
 createTriggerExit (cn,mn,(rt,mn',xs)) n = 
  let trnm = mn ++ "_ex" 
-     cn'  = cn ++ " cv" 
+     nvar = "cv" ++ "_" ++ (show n)
+     cn'  = cn ++ nvar
      ret  = "r" ++ (show n) in
  if (mn == mn')
  then if (rt == "void")
-      then let cpe  = NormalEvent (BindingVar (BindType cn "cv")) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [])
+      then let cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [])
                tr   = EventDef trnm (map ((\[x,y] -> BindType x y).words) xs) cpe ""
            in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words) xs)), tr)
-      else let cpe = NormalEvent (BindingVar (BindType cn "cv")) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [BindId ret]) 
+      else let cpe = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [BindId ret]) 
                tr  = EventDef trnm (map ((\[x,y] -> BindType x y).words) xs) cpe ""
            in ((cn,mn,(trnm, cn', (map ((\[x,y] -> Args x y).words) xs) ++ [Args rt ret])),tr)
  else error $ "Problem when creating an exit trigger. Mismatch between method names " ++ mn ++ " and " ++ mn' ++ ".\n"
 
-addNewTriggerExit :: Env -> PPDATE -> Integer -> [(ClassInfo,MethodName,(String,MethodName,[String]))] -> (Env, PPDATE)
+addNewTriggerExit :: Env -> PPDATE -> Int -> [(ClassInfo,MethodName,(String,MethodName,[String]))] -> (Env, PPDATE)
 addNewTriggerExit env ppdate _ []     = (env,ppdate)
 addNewTriggerExit env ppdate n (x:xs) =
  let (p,tr) = createTriggerExit x n

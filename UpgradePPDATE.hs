@@ -503,9 +503,17 @@ joinImport (xs:ys:iss) = xs ++ "." ++ joinImport (ys:iss)
 lookForAllEntryEventArgs :: Env -> ClassInfo -> MethodName -> (String, String)
 lookForAllEntryEventArgs env cinf mn =
  case Map.lookup cinf (entryEventsInfo env) of
-      Nothing -> error $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+      Nothing -> case Map.lookup "*" (entryEventsInfo env) of
+                      Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                      Just m' -> case Map.lookup mn m' of
+                                      Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                      Just _  -> error $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"                           
       Just m  -> case Map.lookup mn m of
-                      Nothing -> error $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                      Nothing -> case Map.lookup "*" (entryEventsInfo env) of
+                                      Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                      Just m' -> case Map.lookup mn m' of
+                                                 Nothing ->  error $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                                 Just _  -> error $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
                       Just (_, varClass', argsPre) ->
                            let classPre     = words $ varClass'
                                varClass     = last classPre
@@ -525,9 +533,17 @@ lookForAllEntryEventArgs env cinf mn =
 lookForAllExitEventArgs :: Env -> ClassInfo -> MethodName -> (String, String)
 lookForAllExitEventArgs env cinf mn =
  case Map.lookup cinf (exitEventsInfo env) of
-      Nothing -> error $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+      Nothing -> case Map.lookup "*" (entryEventsInfo env) of
+                      Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                      Just m' -> case Map.lookup mn m' of
+                                      Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                      Just _  -> error $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
       Just m  -> case Map.lookup mn m of
-                      Nothing -> error $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                      Nothing -> case Map.lookup "*" (entryEventsInfo env) of
+                                      Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                      Just m' -> case Map.lookup mn m' of
+                                                 Nothing ->  error $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                                 Just _  -> error $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
                       Just (_, varClass', argsPost) ->
                            let classPost    = words $ varClass'
                                varClass     = last classPost
@@ -555,7 +571,7 @@ getEventClass :: Bind -> String
 getEventClass bn = case bn of
                         BindType t id' -> t ++ " " ++ id'
                         BindId id'     -> id'
-                        BindStar       -> error "Error: Missing class name in a trigger definition.\n"
+                        BindStar       -> "*"
 
 --------------------------------------------------------------------
 -- Environment with variables, triggers and foreaches information --
@@ -588,7 +604,14 @@ emptyEnv = Env { forsVars            = []
                }
 
 updateEntryEventsInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
-updateEntryEventsInfo env einfo args mn BindStar        = env
+updateEntryEventsInfo env einfo args mn BindStar        = 
+ let t = "*" in
+ case Map.lookup t (entryEventsInfo env) of
+      Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
+                 in env { entryEventsInfo = Map.insert t mapeinfo' (entryEventsInfo env) }
+      Just mapeinfo -> 
+           let mapeinfo' = Map.insert mn einfo mapeinfo
+           in env { entryEventsInfo = Map.insert t mapeinfo' (entryEventsInfo env) }
 updateEntryEventsInfo env einfo args mn (BindType t id) = 
  case Map.lookup t (entryEventsInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
@@ -609,7 +632,14 @@ updateEntryEventsInfo env einfo args mn (BindId id)     =
 
 
 updateExitEventsInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
-updateExitEventsInfo env einfo args mn BindStar        = env
+updateExitEventsInfo env einfo args mn BindStar        = 
+ let t = "*" in
+ case Map.lookup t (exitEventsInfo env) of
+      Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
+                 in env { exitEventsInfo = Map.insert t mapeinfo' (exitEventsInfo env) }
+      Just mapeinfo -> 
+           let mapeinfo' = Map.insert mn einfo mapeinfo
+           in env { exitEventsInfo = Map.insert t mapeinfo' (exitEventsInfo env) }
 updateExitEventsInfo env einfo args mn (BindType t id) = 
  case Map.lookup t (exitEventsInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
