@@ -295,7 +295,7 @@ makeTransitionAlg1Cond ns e events c =
     then Transition ns (Arrow e c' act) ns
     else let ident = "_nyckelord"
              ys    = map (splitOnIdentifier ident) (tail xs)
-             bindn = getClassVar c events
+             bindn = getClassVar c events EVEntry
              ys'   = removeDuplicates $ map head ys
              zs    = map (\xs -> cn ++ xs ++ ident ++ " = " ++ bindn ++ "." ++ (tail xs) ++ ";") ys'
              act'  = act ++ " " ++ concat zs
@@ -331,7 +331,7 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e events =
          in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
     else let ident   = "_nyckelord"
              ys      = map (splitOnIdentifier ident) (tail xs)
-             bindn   = getClassVar c events
+             bindn   = getClassVar c events EVEntry
              ys'     = removeDuplicates $ map head ys
              zs      = map (\xs -> cn ++ xs ++ ident ++ " = " ++ bindn ++ "." ++ (tail xs) ++ ";") ys'
              semicol = if (act == "") then "" else ";"

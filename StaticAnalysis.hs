@@ -17,6 +17,7 @@ import Instrumentation
 import PartialInfoFilesGeneration
 import Data.Functor ((<$>))
 import Data.List ((\\))
+import Data.Maybe
 import System.FilePath
 import qualified Data.Map as Map
 
@@ -63,7 +64,7 @@ staticAnalysis' jpath ppd output_add =
        then do xml <- ParserXMLKeYOut.parse xml_add
                let cns  = getContractNamesEnv ppd
                let xml' = removeNoneContracts xml cns
-               let ppdate'  = ppd >>= (\x -> return $ refinePPDATE x xml')
+               let ppdate' = refinePPDATE ppd xml'
                info <- report xml'
                writeFile (output_add ++ "/report.txt") info
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
@@ -73,7 +74,6 @@ staticAnalysis' jpath ppd output_add =
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
                createDirectoryIfMissing True (output_add ++ "/" ++ annotated_add)
-               --putStrLn (show $ generateNewTriggers ppdate'')
                contractsJavaFileGen ppdate'' add tnewvars
                idFileGen add
                copyFiles jpath (output_add ++ "/" ++ annotated_add)
@@ -81,9 +81,10 @@ staticAnalysis' jpath ppd output_add =
                return ppdate''
        else do putStrLn "\nWarning: KeY execution has failed."
                writeFile (output_add ++ "/report.txt") "Warning: KeY execution has failed.\n"
+               let ppd' = generateNewTriggers ppd (contractsGet $ getValue ppd)
                putStrLn "Generating Java files to control the Hoare triple(s) at runtime."
-               methods <- methodsNames ppd jpath
-               let (ppdate'', tnewvars) = operationalizeOldResultBind ppd methods
+               methods <- methodsNames ppd' jpath
+               let (ppdate'', tnewvars) = operationalizeOldResultBind ppd' methods
                let add = output_add ++ "/ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
@@ -132,15 +133,3 @@ getSourceCodeFolderName :: FilePath -> String
 getSourceCodeFolderName s = let (xs,ys) = splitAtIdentifier '/' $ (reverse . init) s
                             in reverse xs
 
---TODO: Fix this method if classes with the same name in different paths are allowed
---Generates triggers whenever a method to be runtime verified is not associated to anyone
---generateNewTriggers :: UpgradePPD PPDATE -> UpgradePPD PPDATE
-generateNewTriggers ppd =
-  do let env    = getEnvVal ppd
-     let ppdate = getValue ppd
-     let consts = contractsGet ppdate
-     let mns    = removeDuplicates [mn | mn <- map methodCN consts]
-     let entry  = filter (\(x,y) -> y == Nothing) $ map ((\x -> (x,Map.lookup x (entryEventsInfo env))).snd) mns
-     let exit   = filter (\(x,y) -> y == Nothing) $ map ((\x -> (x,Map.lookup x (exitEventsInfo env))).snd) mns
-     let minfo  = methodsInFiles env
-     (entryEventsInfo env)
