@@ -66,7 +66,6 @@ staticAnalysis' jpath ppd output_add =
                let ppdate'  = ppd >>= (\x -> return $ refinePPDATE x xml')
                info <- report xml'
                writeFile (output_add ++ "/report.txt") info
-               putStrLn "\nStatic verification completed."
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
                methods <- methodsNames ppdate' jpath
                let (ppdate'', tnewvars) = operationalizeOldResultBind ppdate' methods
