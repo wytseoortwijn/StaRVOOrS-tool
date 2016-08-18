@@ -120,12 +120,12 @@ getVarsToControl cl ((main, cl', vars):xs) = if (cl == cl')
 -- returns the operationalized string and the list of variables in old operators
 operationalizeOld :: String -> ContractName -> (String, [String])
 operationalizeOld s cn = 
- let xs = splitOnIdentifier "\\old" s
+ let xs = splitOnIdentifier "\\old(" s
  in if (length xs == 1)
     then (s, [])
     else let begin = head xs
              ys = tail xs
-             zs = map ((\(x,y) -> (trim (tail x), clean $ tail y)) . (splitAtIdentifier ')')) ys
+             zs = map ((\(x,y) -> (trim (tail x), clean $ tail y)) . (splitAtClosingParen 0)) ys
              s' = begin ++ flattenOld zs cn            
          in (s' , removeDuplicates (map fst zs))
 
