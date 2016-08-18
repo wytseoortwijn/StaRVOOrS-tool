@@ -27,6 +27,20 @@ trim = reverse . clean . reverse . clean
 splitAtIdentifier :: Char -> String -> (String, String)
 splitAtIdentifier iden s = (takeWhile (\c -> not (c == iden)) s, dropWhile (\c -> not (c == iden)) s)
 
+splitAtClosingParen :: Int -> String -> (String, String)
+splitAtClosingParen n ""       = ("","")
+splitAtClosingParen n ('(':xs) = 
+ let (a,b) = splitAtClosingParen (n+1) xs
+ in ('(':a,b)
+splitAtClosingParen n (')':xs) = 
+ if n > 0
+ then let (a,b) = splitAtClosingParen (n-1) xs
+      in (')':a,b)
+ else ("",xs)
+splitAtClosingParen n (x:xs) = 
+ let (a,b) = splitAtClosingParen n xs
+ in (x:a,b)
+
 splitOnIdentifier :: String -> String -> [String]
 splitOnIdentifier = splitOn
 
