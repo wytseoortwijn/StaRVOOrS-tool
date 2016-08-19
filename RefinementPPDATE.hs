@@ -171,7 +171,7 @@ createTriggerEntry (cn,mn,(rt,mn',xs)) n =
  if (mn == mn')
  then let trnm = mn ++ "_en"
           nvar = "cv" ++ "_" ++ (show n)
-          cn'  = cn ++ nvar
+          cn'  = cn ++ " " ++ nvar
           cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) EVEntry
           tr   = EventDef trnm (map ((\[x,y] -> BindType x y).words) xs) cpe ""
       in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words) xs)),tr)
@@ -198,7 +198,7 @@ createTriggerExit:: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -
 createTriggerExit (cn,mn,(rt,mn',xs)) n = 
  let trnm = mn ++ "_ex" 
      nvar = "cv" ++ "_" ++ (show n)
-     cn'  = cn ++ nvar
+     cn'  = cn ++ " " ++ nvar
      ret  = "r" ++ (show n) in
  if (mn == mn')
  then if (rt == "void")
@@ -206,7 +206,7 @@ createTriggerExit (cn,mn,(rt,mn',xs)) n =
                tr   = EventDef trnm (map ((\[x,y] -> BindType x y).words) xs) cpe ""
            in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words) xs)), tr)
       else let cpe = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [BindId ret]) 
-               tr  = EventDef trnm (map ((\[x,y] -> BindType x y).words) xs) cpe ""
+               tr  = EventDef trnm (map ((\[x,y] -> BindType x y).words) xs ++ [BindType rt ret]) cpe ""
            in ((cn,mn,(trnm, cn', (map ((\[x,y] -> Args x y).words) xs) ++ [Args rt ret])),tr)
  else error $ "Problem when creating an exit trigger. Mismatch between method names " ++ mn ++ " and " ++ mn' ++ ".\n"
 

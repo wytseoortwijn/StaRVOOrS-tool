@@ -7,14 +7,17 @@ import RefinementPPDATE
 import Data.Char
 import UpgradePPDATE
 import ErrM
+import Data.List
 
 
 --TODO: Possible problem when operationalising nested properties
-operationalizeOldResultBind :: UpgradePPD PPDATE -> [(String, ClassInfo, [String])] -> (UpgradePPD PPDATE, [(Contract, Variables)])
-operationalizeOldResultBind ppd methods =
+operationalizeOldResultBind :: UpgradePPD PPDATE -> (UpgradePPD PPDATE, [(Contract, Variables)])
+operationalizeOldResultBind ppd =
  let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
      global   = globalGet ppdate
      consts   = contractsGet ppdate
+     mfiles   = methodsInFiles env
+     methods  = map (\(x,y,z) -> (x,y,map (\(x,y,z) -> y) z)) mfiles
      es       = getAllEvents global
      xs       = map (\ c -> operationalizePrePostORB c (varsInFiles env) es methods) consts
      consts'  = map fst xs
@@ -126,13 +129,25 @@ operationalizeOld s cn =
     else let begin = head xs
              ys = tail xs
              zs = map ((\(x,y) -> (trim (tail x), clean $ tail y)) . (splitAtClosingParen 0)) ys
-             s' = begin ++ flattenOld zs cn            
+             s' = begin ++ flattenOld zs cn
          in (s' , removeDuplicates (map fst zs))
 
 flattenOld :: [(String, String)] -> ContractName -> String
 flattenOld [] cn            = ""
-flattenOld ((xs,ys):xss) cn = cn ++ "_" ++ xs ++ "_nyckelord" ++ ys ++ flattenOld xss cn
+flattenOld ((xs,ys):xss) cn = cn ++ "_" ++ xs ++ "_nyckelord " ++ ys ++ flattenOld xss cn
 
+flattenOld' [] cn _             = ""
+flattenOld' ((xs,ys):xss) cn zs = 
+ let xs'   = words xs
+     xs''  = map (\c -> getExpName zs c cn) xs'
+     xs''' = unwords xs''
+ in xs''' ++ " " ++ ys ++ flattenOld' xss cn zs
+
+getExpName :: [(String,String,String)] -> String -> ContractName -> String
+getExpName [] exp _             = exp
+getExpName ((a,_,c):xss) exp cn = if exp == a
+                                  then cn ++ "_nyckelord" ++ "." ++ c
+                                  else getExpName xss exp cn
 
 addType2NewVars :: ContractName -> [(Type, Id)] -> [Id] -> Variables
 addType2NewVars cn vars []     = []
@@ -141,7 +156,7 @@ addType2NewVars cn vars (v:vs) = let vdec = VarDecl (cn ++ "_" ++ v ++ "_nyckelo
                                  in tvar : addType2NewVars cn vars vs
 
 getType :: Id -> [(Type, Id)] -> Type
-getType _ []               = ""
+getType var []             = inferType var
 getType var ((type',v):vs) = if (var == v)
                              then type'
                              else getType var vs
@@ -152,6 +167,20 @@ genNewVarsOld global ss =
   in if (null vars)
      then ss
      else ss ++ vars
+
+--TODO: After a bug detection, this method was introduced as a temporary partial fix 
+--      it is in the process of being replace by a proper type inference
+inferType :: String -> Type
+inferType s 
+ | (or.map (\c -> isInfixOf c s)) boolSymbols = "boolean"
+ | (or.map (\c -> isInfixOf c s)) intSymbols  = "int"
+ | otherwise                                  = "int"
+ 
+boolSymbols :: [String]
+boolSymbols = ["<","<=","==",">",">=","&&","||","!"]
+
+intSymbols :: [String]
+intSymbols = ["+","-","*"]
 
 -------------
 -- \result --

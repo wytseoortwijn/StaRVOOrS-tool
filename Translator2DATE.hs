@@ -286,7 +286,7 @@ makeTransitionAlg1Cond ns e events c =
  let p     = pre c
      p'    = post c
      cn    = contractName c
-     xs    = splitOnIdentifier cn p'
+     xs    = splitOnIdentifier cn p' --identifies \old expressions operationalisations
      esinf = map getInfoEvent events
      arg   = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
      c'    = "HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")"
@@ -297,9 +297,10 @@ makeTransitionAlg1Cond ns e events c =
              ys    = map (splitOnIdentifier ident) (tail xs)
              bindn = getClassVar c events EVEntry
              ys'   = removeDuplicates $ map head ys
-             zs    = map (\xs -> cn ++ xs ++ ident ++ " = " ++ bindn ++ "." ++ (tail xs) ++ ";") ys'
+             zs    = map (\xs -> cn ++ xs ++ ident ++ " = " ++ bindn ++ "." ++ (tail xs) ++ ";") ys' --change to new initilisation
              act'  = act ++ " " ++ concat zs
          in Transition ns (Arrow e c' act') ns
+
 
 makeExtraTransitionAlg2Cond :: Transitions -> String
 makeExtraTransitionAlg2Cond []     = ""
@@ -322,7 +323,7 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e events =
  let p  = pre c
      p' = post c
      cn = contractName c
-     xs = splitOnIdentifier cn p'
+     xs = splitOnIdentifier cn p' --identifies \old expressions operationalisations
      esinf = map getInfoEvent events
      arg = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
  in if (length xs == 1)
@@ -333,7 +334,7 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e events =
              ys      = map (splitOnIdentifier ident) (tail xs)
              bindn   = getClassVar c events EVEntry
              ys'     = removeDuplicates $ map head ys
-             zs      = map (\xs -> cn ++ xs ++ ident ++ " = " ++ bindn ++ "." ++ (tail xs) ++ ";") ys'
+             zs      = map (\xs -> cn ++ xs ++ ident ++ " = " ++ bindn ++ "." ++ (tail xs) ++ ";") ys'--change to new initilisation
              semicol = if (act == "") then "" else ";"
              act'    = " if (HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(id); " ++ concat zs ++ "}"
          in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'

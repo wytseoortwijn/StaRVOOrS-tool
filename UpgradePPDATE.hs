@@ -587,7 +587,7 @@ data Env = Env
  , allEventsId         :: [Id]
  , contractsNames      :: [ContractName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
- , methodsInFiles      :: [(String, ClassInfo, [(Id,String,[String])])] --[(path_to_class,class_name,[(method_name,returned_type,arguments)])]
+ , methodsInFiles      :: [(String, ClassInfo, [(Id,String,[String])])] --[(path_to_class,class_name,[(returned_type,method_name,arguments)])]
  }
   deriving (Show)
 

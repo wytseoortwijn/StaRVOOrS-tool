@@ -68,8 +68,7 @@ staticAnalysis' jpath ppd output_add =
                info <- report xml'
                writeFile (output_add ++ "/report.txt") info
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
-               methods <- methodsNames ppdate' jpath
-               let (ppdate'', tnewvars) = operationalizeOldResultBind ppdate' methods
+               let (ppdate'', tnewvars) = operationalizeOldResultBind ppdate'
                let add = output_add ++ "/ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
@@ -83,8 +82,7 @@ staticAnalysis' jpath ppd output_add =
                writeFile (output_add ++ "/report.txt") "Warning: KeY execution has failed.\n"
                let ppd' = generateNewTriggers ppd (contractsGet $ getValue ppd)
                putStrLn "Generating Java files to control the Hoare triple(s) at runtime."
-               methods <- methodsNames ppd' jpath
-               let (ppdate'', tnewvars) = operationalizeOldResultBind ppd' methods
+               let (ppdate'', tnewvars) = operationalizeOldResultBind ppd'
                let add = output_add ++ "/ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
