@@ -123,7 +123,7 @@ lookupClassVar (e:es) c ev =
 
 compareEV :: EventVariation -> EventVariation -> Bool
 compareEV EVEntry EVEntry         = True
-compareEV (EVExit []) (EVExit []) = True
+compareEV (EVExit _) (EVExit _)   = True
 compareEV _ _                     = False
 
 -----------------------------------------------------------------------------------------
