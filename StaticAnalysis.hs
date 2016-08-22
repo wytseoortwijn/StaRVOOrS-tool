@@ -68,7 +68,9 @@ staticAnalysis' jpath ppd output_add =
                info <- report xml'
                writeFile (output_add ++ "/report.txt") info
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
-               let (ppdate'', tnewvars) = operationalizeOldResultBind ppdate'
+               --TODO: compute types of expressions in \old
+               let oldExpTypes = Map.empty
+               let (ppdate'', tnewvars) = operationalizeOldResultBind ppdate' oldExpTypes
                let add = output_add ++ "/ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
@@ -82,7 +84,7 @@ staticAnalysis' jpath ppd output_add =
                writeFile (output_add ++ "/report.txt") "Warning: KeY execution has failed.\n"
                let ppd' = generateNewTriggers ppd (contractsGet $ getValue ppd)
                putStrLn "Generating Java files to control the Hoare triple(s) at runtime."
-               let (ppdate'', tnewvars) = operationalizeOldResultBind ppd'
+               let (ppdate'', tnewvars) = operationalizeOldResultBind ppd' Map.empty
                let add = output_add ++ "/ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add

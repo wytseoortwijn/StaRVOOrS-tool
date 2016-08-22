@@ -588,6 +588,7 @@ data Env = Env
  , contractsNames      :: [ContractName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
  , methodsInFiles      :: [(String, ClassInfo, [(Id,String,[String])])] --[(path_to_class,class_name,[(returned_type,method_name,arguments)])]
+ , oldExpTypes         :: OldExprM
  }
   deriving (Show)
 
@@ -601,6 +602,7 @@ emptyEnv = Env { forsVars            = []
                , contractsNames      = []
                , varsInFiles         = []
                , methodsInFiles      = []
+               , oldExpTypes         = Map.empty
                }
 
 updateEntryEventsInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
@@ -696,3 +698,10 @@ getContractNamesEnv ppd = let env = CM.execStateT ppd emptyEnv
                           in case env of
                                 Bad _ -> []
                                 Ok fs -> contractsNames fs
+
+getOldExpTypesEnv :: UpgradePPD a -> OldExprM
+getOldExpTypesEnv ppd = let env = CM.execStateT ppd emptyEnv
+                        in case env of
+                                Bad _ -> Map.empty
+                                Ok fs -> oldExpTypes fs
+
