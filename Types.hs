@@ -1,5 +1,7 @@
 module Types where
 
+import Data.Map
+
 ------------
 -- ppDATE --
 ------------
@@ -293,6 +295,14 @@ updateMethodCallBody :: EventDef -> [Bind] -> EventDef
 updateMethodCallBody (EventDef e arg cpes wc) bs = EventDef e arg (updateCpeMethodCallBody cpes bs) wc
 
 type Events = [EventDef]
+
+
+-------------------------------------------------------------------
+-- Types to deal with the operationalisation of \old expressions --
+-------------------------------------------------------------------
+
+type OldExprL = [(String,Type,String)] --(expr_in_old,type_expr_in_old,expr_in_old_name_in_obj)
+type OldExprM = Map ContractName OldExprL
 
 -----------------------
 -- XML related types --

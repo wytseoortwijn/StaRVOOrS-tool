@@ -7,33 +7,41 @@ import RefinementPPDATE
 import Data.Char
 import UpgradePPDATE
 import ErrM
+import Data.List
+import qualified Data.Map as Map
+import Data.Maybe
 
 
 --TODO: Possible problem when operationalising nested properties
-operationalizeOldResultBind :: UpgradePPD PPDATE -> [(String, ClassInfo, [String])] -> (UpgradePPD PPDATE, [(Contract, Variables)])
-operationalizeOldResultBind ppd methods =
+operationalizeOldResultBind :: UpgradePPD PPDATE -> Map.Map ContractName [(String,Type)] -> (UpgradePPD PPDATE, [(Contract, Variables)])
+operationalizeOldResultBind ppd oldExprTypesM =
  let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
      global   = globalGet ppdate
      consts   = contractsGet ppdate
+     mfiles   = methodsInFiles env
+     methods  = map (\(x,y,z) -> (x,y,map (\(x,y,z) -> y) z)) mfiles
      es       = getAllEvents global
-     xs       = map (\ c -> operationalizePrePostORB c (varsInFiles env) es methods) consts
-     consts'  = map fst xs
-     newvars  = genNewVarsOld global (concat (map snd xs))
+     xs       = map (\ c -> operationalizePrePostORB c (varsInFiles env) es methods oldExprTypesM) consts
+     oldExpT  = Map.unions $ map (\(x,y,z) -> z) xs
+     consts'  = map (\(x,y,z) -> x) xs
+     newvars  = genNewVarsOld global (concat (map (\(x,y,z) -> y) xs))
      global'  = updateGlobal global (Ctxt newvars (events $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
-     ppdate'  = ppd >>= (\x -> return $ PPDATE (importsGet ppdate) global' (cinvariantsGet ppdate) consts' (methodsGet ppdate))
- in (ppdate', xs)
+     ppdate'  = ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ PPDATE (importsGet ppdate) global' (cinvariantsGet ppdate) consts' (methodsGet ppdate))
+ in (ppdate', map (\(x,y,z) -> (x,y)) xs)
 
 
-operationalizePrePostORB :: Contract -> [(String, ClassInfo, [(Type, Id)])] -> Events -> [(String, ClassInfo, [String])] -> (Contract, Variables)
-operationalizePrePostORB c vars events methods = 
- let cn = contractName c
-     p  = pre c
-     p' = post c
-     (xsPost, vars') = operationalizeOld p' cn
-     ysPost = operationalizeResult xsPost
-     tvars  = addType2NewVars cn (getListOfTypesAndVars (fst $ methodCN c) vars) vars'   
-     const' = updatePost c ysPost
- in (bindCV const' vars events methods, tvars)
+operationalizePrePostORB :: Contract -> [(String, ClassInfo, [(Type, Id)])] -> Events -> [(String, ClassInfo, [String])] -> Map.Map ContractName [(String,Type)] -> (Contract, Variables,OldExprM)
+operationalizePrePostORB c vars events methods oldExprTypesM = 
+ let cn                  = contractName c
+     p                   = pre c
+     p'                  = post c
+     (xsPost, oldExprl)  = operationalizeOld p' cn
+     ysPost              = operationalizeResult xsPost
+     typeList            = getListOfTypesAndVars (fst $ methodCN c) vars
+     (oldExprl', tvars)  = addType2NewVars cn typeList oldExprTypesM oldExprl 
+     const'              = updatePost c ysPost
+     oldExprl''          = bindOldExp c vars events methods oldExprl'
+ in (bindCV const' vars events methods, tvars,Map.singleton cn oldExprl'')
 
 
 --------------------------
@@ -52,6 +60,16 @@ bindCV c vars es methods =
      pre''  = concat $ bindMethods bindEntry mnames pre'
      post'' = concat $ bindMethods bindExit mnames post'
  in updatePre (updatePost c post'') pre''
+
+bindOldExp :: Contract -> [(String, ClassInfo, [(String, String)])] -> Events -> [(String, ClassInfo, [String])] -> OldExprL -> OldExprL
+bindOldExp c vars es _ []             = []
+bindOldExp c vars es ms ((x,y,z):xss) = 
+ let bindExit  = getClassVar c es (EVExit [])
+     varsc     = getVarsToControl (fst $ methodCN c) vars
+     x'        = concat $ bindVars bindExit varsc x
+     ms'       = getMethodsToControl (fst $ methodCN c) ms
+     x''       = concat $ bindMethods bindExit ms' x'
+ in (x'',y,z):bindOldExp c vars es ms xss
 
 
 bindMethods :: String -> [String] -> String -> [String]
@@ -117,34 +135,43 @@ getVarsToControl cl ((main, cl', vars):xs) = if (cl == cl')
 -- \old --
 ----------
 
--- returns the operationalized string and the list of variables in old operators
-operationalizeOld :: String -> ContractName -> (String, [String])
-operationalizeOld s cn = 
- let xs = splitOnIdentifier "\\old(" s
+-- returns the operationalized post and a map storing the expressions in old operators
+operationalizeOld :: String -> ContractName -> (String, OldExprL)
+operationalizeOld post cn = 
+ let xs = splitOnIdentifier "\\old(" post
  in if (length xs == 1)
-    then (s, [])
+    then (post, [])
     else let begin = head xs
-             ys = tail xs
-             zs = map ((\(x,y) -> (trim (tail x), clean $ tail y)) . (splitAtClosingParen 0)) ys
-             s' = begin ++ flattenOld zs cn            
-         in (s' , removeDuplicates (map fst zs))
+             ys    = tail xs
+             zs    = map ((\(x,y) -> (trim (tail x), clean $ tail y)) . (splitAtClosingParen 0)) ys
+             fszs  = foldr (\(x,y) xs -> (x,"","e" ++ show y):xs) [] $ zip (removeDuplicates (map fst zs)) [1..length zs]
+             --s'    = begin ++ flattenOld zs cn
+             s'    = begin ++ flattenOld' zs cn fszs
+         in (s',fszs)
 
 flattenOld :: [(String, String)] -> ContractName -> String
 flattenOld [] cn            = ""
-flattenOld ((xs,ys):xss) cn = cn ++ "_" ++ xs ++ "_nyckelord" ++ ys ++ flattenOld xss cn
+flattenOld ((xs,ys):xss) cn = cn ++ "_" ++ xs ++ "_nyckelord " ++ ys ++ flattenOld xss cn
 
+flattenOld' :: [(String, String)] -> ContractName -> OldExprL -> String
+flattenOld' [] cn _             = ""
+flattenOld' ((xs,ys):xss) cn zs = 
+ let xs' = getExpName zs xs cn
+ in xs' ++ " " ++ ys ++ flattenOld' xss cn zs
 
-addType2NewVars :: ContractName -> [(Type, Id)] -> [Id] -> Variables
-addType2NewVars cn vars []     = []
-addType2NewVars cn vars (v:vs) = let vdec = VarDecl (cn ++ "_" ++ v ++ "_nyckelord") VarInitNil
-                                     tvar = Var VarModifierNil (getType v vars) [vdec]
-                                 in tvar : addType2NewVars cn vars vs
+getExpName :: OldExprL -> String -> ContractName -> String
+getExpName [] exp _             = error "Error: Cannot get type to operationalise \\old expresion"
+getExpName ((a,_,c):xss) exp cn = if exp == a
+                                  then cn ++ "_"  ++ c ++ "_nyckelord"
+                                  else getExpName xss exp cn
 
-getType :: Id -> [(Type, Id)] -> Type
-getType _ []               = ""
-getType var ((type',v):vs) = if (var == v)
-                             then type'
-                             else getType var vs
+addType2NewVars :: ContractName -> [(Type, Id)] -> Map.Map ContractName [(String,Type)] -> OldExprL -> (OldExprL, Variables)
+addType2NewVars cn vars _ []                = ([],[])
+addType2NewVars cn vars mtypes ((v,t,e):vs) = let vdec  = VarDecl (cn ++ "_" ++ e ++ "_nyckelord") VarInitNil
+                                                  typE  = getType v mtypes vars
+                                                  tvar  = Var VarModifierNil typE [vdec]                                          
+                                                  (a,b) = addType2NewVars cn vars mtypes vs
+                                              in ((v,typE,e):a, tvar:b)
 
 genNewVarsOld :: Global -> Variables -> Variables
 genNewVarsOld global ss = 
@@ -152,6 +179,27 @@ genNewVarsOld global ss =
   in if (null vars)
      then ss
      else ss ++ vars
+
+--TODO: After a bug detection, this method was introduced as a temporary partial fix 
+--      it is in the process of being replace by a proper type inference
+getType :: Id -> Map.Map ContractName [(String,Type)] -> [(Type, Id)] -> Type
+getType var oldExprTypesM []             = checkType oldExprTypesM var
+getType var oldExprTypesM ((type',v):vs) = 
+ if (var == v)
+ then type'
+ else getType var oldExprTypesM vs
+
+checkType :: Map.Map ContractName [(String,Type)] -> String -> Type
+checkType _ s 
+ | (or.map (\c -> isInfixOf c s)) boolSymbols = "boolean"
+ | (or.map (\c -> isInfixOf c s)) intSymbols  = "int"
+ | otherwise                                  = "int"
+ 
+boolSymbols :: [String]
+boolSymbols = ["<","<=","==",">",">=","&&","||","!"]
+
+intSymbols :: [String]
+intSymbols = ["+","-","*"]
 
 -------------
 -- \result --

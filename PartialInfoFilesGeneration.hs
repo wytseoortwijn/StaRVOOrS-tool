@@ -91,10 +91,9 @@ methodForPost c env ctnewvars =
      tnvs'     = auxNewVars tnvs
      newargs   = addComma tnvs'
      nargs     = if (null tnvs) then "" else "," ++ newargs
-     argsPost' = if (isInfixOf "ret" argsPost) then init argsPost else argsPost
  in 
   "  // " ++ (contractName c) ++ "\n"
-  ++ "  public static boolean " ++ (contractName c) ++ "_post(" ++ argsPost' ++ nargs ++ ") {\n" 
+  ++ "  public static boolean " ++ (contractName c) ++ "_post(" ++ argsPost ++ nargs ++ ") {\n" 
   ++ "    return " ++ (post c) ++ ";\n" 
   ++ "  }\n\n"
 

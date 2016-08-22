@@ -1,4 +1,4 @@
-module Instrumentation (programMethods,programVariables, methodsInstrumentation, methodsNames,updateVarsEnv) where
+module Instrumentation (programMethods,programVariables, methodsInstrumentation, updateVarsEnv) where
 
 import qualified Types as T
 import CommonFunctions
@@ -148,26 +148,4 @@ getMethods i jpath =
      let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
      let methods = (getMethodDecl.getDecls.getClassBody) java_aux
      return (main, cl, (map methodsDetails methods))
-
-
---TODO: Modify to use info in the enviroment (methodsInFiles) when dealing with private variables
---returns the name of all the public methods in the java files involved in the verification process
-methodsNames :: UpgradePPD T.PPDATE -> FilePath -> IO [(String, T.ClassInfo, [String])]
-methodsNames ppd jpath = 
- do let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
-    let imports       = T.importsGet ppdate
-    mnames <- sequence [ getMethodName i jpath
-                       | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
-                       ]
-    return mnames
-
-getMethodName :: T.Import -> FilePath -> IO (String, T.ClassInfo, [String])
-getMethodName i jpath =
-  do (main, cl) <- makeAddFile i
-     let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")
-     r <- readFile file_add
-     let java     = (\(Right x) -> x) $ parseJavaFile r
-     let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
-     let methods  = (getMethodDeclId.getMemberDecl.getDecls.getClassBody) java_aux
-     return (main, cl, methods)
 
