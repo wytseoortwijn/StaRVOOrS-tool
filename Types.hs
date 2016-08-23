@@ -308,6 +308,8 @@ type OldExprM = Map ContractName OldExprL
 -- XML related types --
 -----------------------
 
+--Types associated to the KeY API --
+
 type ContractId   = String
 type ContractText = String
 type Target       = String
@@ -340,4 +342,19 @@ data MethodContractApplication = MCA
  , methodMCA   :: String
  , contractMCA :: String
  } deriving(Eq,Show)
+
+
+-- Types associated to the types inference --
+
+data OldExpr = OldExpr
+  { contractID    :: ContractId
+  , path          :: Type
+  , methoD        :: Target
+  , oldExprs      :: [OExpr]
+  } deriving (Show, Eq)
+
+data OExpr = OExpr
+ { expr      :: String
+ , inferType :: String
+ } deriving (Show,Eq)
 

@@ -20,6 +20,7 @@ import Data.List ((\\))
 import Data.Maybe
 import System.FilePath
 import qualified Data.Map as Map
+import TypeInferenceXml
 
 -------------------------------
 -- Static Analysis using KeY --
