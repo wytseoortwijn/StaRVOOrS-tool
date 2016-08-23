@@ -46,7 +46,7 @@ updateJMLForM' c mn cl ((mn', cl', jml):xs) = if (mn == mn' && cl == cl')
                                               else (mn', cl', jml):updateJMLForM' c mn cl xs
 
 fromContract2JML' :: Contract -> String
-fromContract2JML' (Contract cn _ precon postcon assig _ _) =  
+fromContract2JML' (Contract cn _ precon postcon assig _ _ _) =  
   "    @ " ++ requires' precon cn
   ++ "    @ " ++ ensures postcon
   ++ "    @ " ++ assign assig
@@ -63,7 +63,7 @@ requires' p cn = "requires " ++ cn ++ " && " ++ p ++ ";\n"
 ----------------------------------------------------------
 
 getContract :: Contract -> String
-getContract (Contract _ _ precon postcon assig _ _) =
+getContract (Contract _ _ precon postcon assig _ _ _) =
   "  /*@ public normal_behaviour\n"
   ++ "    @ " ++ requires precon 
   ++ "    @ " ++ ensures postcon
@@ -90,7 +90,7 @@ updateJMLForM c mn ((mn', jml):xs) = if (mn == mn')
                                      else (mn', jml):updateJMLForM c mn xs
 
 fromContract2JML :: Contract -> String
-fromContract2JML (Contract _ _ precon postcon assig _ _) =  
+fromContract2JML (Contract _ _ precon postcon assig _ _ _) =  
   "    @ " ++ requires precon 
   ++ "    @ " ++ ensures postcon
   ++ "    @ " ++ assign assig

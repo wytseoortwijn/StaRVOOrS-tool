@@ -38,7 +38,7 @@ operationalizePrePostORB c vars events methods oldExprTypesM =
      (xsPost, oldExprl)  = operationalizeOld p' cn
      ysPost              = operationalizeResult xsPost
      typeList            = getListOfTypesAndVars (fst $ methodCN c) vars
-     (oldExprl', tvars)  = addType2NewVars cn typeList oldExprTypesM oldExprl 
+     (oldExprl', tvars)  = addType2NewVars cn typeList oldExprTypesM oldExprl
      const'              = updatePost c ysPost
      oldExprl''          = bindOldExp c vars events methods oldExprl'
  in (bindCV const' vars events methods, tvars,Map.singleton cn oldExprl'')

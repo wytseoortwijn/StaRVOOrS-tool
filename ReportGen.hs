@@ -9,7 +9,7 @@ type PProof = (MethodName, ContractName, [Pre])
 
 report :: [Proof] -> IO String
 report proofs = do let xs    = map getInfoFromProof proofs
-                   let pinfo = splitAccording2Proof [] [] [] xs
+                   let pinfo = splitAccording2Proof [] [] [] (map (\(x,y,z,t) -> (x,y,z)) xs)
                    return $ makeReport pinfo
 
 
