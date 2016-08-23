@@ -14,8 +14,7 @@ import qualified Data.Map as Map
 import Data.List
 
 
---inferTypesOldExprs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO (Map.Map ContractName [(String,Type)])
---inferTypesOldExprs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [OldExpr]
+inferTypesOldExprs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO (Map.Map ContractName [(String,Type)])
 inferTypesOldExprs ppd jpath output_add = 
  do let ppdate  = getValue ppd
     let env     = getEnvVal ppd
@@ -26,8 +25,8 @@ inferTypesOldExprs ppd jpath output_add =
     let toXml'  = map (\oexpr -> addType oexpr types) toXml
     let xml_add = output_add ++ "tmp.xml"
     generateXmlFile jpath xml_add
-    let oldExpTypes = foldr (\x xs -> Map.insert (contractID x) (oldExprs x) xs) Map.empty toXml' 
-    return toXml'
+    let oldExpTypes = foldr (\x xs -> Map.insert (contractID x) (map toTuple $ oldExprs x) xs) Map.empty toXml' 
+    return oldExpTypes
                  where getTypes c vs ms = getListOfTypesAndVars c vs ++ getListOfTypesAndMethods c ms
                        toTuple (OExpr e t) = (e,t) 
 

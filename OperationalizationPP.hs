@@ -37,8 +37,7 @@ operationalizePrePostORB c vars events methods oldExprTypesM =
      p'                  = post c
      (xsPost, oldExprl)  = operationalizeOld p' cn
      ysPost              = operationalizeResult xsPost
-     typeList            = getListOfTypesAndVars (fst $ methodCN c) vars
-     (oldExprl', tvars)  = addType2NewVars cn typeList oldExprTypesM oldExprl
+     (oldExprl', tvars)  = addType2NewVars cn oldExprTypesM oldExprl
      const'              = updatePost c ysPost
      oldExprl''          = bindOldExp c vars events methods oldExprl'
  in (bindCV const' vars events methods, tvars,Map.singleton cn oldExprl'')
@@ -160,13 +159,13 @@ getExpName ((a,_,c):xss) exp cn = if exp == a
                                   then cn ++ "_"  ++ c ++ "_nyckelord"
                                   else getExpName xss exp cn
 
-addType2NewVars :: ContractName -> [(Type, Id)] -> Map.Map ContractName [(String,Type)] -> OldExprL -> (OldExprL, Variables)
-addType2NewVars cn vars _ []                = ([],[])
-addType2NewVars cn vars mtypes ((v,t,e):vs) = let vdec  = VarDecl (cn ++ "_" ++ e ++ "_nyckelord") VarInitNil
-                                                  typE  = getType v mtypes vars
-                                                  tvar  = Var VarModifierNil typE [vdec]                                          
-                                                  (a,b) = addType2NewVars cn vars mtypes vs
-                                              in ((v,typE,e):a, tvar:b)
+addType2NewVars :: ContractName -> Map.Map ContractName [(String,Type)] -> OldExprL -> (OldExprL, Variables)
+addType2NewVars cn _ []                = ([],[])
+addType2NewVars cn mtypes ((v,t,e):vs) = let vdec  = VarDecl (cn ++ "_" ++ e ++ "_nyckelord") VarInitNil
+                                             typE  = getType v cn mtypes
+                                             tvar  = Var VarModifierNil typE [vdec]                                          
+                                             (a,b) = addType2NewVars cn mtypes vs
+                                         in ((v,typE,e):a, tvar:b)
 
 genNewVarsOld :: Global -> Variables -> Variables
 genNewVarsOld global ss = 
@@ -175,26 +174,14 @@ genNewVarsOld global ss =
      then ss
      else ss ++ vars
 
---TODO: After a bug detection, this method was introduced as a temporary partial fix 
---      it is in the process of being replace by a proper type inference
-getType :: Id -> Map.Map ContractName [(String,Type)] -> [(Type, Id)] -> Type
-getType var oldExprTypesM []             = checkType oldExprTypesM var
-getType var oldExprTypesM ((type',v):vs) = 
- if (var == v)
- then type'
- else getType var oldExprTypesM vs
+getType :: Id -> ContractName -> Map.Map ContractName [(String,Type)] -> Type
+getType var cn oldExprTypesM = 
+ let xs = fromJust $ Map.lookup cn oldExprTypesM 
+     ys = [t | (y,t) <- xs, y==var]
+ in if (null ys)
+    then ""
+    else head ys
 
-checkType :: Map.Map ContractName [(String,Type)] -> String -> Type
-checkType _ s 
- | (or.map (\c -> isInfixOf c s)) boolSymbols = "boolean"
- | (or.map (\c -> isInfixOf c s)) intSymbols  = "int"
- | otherwise                                  = "int"
- 
-boolSymbols :: [String]
-boolSymbols = ["<","<=","==",">",">=","&&","||","!"]
-
-intSymbols :: [String]
-intSymbols = ["+","-","*",".intValue()"]
 
 -------------
 -- \result --

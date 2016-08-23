@@ -72,10 +72,7 @@ staticAnalysis' jpath ppd output_add =
                info <- report xml'
                writeFile (output_addr ++ "report.txt") info
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
-               --TODO: compute types of expressions in \old
-               aux <- inferTypesOldExprs ppdate' jpath output_addr--(output_addr ++ "workspace/")
-               putStrLn (show aux)
-               let oldExpTypes = Map.empty
+               oldExpTypes <- inferTypesOldExprs ppdate' jpath output_addr--(output_addr ++ "workspace/")               
                let (ppdate'', tnewvars) = operationalizeOldResultBind ppdate' oldExpTypes
                let add = output_add ++ "/ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
