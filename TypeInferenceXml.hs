@@ -27,9 +27,8 @@ inferTypesOldExprs ppd jpath output_add =
     generateXmlFile toXml' jpath xml_add
     --Run JavaExprReader
     oldExpsJER <- parse xml_add   
-    let oldExpTypes = foldr (\x xs -> Map.insert (contractID x) (map toTuple $ oldExprs x) xs) Map.empty toXml' 
-    return oldExpsJER
---    return oldExpTypes
+    let oldExpTypes = foldr (\x xs -> Map.insert (contractID x) (map toTuple $ oldExprs x) xs) Map.empty oldExpsJER
+    return oldExpTypes
                  where getTypes c vs ms = getListOfTypesAndVars c vs ++ getListOfTypesAndMethods c ms
                        toTuple (OExpr e t) = (e,t) 
 
@@ -92,7 +91,7 @@ generateXmlFile xs jpath output_add =
 oldExpr2Xml :: OldExpr -> String
 oldExpr2Xml oldExpr = 
  let xs = map oExpr2Xml (oldExprs oldExpr) in
- twoSpaces ++ "<contract ID=" ++ "\"" ++ contractID oldExpr ++ "\"" 
+ twoSpaces ++ "<contract Id=" ++ "\"" ++ contractID oldExpr ++ "\"" 
  ++ " class=" ++ "\"" ++ classInf oldExpr ++ "\"\n" 
  ++ " path=" ++ "\"" ++ path oldExpr ++ "\"\n" 
  ++ " target=" ++ "\"" ++ methoD oldExpr ++ "\">\n" 
@@ -163,7 +162,7 @@ parse xml_fn =
 getContractInfo :: Content i -> (ContractId, ClassInfo, Target,Type)
 getContractInfo (CElem (Elem name as _) _) =
   if (getFromQN name == "contract")
-  then let cid  = lookForVal "ID" as
+  then let cid  = lookForVal "Id" as
            cinf = lookForVal "class" as
            t    = lookForVal "path" as 
            tar  = lookForVal "target" as 
