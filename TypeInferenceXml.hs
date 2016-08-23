@@ -26,8 +26,10 @@ inferTypesOldExprs ppd jpath output_add =
     let toXml'  = map (\oexpr -> addType oexpr types) toXml
     let xml_add = output_add ++ "tmp.xml"
     generateXmlFile jpath xml_add
+    let oldExpTypes = foldr (\x xs -> Map.insert (contractID x) (oldExprs x) xs) Map.empty toXml' 
     return toXml'
                  where getTypes c vs ms = getListOfTypesAndVars c vs ++ getListOfTypesAndMethods c ms
+                       toTuple (OExpr e t) = (e,t) 
 
 
 --------------------
