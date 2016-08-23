@@ -70,6 +70,8 @@ staticAnalysis' jpath ppd output_add =
                writeFile (output_add ++ "/report.txt") info
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
                --TODO: compute types of expressions in \old
+               let aux = inferTypesOldExprs ppdate'
+               putStrLn (show aux)
                let oldExpTypes = Map.empty
                let (ppdate'', tnewvars) = operationalizeOldResultBind ppdate' oldExpTypes
                let add = output_add ++ "/ppArtifacts/"
