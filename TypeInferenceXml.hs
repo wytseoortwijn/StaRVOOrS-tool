@@ -14,7 +14,7 @@ import qualified Data.Map as Map
 import Data.List
 
 
-inferTypesOldExprs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO (Map.Map ContractName [(String,Type)])
+--inferTypesOldExprs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO (Map.Map ContractName [(String,Type)])
 inferTypesOldExprs ppd jpath output_add = 
  do let ppdate  = getValue ppd
     let env     = getEnvVal ppd
@@ -24,9 +24,12 @@ inferTypesOldExprs ppd jpath output_add =
     let types   = removeDuplicates [(classInf c, getTypes (classInf c) vars mfiles) | c <- toXml]
     let toXml'  = map (\oexpr -> addType oexpr types) toXml
     let xml_add = output_add ++ "tmp.xml"
-    generateXmlFile jpath xml_add
+    generateXmlFile toXml' jpath xml_add
+    --Run JavaExprReader
+    oldExpsJER <- parse xml_add   
     let oldExpTypes = foldr (\x xs -> Map.insert (contractID x) (map toTuple $ oldExprs x) xs) Map.empty toXml' 
-    return oldExpTypes
+    return oldExpsJER
+--    return oldExpTypes
                  where getTypes c vs ms = getListOfTypesAndVars c vs ++ getListOfTypesAndMethods c ms
                        toTuple (OExpr e t) = (e,t) 
 
@@ -78,11 +81,30 @@ intSymbols = [".intValue()","1"]
 -- Generating XML file --
 -------------------------
 
-generateXmlFile :: FilePath -> FilePath -> IO ()
-generateXmlFile jpath output_add = 
+generateXmlFile :: [OldExpr] -> FilePath -> FilePath -> IO ()
+generateXmlFile xs jpath output_add = 
  do writeFile output_add "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
     appendFile output_add "<result>\n"
+    appendFile output_add (concat $ map oldExpr2Xml xs)
     appendFile output_add "</result>" 
+
+
+oldExpr2Xml :: OldExpr -> String
+oldExpr2Xml oldExpr = 
+ let xs = map oExpr2Xml (oldExprs oldExpr) in
+ twoSpaces ++ "<contract ID=" ++ "\"" ++ contractID oldExpr ++ "\"" 
+ ++ " class=" ++ "\"" ++ classInf oldExpr ++ "\"\n" 
+ ++ " path=" ++ "\"" ++ path oldExpr ++ "\"\n" 
+ ++ " target=" ++ "\"" ++ methoD oldExpr ++ "\">\n" 
+ ++ concat xs
+ ++ twoSpaces ++ "</contract>\n\n"
+ 
+
+oExpr2Xml :: OExpr -> String
+oExpr2Xml oexpr = 
+ fourSpaces ++"<oldExpr expr=" ++ "\"" ++ expr oexpr ++ "\"" 
+ ++ " type=" ++ "\"" ++ inferType oexpr ++ "\">\n" 
+ ++ fourSpaces ++ "</oldExpr>\n\n"
 
 
 generateOldExpr :: Contracts -> [OldExpr]
@@ -101,6 +123,11 @@ generateOldExpr (c:cs) =
              xs'   = foldr (\x xs -> (OExpr x ""):xs) [] zs
          in (OldExpr cn classI path target xs'):generateOldExpr cs
 
+twoSpaces :: String
+twoSpaces = "  "
+
+fourSpaces :: String
+fourSpaces = "    "
 
 ----------------------
 -- Reading XML file --
@@ -122,8 +149,8 @@ parse xml_fn =
      let proof        = foldr foo [] $ zip oldExpr_info oldExpr
      return proof
           where foo (x,oexpr) xs  = (OldExpr { contractID    = fst' x
-                                             , classInf      = snd' x 
-                                             , path          = fth x
+                                             , classInf      = fth x 
+                                             , path          = snd' x
                                              , methoD        = trd' x
                                              , oldExprs      = oexpr
                                              }) : xs
@@ -138,7 +165,7 @@ getContractInfo (CElem (Elem name as _) _) =
   if (getFromQN name == "contract")
   then let cid  = lookForVal "ID" as
            cinf = lookForVal "class" as
-           t    = lookForVal "type" as 
+           t    = lookForVal "path" as 
            tar  = lookForVal "target" as 
        in (cid, t, tar,cinf)
   else ("","","","")
