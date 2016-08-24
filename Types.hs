@@ -1,6 +1,7 @@
 module Types where
 
 import Data.Map
+import System.FilePath
 
 ------------
 -- ppDATE --
@@ -354,13 +355,14 @@ data MethodContractApplication = MCA
 data OldExpr = OldExpr
   { contractID    :: ContractId
   , classInf      :: ClassInfo
-  , path          :: String
-  , methoD        :: Target
+  , targ          :: Target
+  , path          :: FilePath
+  , methoD        :: MethodName
   , oldExprs      :: [OExpr]
   } deriving (Show, Eq)
 
 updateOldExprs :: OldExpr -> [OExpr] -> OldExpr
-updateOldExprs (OldExpr cn cinf pth m oexprs) oexprs' = OldExpr cn cinf pth m oexprs'
+updateOldExprs (OldExpr cn cinf targ pth m oexprs) oexprs' = OldExpr cn cinf targ pth m oexprs'
 
 data OExpr = OExpr
  { expr      :: String

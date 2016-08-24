@@ -18,7 +18,7 @@ import Data.List
 inferTypesOldExprs ppd jpath output_add = 
  do let ppdate  = getValue ppd
     let env     = getEnvVal ppd
-    let toXml   = generateOldExpr (contractsGet ppdate)
+    let toXml   = generateOldExpr (contractsGet ppdate) jpath
     let vars    = varsInFiles env
     let mfiles  = methodsInFiles env
     let types   = removeDuplicates [(classInf c, getTypes (classInf c) vars mfiles) | c <- toXml]
@@ -94,7 +94,8 @@ oldExpr2Xml oldExpr =
  twoSpaces ++ "<contract Id=" ++ "\"" ++ contractID oldExpr ++ "\"" 
  ++ " class=" ++ "\"" ++ classInf oldExpr ++ "\"\n" 
  ++ " path=" ++ "\"" ++ path oldExpr ++ "\"\n" 
- ++ " target=" ++ "\"" ++ methoD oldExpr ++ "\">\n" 
+ ++ " target=" ++ "\"" ++ targ oldExpr ++ "\""
+ ++ " method=" ++ "\"" ++ methoD oldExpr ++ "\">\n" 
  ++ concat xs
  ++ twoSpaces ++ "</contract>\n\n"
  
@@ -106,21 +107,22 @@ oExpr2Xml oexpr =
  ++ fourSpaces ++ "</oldExpr>\n\n"
 
 
-generateOldExpr :: Contracts -> [OldExpr]
-generateOldExpr []     = []
-generateOldExpr (c:cs) = 
+generateOldExpr :: Contracts -> FilePath ->  [OldExpr]
+generateOldExpr [] _         = []
+generateOldExpr (c:cs) jpath = 
  let cn     = contractName c
      p      = post c
      classI = fst $ methodCN c
-     path   = path2it c
-     target = snd $ methodCN c
+     path   = jpath
+     tar    = path2it c
+     mn = snd $ methodCN c
      xs     = splitOnIdentifier "\\old(" p
  in if (length xs == 1)
-    then generateOldExpr cs
+    then generateOldExpr cs jpath
     else let ys    = tail xs
              zs    = removeDuplicates $ map ((\(x,y) -> trim (tail x)) . (splitAtClosingParen 0)) ys
              xs'   = foldr (\x xs -> (OExpr x ""):xs) [] zs
-         in (OldExpr cn classI path target xs'):generateOldExpr cs
+         in (OldExpr cn classI tar path mn xs'):generateOldExpr cs jpath
 
 twoSpaces :: String
 twoSpaces = "  "
@@ -149,25 +151,28 @@ parse xml_fn =
      return proof
           where foo (x,oexpr) xs  = (OldExpr { contractID    = fst' x
                                              , classInf      = fth x 
-                                             , path          = snd' x
-                                             , methoD        = trd' x
+                                             , path          = fifth x
+                                             , methoD        = snd' x
+                                             , targ          = trd' x
                                              , oldExprs      = oexpr
                                              }) : xs
-                fst' (x,y,z,t) = x
-                snd' (x,y,z,t) = y
-                trd' (x,y,z,t) = z
-                fth  (x,y,z,t) = t
+                fst' (x,y,z,t,u)  = x
+                snd' (x,y,z,t,u)  = y
+                trd' (x,y,z,t,u)  = z
+                fth  (x,y,z,t,u)  = t
+                fifth (x,y,z,t,u) = u
 
 
-getContractInfo :: Content i -> (ContractId, ClassInfo, Target,Type)
+getContractInfo :: Content i -> (ContractId, ClassInfo, Target,Type, FilePath)
 getContractInfo (CElem (Elem name as _) _) =
   if (getFromQN name == "contract")
   then let cid  = lookForVal "Id" as
            cinf = lookForVal "class" as
-           t    = lookForVal "path" as 
-           tar  = lookForVal "target" as 
-       in (cid, t, tar,cinf)
-  else ("","","","")
+           mn   = lookForVal "method" as 
+           tar  = lookForVal "target" as
+           fp   = lookForVal "path" as  
+       in (cid, mn, tar,cinf,fp)
+  else ("","","","","")
 
 
 getExpr :: Content i -> String
