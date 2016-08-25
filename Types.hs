@@ -18,6 +18,9 @@ data PPDATE = PPDATE
 updateContractsPP :: PPDATE -> Contracts -> PPDATE
 updateContractsPP (PPDATE imp global cinvs conts ms) conts' = PPDATE imp global cinvs conts' ms
 
+updateGlobalPP :: PPDATE -> Global -> PPDATE
+updateGlobalPP (PPDATE imp global cinvs conts ms) global' = PPDATE imp global' cinvs conts ms
+
 data Import = Import String deriving (Show, Eq)
 type Imports = [Import]
 

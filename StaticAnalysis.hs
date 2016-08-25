@@ -66,8 +66,8 @@ staticAnalysis' jpath ppd output_add =
        b <- doesFileExist xml_add
        if b
        then do xml <- ParserXMLKeYOut.parse xml_add
-               let cns  = getContractNamesEnv ppd
-               let xml' = removeNoneContracts xml cns
+               let cns     = getContractNamesEnv ppd
+               let xml'    = removeNoneContracts xml cns
                let ppdate' = refinePPDATE ppd xml'
                info <- report xml'
                writeFile (output_addr ++ "report.txt") info
