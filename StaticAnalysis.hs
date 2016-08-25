@@ -87,7 +87,8 @@ staticAnalysis' jpath ppd output_add =
                writeFile (output_addr ++ "report.txt") "Warning: KeY execution has failed.\n"
                let ppd' = generateNewTriggers ppd (contractsGet $ getValue ppd)
                putStrLn "Generating Java files to control the Hoare triple(s) at runtime."
-               let (ppdate'', tnewvars) = operationalizeOldResultBind ppd' Map.empty
+               oldExpTypes <- inferTypesOldExprs ppd' jpath output_addr--(output_addr ++ "workspace/")
+               let (ppdate'', tnewvars) = operationalizeOldResultBind ppd' oldExpTypes
                let add = output_addr ++ "ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
