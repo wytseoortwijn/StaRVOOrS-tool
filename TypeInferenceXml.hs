@@ -14,7 +14,7 @@ import qualified Data.Map as Map
 import Data.List
 
 
---inferTypesOldExprs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO (Map.Map ContractName [(String,Type)])
+inferTypesOldExprs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO (Map.Map ContractName [(String,Type)])
 inferTypesOldExprs ppd jpath output_add = 
  do let ppdate  = getValue ppd
     let env     = getEnvVal ppd
@@ -25,8 +25,9 @@ inferTypesOldExprs ppd jpath output_add =
     let toXml'  = map (\oexpr -> addType oexpr types mfiles) toXml
     let xml_add = output_add ++ "tmp.xml"
     generateXmlFile toXml' jpath xml_add
-    --Run JavaExprReader
-    oldExpsJER <- parse xml_add   
+    javaExprReader xml_add output_add
+    let new_xml_add = output_add ++ "tmp2.xml"
+    oldExpsJER <- parse new_xml_add
     let oldExpTypes = foldr (\x xs -> Map.insert (contractID x) (map toTuple $ oldExprs x) xs) Map.empty oldExpsJER
     return oldExpTypes
                  where getTypes c vs ms = getListOfTypesAndVars c vs ++ getListOfTypesAndMethods c ms
@@ -36,6 +37,14 @@ inferTypesOldExprs ppd jpath output_add =
 --------------------
 -- Type inference --
 --------------------
+
+--Runs the API which infer the types of \old expressions
+javaExprReader xml_add out_add = 
+ do eapp_add <- getExecutablePath
+    let eapp_add' = reverse $ snd $ splitAtIdentifier '/' $ reverse eapp_add
+    let jer_add   = eapp_add' ++ "jer_api"
+    rawSystem jer_add [xml_add, out_add]
+
 
 addType :: OldExpr -> [(ClassInfo,[(Type,String)])] -> [(String, ClassInfo, [(Type,Id,[String])])] -> OldExpr
 addType oexpr ts minfs = 
@@ -65,7 +74,7 @@ checkTypeArgs ((_,cinf,ys):xs) oexpr s =
     else checkTypeArgs xs oexpr s
 
 checkTypeClass :: [(ClassInfo,[(Type,String)])] -> ClassInfo -> String -> Type
-checkTypeClass [] cn s             = ""
+checkTypeClass [] cn s             = "Fail to infer type" --TODO: replace by "" when type inference API works properly
 checkTypeClass ((cn',ts):xss) cn s = 
  if (cn == cn')
  then let ys = [ t | (t,s') <- ts, s == s' || isPrefixOf (s'++"(") s]
@@ -86,7 +95,7 @@ checkType' ts s
    in if null zs 
       then ""
       else head zs
- | otherwise                                    = ""
+ | otherwise                                    = "Fail to infer type" --TODO: replace by "" when type inference API works properly
  
 boolSymbols :: [String]
 boolSymbols = ["<","<=","==",">",">=","&&","||","!"]
