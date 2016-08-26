@@ -109,8 +109,14 @@ getListOfTypesAndVars cl ((main, cl',ts):xs) = if (cl == cl')
 getListOfTypesAndMethods :: ClassInfo -> [(String, ClassInfo, [(Type, Id,[String])])] -> [(Type, Id)]
 getListOfTypesAndMethods cl []                  = []
 getListOfTypesAndMethods cl ((main, cl',ts):xs) = if (cl == cl') 
-                                               then [(x,y) | (x,y,_) <- ts]
-                                               else getListOfTypesAndMethods cl xs
+                                                  then [(x,y) | (x,y,_) <- ts]
+                                                  else getListOfTypesAndMethods cl xs
+
+getListOfArgs :: MethodName -> [(Type, Id,[String])] -> [String]
+getListOfArgs mn []                  = []
+getListOfArgs mn ((t,mn',ts):xs) = if (mn == mn') 
+                                   then ts
+                                   else getListOfArgs mn xs
 
 addComma :: [String] -> String
 addComma []       = ""

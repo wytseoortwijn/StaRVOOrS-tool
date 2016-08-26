@@ -22,7 +22,7 @@ inferTypesOldExprs ppd jpath output_add =
     let vars    = varsInFiles env
     let mfiles  = methodsInFiles env
     let types   = removeDuplicates [(classInf c, getTypes (classInf c) vars mfiles) | c <- toXml]
-    let toXml'  = map (\oexpr -> addType oexpr types) toXml
+    let toXml'  = map (\oexpr -> addType oexpr types mfiles) toXml
     let xml_add = output_add ++ "tmp.xml"
     generateXmlFile toXml' jpath xml_add
     --Run JavaExprReader
@@ -37,21 +37,42 @@ inferTypesOldExprs ppd jpath output_add =
 -- Type inference --
 --------------------
 
-addType :: OldExpr -> [(ClassInfo,[(Type,String)])] -> OldExpr
-addType oexpr ts = 
- let xs = map (\(OExpr e t) -> OExpr e (checkType ts (classInf oexpr) e)) (oldExprs oexpr)
+addType :: OldExpr -> [(ClassInfo,[(Type,String)])] -> [(String, ClassInfo, [(Type,Id,[String])])] -> OldExpr
+addType oexpr ts minfs = 
+ let xs = map (\(OExpr e t) -> OExpr e (checkType ts minfs oexpr e)) (oldExprs oexpr)
  in updateOldExprs oexpr xs
 
-checkType :: [(ClassInfo,[(Type,String)])] -> ClassInfo -> String -> Type
-checkType [] cn s             = ""
-checkType ((cn',ts):xss) cn s = 
+checkType :: [(ClassInfo,[(Type,String)])] -> [(String, ClassInfo, [(Type,Id,[String])])] -> OldExpr -> String -> String
+checkType xs ys oexpr s = 
+ let cinf = classInf oexpr
+ in if (checkTypeArgs ys oexpr s == "") 
+    then checkTypeClass xs cinf s
+    else checkTypeArgs ys oexpr s
+
+--TODO: Fix if classes with the same name in different folders is allowed
+checkTypeArgs :: [(String, ClassInfo, [(Type,Id,[String])])] -> OldExpr -> String -> String
+checkTypeArgs [] _ s                   = ""
+checkTypeArgs ((_,cinf,ys):xs) oexpr s = 
+ let cinf' = classInf oexpr
+     mn    = methoD oexpr
+ in if cinf' == cinf
+    then if (null $ getListOfArgs mn ys)
+         then ""
+         else let zs = [ t | [t,s'] <- map words $ getListOfArgs mn ys, s' == s]
+              in if null zs
+                 then ""
+                 else head zs
+    else checkTypeArgs xs oexpr s
+
+checkTypeClass :: [(ClassInfo,[(Type,String)])] -> ClassInfo -> String -> Type
+checkTypeClass [] cn s             = ""
+checkTypeClass ((cn',ts):xss) cn s = 
  if (cn == cn')
  then let ys = [ t | (t,s') <- ts, s == s' || isPrefixOf (s'++"(") s]
       in if null ys 
          then checkType' ts s
          else head ys
- else checkType xss cn s
-
+ else checkTypeClass xss cn s
 
 checkType' :: [(Type,String)] -> String -> Type
 checkType' ts s 

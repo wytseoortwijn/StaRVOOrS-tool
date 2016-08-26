@@ -124,7 +124,7 @@ run flags java_fn_add ppdate_fn output_add =
                                              ppdate <- programMethods ppd' java_fn_add'
                                              putStrLn "Initiating static verification of Hoare triples with KeY."
                                              ppdate' <- staticAnalysis java_fn_add' ppdate output_add'                                
-                                             putStrLn "Initiating LARVA files generation."
+                                             putStrLn "Initiating monitor files generation."
                                              let larva_fn  = generateLarvaFileName ppdate_fn
                                              let larva_add = output_addr ++ "out/" ++ larva_fn
                                              writeFile larva_add ""
@@ -132,8 +132,9 @@ run flags java_fn_add ppdate_fn output_add =
                                              eapp_add <- getExecutablePath
                                              let eapp_add' = reverse $ snd $ splitAtIdentifier '/' $ reverse eapp_add
                                              let app_add   = eapp_add' ++ "larvag"
+                                             putStrLn "Running LARVA..."
                                              rawSystem app_add [larva_add,output_add']
-                                             putStrLn "LARVA files generation complete."
+                                             putStrLn "Monitor files generation completed."
                                              removeDirectoryRecursive (output_add' ++ "/workspace") 
                                              out_dir_content <- getDirectoryContents output_add'
                                              putStrLn "StaRVOOrS has finished successfully.\n"
