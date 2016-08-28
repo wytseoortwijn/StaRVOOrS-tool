@@ -58,10 +58,7 @@ staticAnalysis' jpath ppd output_add =
        let consts_jml = ParserJML.getContracts' ppd
        copyFiles jpath output_add'
        generateTmpFilesAllConsts ppd consts_jml output_add' (nulla_add ++ "/")
-       eapp_add <- getExecutablePath
-       let eapp_add' = reverse $ snd $ splitAtIdentifier '/' $ reverse eapp_add
-       let api_add   = eapp_add' ++ "key_api"
-       rawSystem api_add [output_add', output_addr]
+       rawSystem "java" ["-jar","key.starvoors.jar",output_add', output_addr]
        let xml_add = output_addr ++ "out.xml"
        b <- doesFileExist xml_add
        if b

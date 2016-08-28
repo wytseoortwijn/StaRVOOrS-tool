@@ -129,11 +129,8 @@ run flags java_fn_add ppdate_fn output_add =
                                              let larva_add = output_addr ++ "out/" ++ larva_fn
                                              writeFile larva_add ""
                                              translate ppdate' larva_add
-                                             eapp_add <- getExecutablePath
-                                             let eapp_add' = reverse $ snd $ splitAtIdentifier '/' $ reverse eapp_add
-                                             let app_add   = eapp_add' ++ "larvag"
                                              putStrLn "Running LARVA..."
-                                             rawSystem app_add [larva_add,output_add']
+                                             rawSystem "java" ["-cp","larva.jar","compiler.Compiler",larva_add,"-o",output_add']
                                              putStrLn "Monitor files generation completed."
                                              removeDirectoryRecursive (output_add' ++ "/workspace") 
                                              out_dir_content <- getDirectoryContents output_add'

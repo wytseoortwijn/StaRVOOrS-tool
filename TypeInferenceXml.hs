@@ -44,11 +44,7 @@ inferTypesOldExprs ppd jpath output_add =
 --------------------
 
 --Runs the API which infer the types of \old expressions
-javaExprReader xml_add out_add = 
- do eapp_add <- getExecutablePath
-    let eapp_add' = reverse $ snd $ splitAtIdentifier '/' $ reverse eapp_add
-    let jer_add   = eapp_add' ++ "jer_api"
-    rawSystem jer_add [xml_add, out_add]
+javaExprReader xml_add out_add = rawSystem "java" ["-jar","jer.jar",xml_add, out_add]
 
 
 addType :: OldExpr -> [(ClassInfo,[(Type,String)])] -> [(String, ClassInfo, [(Type,Id,[String])])] -> OldExpr
