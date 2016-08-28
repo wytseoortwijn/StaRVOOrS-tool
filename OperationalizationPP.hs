@@ -160,12 +160,13 @@ getExpName ((a,_,c):xss) exp cn = if exp == a
                                   else getExpName xss exp cn
 
 addType2NewVars :: ContractName -> Map.Map ContractName [(String,Type)] -> OldExprL -> (OldExprL, Variables)
-addType2NewVars cn _ []                = ([],[])
-addType2NewVars cn mtypes ((v,t,e):vs) = let vdec  = VarDecl (cn ++ "_" ++ e ++ "_nyckelord") VarInitNil
-                                             typE  = getType v cn mtypes
-                                             tvar  = Var VarModifierNil typE [vdec]                                          
-                                             (a,b) = addType2NewVars cn mtypes vs
-                                         in ((v,typE,e):a, tvar:b)
+addType2NewVars cn _ []                      = ([],[])
+addType2NewVars cn mtypes oexpr@((v,t,e):vs) = 
+ let vdec  = VarDecl (cn ++ "_" ++ e ++ "_nyckelord") VarInitNil
+     typE  = getType v cn mtypes
+     tvar  = Var VarModifierNil typE [vdec]                                          
+     (a,b) = addType2NewVars cn mtypes vs
+ in ((v,typE,e):a, tvar:b)
 
 genNewVarsOld :: Global -> Variables -> Variables
 genNewVarsOld global ss = 

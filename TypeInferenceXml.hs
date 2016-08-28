@@ -16,22 +16,27 @@ import Data.List
 
 inferTypesOldExprs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO (Map.Map ContractName [(String,Type)])
 inferTypesOldExprs ppd jpath output_add = 
- do let ppdate  = getValue ppd
-    let env     = getEnvVal ppd
-    let toXml   = generateOldExpr (contractsGet ppdate) jpath
-    let vars    = varsInFiles env
-    let mfiles  = methodsInFiles env
-    let types   = removeDuplicates [(classInf c, getTypes (classInf c) vars mfiles) | c <- toXml]
-    let toXml'  = map (\oexpr -> addType oexpr types mfiles) toXml
-    let xml_add = output_add ++ "tmp.xml"
-    generateXmlFile toXml' jpath xml_add
-    javaExprReader xml_add output_add
-    let new_xml_add = output_add ++ "tmp2.xml"
-    oldExpsJER <- parse new_xml_add
-    let oldExpTypes = foldr (\x xs -> Map.insert (contractID x) (map toTuple $ oldExprs x) xs) Map.empty oldExpsJER
-    return oldExpTypes
-                 where getTypes c vs ms = getListOfTypesAndVars c vs ++ getListOfTypesAndMethods c ms
-                       toTuple (OExpr e t) = (e,t) 
+ let ppdate  = getValue ppd
+     env     = getEnvVal ppd
+     toXml   = generateOldExpr (contractsGet ppdate) jpath
+ in if null toXml
+    then return Map.empty
+    else let vars    = varsInFiles env
+             mfiles  = methodsInFiles env
+             types   = removeDuplicates [(classInf c, getTypes (classInf c) vars mfiles) | c <- toXml]
+             toXml'  = map (\oexpr -> addType oexpr types mfiles) toXml
+             xml_add = output_add ++ "tmp.xml"
+         in if (null [y | x <- toXml', y <- oldExprs x, inferType y == ""])
+            then do let oldExpTypes = foldr (\x xs -> Map.insert (contractID x) (map toTuple $ oldExprs x) xs) Map.empty toXml'
+                    return oldExpTypes
+            else do generateXmlFile toXml' jpath xml_add
+                    javaExprReader xml_add output_add
+                    let new_xml_add = output_add ++ "tmp2.xml"
+                    oldExpsJER <- parse new_xml_add
+                    let oldExpTypes = foldr (\x xs -> Map.insert (contractID x) (map toTuple $ oldExprs x) xs) Map.empty oldExpsJER
+                    return oldExpTypes
+                       where getTypes c vs ms = getListOfTypesAndVars c vs ++ getListOfTypesAndMethods c ms
+                             toTuple (OExpr e t) = (e,t) 
 
 
 --------------------
