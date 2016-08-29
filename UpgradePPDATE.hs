@@ -421,6 +421,7 @@ getContract (Abs.Contract id pre' method post' (Abs.Assignable ass)) =
                      , assignable   = joinAssignable $ map assig ass
                      , optimized    = []
                      , chGet        = 0
+                     , path2it      = ""
                      })
 
 assig :: Abs.Assig -> String
@@ -587,7 +588,7 @@ data Env = Env
  , allEventsId         :: [Id]
  , contractsNames      :: [ContractName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
- , methodsInFiles      :: [(String, ClassInfo, [(Id,String,[String])])] --[(path_to_class,class_name,[(returned_type,method_name,arguments)])]
+ , methodsInFiles      :: [(String, ClassInfo, [(Type,Id,[String])])] --[(path_to_class,class_name,[(returned_type,method_name,arguments)])]
  , oldExpTypes         :: OldExprM
  }
   deriving (Show)

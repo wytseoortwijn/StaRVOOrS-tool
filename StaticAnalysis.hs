@@ -20,6 +20,7 @@ import Data.List ((\\))
 import Data.Maybe
 import System.FilePath
 import qualified Data.Map as Map
+import TypeInferenceXml
 
 -------------------------------
 -- Static Analysis using KeY --
@@ -36,10 +37,13 @@ staticAnalysis jpath ppd output_add =
 
 staticAnalysis' :: FilePath -> UpgradePPD PPDATE -> FilePath -> IO (UpgradePPD PPDATE)
 staticAnalysis' jpath ppd output_add =
- let output_add' = output_add ++ "/workspace/files2analyse"
-     tmp_add     = output_add ++ "/workspace/files/"
-     cinv_add    = output_add ++ "/workspace/filescinv"
-     nulla_add   = output_add ++ "/workspace/filesnullable"
+ let output_addr = if ((last $ trim output_add) == '/') 
+                   then output_add
+                   else output_add ++ "/"
+     output_add' = output_addr ++ "workspace/files2analyse"
+     tmp_add     = output_addr ++ "workspace/files/"
+     cinv_add    = output_addr ++ "workspace/filescinv"
+     nulla_add   = output_addr ++ "workspace/filesnullable"
      ppdate      = getValue ppd
      consts      = contractsGet ppdate
  in do
@@ -47,51 +51,48 @@ staticAnalysis' jpath ppd output_add =
        createDirectoryIfMissing False output_add'
        createDirectoryIfMissing False nulla_add
        createDirectoryIfMissing False cinv_add
-       createDirectoryIfMissing False (output_add ++ "/workspace/filesnu")
+       createDirectoryIfMissing False (output_addr ++ "workspace/filesnu")
        generateDummyBoolVars ppd tmp_add jpath
        generateTmpFilesCInvs ppd cinv_add tmp_add
        updateTmpFilesCInvs ppd nulla_add cinv_add
        let consts_jml = ParserJML.getContracts' ppd
        copyFiles jpath output_add'
        generateTmpFilesAllConsts ppd consts_jml output_add' (nulla_add ++ "/")
-       eapp_add <- getExecutablePath
-       let eapp_add' = reverse $ snd $ splitAtIdentifier '/' $ reverse eapp_add
-       let api_add   = eapp_add' ++ "key_api"
-       rawSystem api_add [output_add', (output_add ++ "/")]
-       let xml_add = output_add ++ "/out.xml"
+       rawSystem "java" ["-jar","key.starvoors.jar",output_add', output_addr]
+       let xml_add = output_addr ++ "out.xml"
        b <- doesFileExist xml_add
        if b
        then do xml <- ParserXMLKeYOut.parse xml_add
-               let cns  = getContractNamesEnv ppd
-               let xml' = removeNoneContracts xml cns
+               let cns     = getContractNamesEnv ppd
+               let xml'    = removeNoneContracts xml cns
                let ppdate' = refinePPDATE ppd xml'
                info <- report xml'
-               writeFile (output_add ++ "/report.txt") info
+               writeFile (output_addr ++ "report.txt") info
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
-               --TODO: compute types of expressions in \old
-               let oldExpTypes = Map.empty
+               oldExpTypes <- inferTypesOldExprs ppdate' jpath (output_addr ++ "workspace/")
                let (ppdate'', tnewvars) = operationalizeOldResultBind ppdate' oldExpTypes
                let add = output_add ++ "/ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
-               createDirectoryIfMissing True (output_add ++ "/" ++ annotated_add)
+               createDirectoryIfMissing True (output_addr ++ annotated_add)
                contractsJavaFileGen ppdate'' add tnewvars
                idFileGen add
-               copyFiles jpath (output_add ++ "/" ++ annotated_add)
-               methodsInstrumentation ppdate'' jpath (output_add ++ "/" ++ annotated_add)
+               copyFiles jpath (output_addr ++ annotated_add)
+               methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
                return ppdate''
        else do putStrLn "\nWarning: KeY execution has failed."
-               writeFile (output_add ++ "/report.txt") "Warning: KeY execution has failed.\n"
+               writeFile (output_addr ++ "report.txt") "Warning: KeY execution has failed.\n"
                let ppd' = generateNewTriggers ppd (contractsGet $ getValue ppd)
                putStrLn "Generating Java files to control the Hoare triple(s) at runtime."
-               let (ppdate'', tnewvars) = operationalizeOldResultBind ppd' Map.empty
-               let add = output_add ++ "/ppArtifacts/"
+               oldExpTypes <- inferTypesOldExprs ppd' jpath (output_addr ++ "workspace/")
+               let (ppdate'', tnewvars) = operationalizeOldResultBind ppd' oldExpTypes
+               let add = output_addr ++ "ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
-               createDirectoryIfMissing True (output_add ++ "/" ++ annotated_add)
+               createDirectoryIfMissing True (output_addr ++ annotated_add)
                contractsJavaFileGen ppdate'' add tnewvars
                idFileGen add
-               methodsInstrumentation ppdate'' jpath (output_add ++ "/" ++ annotated_add)
+               methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
                return ppdate''
 
 --------------------------------------------------------------

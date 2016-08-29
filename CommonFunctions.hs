@@ -106,6 +106,17 @@ getListOfTypesAndVars cl ((main, cl',ts):xs) = if (cl == cl')
                                                then ts
                                                else getListOfTypesAndVars cl xs
 
+getListOfTypesAndMethods :: ClassInfo -> [(String, ClassInfo, [(Type, Id,[String])])] -> [(Type, Id)]
+getListOfTypesAndMethods cl []                  = []
+getListOfTypesAndMethods cl ((main, cl',ts):xs) = if (cl == cl') 
+                                                  then [(x,y) | (x,y,_) <- ts]
+                                                  else getListOfTypesAndMethods cl xs
+
+getListOfArgs :: MethodName -> [(Type, Id,[String])] -> [String]
+getListOfArgs mn []                  = []
+getListOfArgs mn ((t,mn',ts):xs) = if (mn == mn') 
+                                   then ts
+                                   else getListOfArgs mn xs
 
 addComma :: [String] -> String
 addComma []       = ""
@@ -125,20 +136,21 @@ removeNoneContracts (p:ps) cns = let cn = getContractNameErrConst (contractText 
                                  else removeNoneContracts ps cns
 
 
-getInfoFromProof :: Proof -> (MethodName, ContractName, [String])
+getInfoFromProof :: Proof -> (MethodName, ContractName, [String],String)
 getInfoFromProof proof = let mn    = getMethodName' (target proof)
+                             path  = typee proof
                              cn    = getContractNameErrConst (contractText proof) (typee proof)
                              npres = getNewPreConds (executionPath proof)
                              aoft  = length $ filter (=="true") npres
                          in if (aoft >= 1)
                             then if (aoft == 1) 
                                  then if (length npres == 1)
-                                      then (mn, cn, npres) -- KeY has nothing to say about the proof
-                                      else (mn, cn, filter (not.(=="true")) npres)
+                                      then (mn, cn, npres,path) -- KeY has nothing to say about the proof
+                                      else (mn, cn, filter (not.(=="true")) npres,path)
                                  else if (aoft == length npres)
-                                      then (mn, cn, ["true"]) -- KeY has nothing to say about the proof
-                                      else (mn, cn, filter (not.(=="true")) npres)
-                            else (mn, cn, npres)
+                                      then (mn, cn, ["true"],path) -- KeY has nothing to say about the proof
+                                      else (mn, cn, filter (not.(=="true")) npres,path)
+                            else (mn, cn, npres,path)
 
 getMethodName' :: Target -> MethodName
 getMethodName' t = fst $ splitAtIdentifier '(' t                   
