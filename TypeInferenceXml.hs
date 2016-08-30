@@ -75,7 +75,7 @@ checkTypeArgs ((_,cinf,ys):xs) oexpr s =
     else checkTypeArgs xs oexpr s
 
 checkTypeClass :: [(ClassInfo,[(Type,String)])] -> ClassInfo -> String -> Type
-checkTypeClass [] cn s             = "Fail to infer type" --TODO: replace by "" when type inference API works properly
+checkTypeClass [] cn s             = ""
 checkTypeClass ((cn',ts):xss) cn s = 
  if (cn == cn')
  then let ys = [ t | (t,s') <- ts, s == s' || isPrefixOf (s'++"(") s]
@@ -96,7 +96,7 @@ checkType' ts s
    in if null zs 
       then ""
       else head zs
- | otherwise                                    = "Fail to infer type" --TODO: replace by "" when type inference API works properly
+ | otherwise                                    = ""
  
 boolSymbols :: [String]
 boolSymbols = ["<","<=","==",">",">=","&&","||","!"]
