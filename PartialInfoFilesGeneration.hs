@@ -1,4 +1,4 @@
-module PartialInfoFilesGeneration (contractsJavaFileGen, idFileGen) where
+module PartialInfoFilesGeneration (contractsJavaFileGen, idFileGen, oldExprFileGen) where
 
 import Types
 import System.Directory
@@ -8,6 +8,8 @@ import OperationalizationPP
 import UpgradePPDATE
 import ErrM
 import Data.List
+import qualified Data.Map as Map
+import Data.Maybe
 
 -----------------------
 -- HoareTriples.java --
@@ -142,10 +144,7 @@ lookforArgs (x:xs) e = if (fst x==e)
 -------------
 
 idFileGen :: FilePath -> IO ()
-idFileGen output_add = 
- do 
-    let output_add' = output_add ++ "Id.java"
-    writeFile output_add' idGen
+idFileGen output_add = writeFile (output_add ++ "Id.java") idGen
     
 idGen :: String
 idGen =
@@ -161,4 +160,43 @@ idGen =
   ++ "  return r;\n"
   ++ "}\n\n"
   ++ "}\n"
+
+-------------------
+-- OldExpr Files --
+-------------------
+
+oldExprFileGen :: FilePath -> UpgradePPD PPDATE -> IO [()]
+oldExprFileGen output_add ppd = 
+ let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
+     consts        = contractsGet ppdate      
+     oldExpM       = oldExpTypes env 
+     consts'       = [c | c <- consts, noOldExprInHT $ Map.lookup (contractName c) oldExpM]    
+ in if Map.null oldExpM
+    then return [()]
+    else sequence [writeFile (output_add ++ (snd $ oldExpGen c oldExpM)) (fst $ oldExpGen c oldExpM) | c <- consts']
+                     where noOldExprInHT v = v /= Nothing && (not.null.fromJust) v 
+
+oldExpGen :: Contract -> OldExprM -> (String,String)
+oldExpGen c oldExpM = 
+ let cn = contractName c
+     nameClass = "Old_" ++ cn
+     xs        = map (\(x,y,z) -> (y,z)) $ fromJust $ Map.lookup cn oldExpM
+ in ("package ppArtifacts;\n\n"
+    ++ "public class " ++ nameClass ++ " {\n\n"
+    ++ varDeclOldExpr xs
+    ++ "  " ++ nameClass ++ "(" ++ addComma (map (\(x,y) -> x ++ " " ++ y) xs) ++ ") }\n"
+    ++ constructorOldExpr xs 
+    ++ "  }\n\n"
+    ++ "}\n", nameClass++".java")
+
+
+varDeclOldExpr :: [(String,String)] -> String
+varDeclOldExpr []           = "\n"
+varDeclOldExpr ((t,exp):xs) = 
+ "  public " ++ t ++ " " ++ exp ++ ";\n" ++ varDeclOldExpr xs
+ 
+constructorOldExpr :: [(String,String)] -> String
+constructorOldExpr []           = ""
+constructorOldExpr ((t,exp):xs) = "    " ++ "this." ++ exp ++ " = " ++ exp ++ ";\n" ++ constructorOldExpr xs
+
 
