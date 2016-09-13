@@ -62,12 +62,12 @@ staticAnalysis' jpath ppd output_add =
        let xml_add = output_addr ++ "out.xml"
        b <- doesFileExist xml_add
        if b
-       then do xml <- ParserXMLKeYOut.parse xml_add
+       then do xml_to_parse <- readFile xml_add
+               let xml     = ParserXMLKeYOut.parse xml_to_parse
                let cns     = getContractNamesEnv ppd
                let xml'    = removeNoneContracts xml cns
                let ppdate' = refinePPDATE ppd xml'
-               info <- report xml'
-               writeFile (output_addr ++ "report.txt") info
+               generateReport xml' output_addr
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
                oldExpTypes <- inferTypesOldExprs ppdate' jpath (output_addr ++ "workspace/")
                let (ppdate'', tnewvars) = operationalizeOldResultBind ppdate' oldExpTypes
@@ -80,8 +80,7 @@ staticAnalysis' jpath ppd output_add =
                copyFiles jpath (output_addr ++ annotated_add)
                methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
                return ppdate''
-       else do putStrLn "\nWarning: KeY execution has failed."
-               writeFile (output_addr ++ "report.txt") "Warning: KeY execution has failed.\n"
+       else do generateReportFailure output_addr
                let ppd' = generateNewTriggers ppd (contractsGet $ getValue ppd)
                putStrLn "Generating Java files to control the Hoare triple(s) at runtime."
                oldExpTypes <- inferTypesOldExprs ppd' jpath (output_addr ++ "workspace/")
