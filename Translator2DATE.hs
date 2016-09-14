@@ -316,11 +316,14 @@ makeExtraTransitionAlg2Cond (t:ts) =
  "!("++ cond'' ++ ") && " ++ makeExtraTransitionAlg2Cond ts
 
 makeExtraTransitionAlg2 :: Transitions -> Contract -> Event -> Events -> NameState -> Env -> Transition
-makeExtraTransitionAlg2 ts c e es ns env = let esinf = map getInfoEvent es
-                                               arg   = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
-                                               pre'  = "HoareTriples." ++ (contractName c) ++ "_pre(" ++ arg ++ ")"
-                                               c'    = makeExtraTransitionAlg2Cond ts ++ pre'
-                                           in Transition ns (Arrow e c' ("h" ++ show (chGet c) ++ ".send(id);")) ns
+makeExtraTransitionAlg2 ts c e es ns env = let esinf   = map getInfoEvent es
+                                               oldExpM = oldExpTypes env
+                                               cn      = contractName c
+                                               zs      = getExpForOld oldExpM cn
+                                               arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
+                                               pre'    = "HoareTriples." ++ (contractName c) ++ "_pre(" ++ arg ++ ")"
+                                               c'      = makeExtraTransitionAlg2Cond ts ++ pre'
+                                           in Transition ns (Arrow e c' (zs ++ " h" ++ show (chGet c) ++ ".send(id);")) ns
 
 
 instrumentTransitionAlg2 :: Contract -> Transition -> Event -> Events -> Env -> Transition

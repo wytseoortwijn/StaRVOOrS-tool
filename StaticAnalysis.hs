@@ -78,6 +78,7 @@ staticAnalysis' jpath ppd output_add =
                contractsJavaFileGen ppdate'' add
                idFileGen add
                oldExprFileGen add ppdate''
+               messagesFileGen add
                copyFiles jpath (output_addr ++ annotated_add)
                methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
                return ppdate''
@@ -93,6 +94,7 @@ staticAnalysis' jpath ppd output_add =
                contractsJavaFileGen ppdate'' add
                idFileGen add
                oldExprFileGen add ppdate''
+               messagesFileGen add
                methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
                return ppdate''
 

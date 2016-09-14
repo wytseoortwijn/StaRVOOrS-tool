@@ -1,4 +1,4 @@
-module PartialInfoFilesGeneration (contractsJavaFileGen, idFileGen, oldExprFileGen) where
+module PartialInfoFilesGeneration (contractsJavaFileGen, idFileGen, oldExprFileGen,messagesFileGen) where
 
 import Types
 import System.Directory
@@ -193,4 +193,25 @@ constructorOldExpr :: [(String,String)] -> String
 constructorOldExpr []           = ""
 constructorOldExpr ((t,exp):xs) = "    " ++ "this." ++ exp ++ " = " ++ exp ++ ";\n" ++ constructorOldExpr xs
 
+----------------------------------------
+-- Messages to send over the channels --
+----------------------------------------
 
+messagesFileGen :: FilePath -> IO ()
+messagesFileGen output_add = writeFile (output_add ++ "Messages.java") messageGen
+    
+messageGen :: String
+messageGen =
+ "package ppArtifacts;\n\n"
+  ++ "public class Message<T> {\n\n"
+  ++ "  public Integer id; \n"
+  ++ "  public T oldExpr; \n\n"
+  ++ "  Message (Integer id, T oldExpr) { \n"
+  ++ "     this.id = id; \n" 
+  ++ "     this.oldExpr = oldExpr; \n" 
+  ++ "  }\n\n"  
+  ++ "  Message (Integer id) { \n"
+  ++ "     this.id = id; \n" 
+  ++ "  }\n"
+  ++ "}\n"
+ 
