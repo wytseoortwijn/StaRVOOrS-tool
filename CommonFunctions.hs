@@ -137,6 +137,14 @@ getConstTnv c oldExpM =
                           then []
                           else [Var VarModifierNil typE [vdec]]
 
+getOldExpr :: OldExprM -> ContractName -> String
+getOldExpr oldExpM cn = 
+ case Map.lookup cn oldExpM of
+      Nothing -> ""
+      Just xs -> if null xs 
+                 then ""
+                 else "," ++ cn
+
 
 ---------------------------------------
 -- Manipulating the parsed .xml file --

@@ -181,7 +181,7 @@ oldExpGen c oldExpM =
     ++ "  public " ++ nameClass ++ "(" ++ addComma (map (\(x,y) -> x ++ " " ++ y) xs) ++ ") {\n"
     ++ constructorOldExpr xs 
     ++ "  }\n\n"
-    ++ "}\n", nameClass++".java")
+    ++ "}\n", nameClass ++ ".java")
 
 
 varDeclOldExpr :: [(String,String)] -> String
@@ -197,21 +197,32 @@ constructorOldExpr ((t,exp):xs) = "    " ++ "this." ++ exp ++ " = " ++ exp ++ ";
 -- Messages to send over the channels --
 ----------------------------------------
 
-messagesFileGen :: FilePath -> IO ()
-messagesFileGen output_add = writeFile (output_add ++ "Messages.java") messageGen
+messagesFileGen :: FilePath -> Env -> IO [()]
+messagesFileGen output_add env = 
+ let oldExpM  = oldExpTypes env
+     cns      = map ("Old_"++) [x | (x,y) <- Map.toList oldExpM, (not.null) y]
+     files    = (output_add ++ "Messages.java") : map (\s -> output_add ++ "Messages" ++ s ++ ".java") cns
+     xs       = messagesGen : map messageOldExpGen cns
+ in sequence $ map (uncurry writeFile) $ zip files xs
     
-messageGen :: String
-messageGen =
+messagesGen :: String
+messagesGen =
  "package ppArtifacts;\n\n"
-  ++ "public class Message<T> {\n\n"
-  ++ "  public Integer id; \n"
-  ++ "  public T oldExpr; \n\n"
-  ++ "  Message (Integer id, T oldExpr) { \n"
-  ++ "     this.id = id; \n" 
-  ++ "     this.oldExpr = oldExpr; \n" 
-  ++ "  }\n\n"  
-  ++ "  Message (Integer id) { \n"
+  ++ "public class Messages {\n\n"
+  ++ "  public Integer id; \n\n"
+  ++ "  public Messages (Integer id) { \n"
   ++ "     this.id = id; \n" 
   ++ "  }\n"
   ++ "}\n"
  
+messageOldExpGen :: String -> String
+messageOldExpGen t =
+ "package ppArtifacts;\n\n"
+  ++ "public class Messages" ++ t ++ " extends Messages  {\n\n"
+--  ++ "  public Integer id; \n"
+  ++ "  public " ++ t ++ " oldExpr; \n\n"
+  ++ "  public Messages" ++ t ++ " (Integer id, " ++ t ++ " oldExpr) { \n"
+  ++ "     super(id); \n" 
+  ++ "     this.oldExpr = oldExpr; \n" 
+  ++ "  }\n"  
+  ++ "}\n"

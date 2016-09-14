@@ -34,22 +34,14 @@ makeTransitions c n esinf es env =
        oldExpM  = oldExpTypes env
        arg      = foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf event
        checkId  = "id.equals(idAux) && "
-       zs       = getOldExpr oldExpM cn
+       zs       = getOldExpr oldExpM cn  
+       nvar     = if null zs then "" else "oldExpAux = " ++ "msg.oldExpr ; "
        idle_to_postok = Arrow event (checkId ++ "HoareTriples." ++ cn ++ "_post(" ++ init arg ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_postOK \\n \");")
        idle_to_bad    = Arrow event (checkId ++ "!HoareTriples." ++ cn ++ "_post(" ++ init arg ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_bad \\n \");")
-       start_to_idle  = Arrow ("rh" ++ show n) "" ("idAux = new Integer(idfrom) ; " ++ "System.out.println(\"    " ++ cn ++ "_preOK \\n\");")
+       start_to_idle  = Arrow ("rh" ++ show n) "" ("idAux = msg.id ; " ++ nvar ++ "System.out.println(\"    " ++ cn ++ "_preOK \\n\");")
    in [Transition "start" start_to_idle "idle",
       Transition "idle" idle_to_postok "postOK",
       Transition "idle" idle_to_bad "bad"
       ]
-
-
-getOldExpr :: OldExprM -> ContractName -> String
-getOldExpr oldExpM cn = 
- case Map.lookup cn oldExpM of
-      Nothing -> ""
-      Just xs -> if null xs 
-                 then ""
-                 else "," ++ cn 
 
 
