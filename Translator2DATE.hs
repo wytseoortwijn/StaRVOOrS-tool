@@ -290,9 +290,8 @@ makeTransitionAlg1Cond ns e events c env =
      esinf   = map getInfoEvent events
      arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
      c'      = "HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")"
-     act     = "h" ++ show (chGet c) ++ ".send(id);"
-     act'    = act ++ " " ++ getExpForOld oldExpM cn
- in Transition ns (Arrow e c' act') ns
+     act     = getExpForOld oldExpM cn ++ " h" ++ show (chGet c) ++ ".send(id);"
+ in Transition ns (Arrow e c' act) ns
 
 getExpForOld :: OldExprM -> ContractName -> String
 getExpForOld oldExpM cn = 
@@ -332,7 +331,7 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e events env =
      arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
      semicol = if (act == "") then "" else ";"     
      zs      = getExpForOld oldExpM cn
-     act'    = " if (HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(id); " ++ zs ++ "}"
+     act'    = " if (HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")) {" ++ zs ++ " h" ++ show (chGet c) ++ ".send(id); " ++ "}"
  in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
 
 lookForContract :: PropertyName -> Contracts -> Contract
