@@ -300,7 +300,7 @@ makeTransitionAlg1Cond ns e events c env =
              bindn = getClassVar c events EVEntry
              ys'   = removeDuplicates $ map head ys
              oexpr = fromJust $ Map.lookup cn (oldExpTypes env)
-             zs    = map (\xs -> cn ++ xs ++ " = " ++ getExpForOld oexpr (tail xs) ++ ";") ys' --change to new initilisation
+             zs    = map (\xs -> cn ++ xs  ++ getExpForOld oexpr (tail xs) ++ ";") ys' --change to new initilisation
              act'  = act ++ " " ++ concat zs
          in if null oexpr
             then error "Error: Cannot get proper expression for the operationalisation of an \\old expresion.\n"
