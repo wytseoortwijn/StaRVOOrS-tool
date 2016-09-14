@@ -157,7 +157,7 @@ flattenOld ((xs,ys):xss) cn zs =
 getExpName :: OldExprL -> String -> ContractName -> String
 getExpName [] exp _             = error "Error: Cannot get type to operationalise \\old expresion"
 getExpName ((a,_,c):xss) exp cn = if exp == a
-                                  then cn ++ "_"  ++ c ++ "_nyckelord"
+                                  then cn ++ "."  ++ c
                                   else getExpName xss exp cn
 
 addType2NewVars :: ContractName -> Map.Map ContractName [(String,Type)] -> OldExprL -> OldExprL
