@@ -95,14 +95,14 @@ methodForPost c env ctnewvars =
      nargs     = if (null tnvs) then "" else "," ++ newargs
  in 
   "  // " ++ (contractName c) ++ "\n"
-  ++ "  public static boolean " ++ (contractName c) ++ "_post(" ++ argsPost ++ nargs ++ ") {\n" 
+  ++ "  public static boolean " ++ (contractName c) ++ "_post(" ++ argsPost ++ nargs ++ ") {\n"
   ++ "    return " ++ (post c) ++ ";\n" 
   ++ "  }\n\n"
 
 
 getConstTnv :: Contract ->  [(Contract, Variables)] -> Variables
 getConstTnv c []             = []
-getConstTnv c ((c',tnvs):cs) = if (c == c')
+getConstTnv c ((c',tnvs):cs) = if (contractName c == contractName c')
                                then tnvs
                                else getConstTnv c cs 
 

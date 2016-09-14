@@ -233,26 +233,28 @@ applyGenMethodForall ((Left x):xs) cn n args argswt s  tnv =
 generateMethodForall :: ContractName -> Int -> (String, String, String) -> String -> String -> String -> Variables -> (String, String)
 generateMethodForall cn n (var, range, body) args argswt s [] = 
  let mn = cn ++ s ++ "_opF_" ++ show n
- in (mn ++ "(" ++ argswt ++ ")", methodForall mn (var, range, body) args "")
+ in (mn ++ "(" ++ argswt ++ ")", methodForall mn (var, range, body) args)
 generateMethodForall cn n (var, range, body) args argswt s tnv = 
  let mn   = cn ++ s ++ "_opF_" ++ show n
      tnv' = auxNewVars tnv
-     tnewvars = init $ foldr (\ x xs -> x ++ "," ++ xs) "" tnv'
-     newargs  =  init $ foldr (\ x xs -> x ++ "," ++ xs) "" $ map (last.words) tnv'
- in (mn ++ "(" ++ argswt ++ newargs ++ ")", methodForall mn (var, range, body) args tnewvars)
+     tnewvars = addComma tnv'
+     newargs  = addComma $ map (last.words) tnv'
+     argswt'  = if null newargs then argswt else argswt ++ "," ++ newargs
+     args'    = if null tnewvars then args else args ++ "," ++ tnewvars
+ in (mn ++ "(" ++ argswt' ++ ")", methodForall mn (var, range, body) args')
 
 
 auxNewVars :: Variables -> [String]
 auxNewVars []                          = []
 auxNewVars (Var _ t [VarDecl id _]:xs) = (t ++ " " ++ id):auxNewVars xs
 
-methodForall :: String -> (String, String, String) -> String -> String -> String
-methodForall mn (tvar, range, body) args tnv = 
- let var = last $ words tvar 
-     low = getLowBoundary range var
-     top = getTopBoundary range var
+methodForall :: String -> (String, String, String) -> String -> String
+methodForall mn (tvar, range, body) args = 
+ let var   = last $ words tvar 
+     low   = getLowBoundary range var
+     top   = getTopBoundary range var
  in
-    "public static boolean " ++ mn ++ "(" ++ args ++ tnv ++ ") {\n" 
+    "public static boolean " ++ mn ++ "(" ++ args ++ ") {\n" 
  ++ "      boolean r = true;\n\n"
  ++ "      for (" ++ tvar ++ " = " ++ low ++ " ; " ++ var ++ " <= " ++ top ++ " ; " ++ var ++ "++) {\n"
  ++ "          if (true) {\n"
@@ -361,9 +363,10 @@ generateMethodExists cn n (var, range, body) args argswt s []  =
 generateMethodExists cn n (var, range, body) args argswt s tnv = 
  let mn = cn ++ s ++ "_opE_" ++ show n
      tnv' = auxNewVars tnv
-     tnewvars = init $ foldr (\ x xs -> x ++ "," ++ xs) "" tnv'
-     newargs  =  init $ foldr (\ x xs -> x ++ "," ++ xs) "" $ map (last.words) tnv'
- in (mn ++ "(" ++ argswt ++ newargs ++ ")", methodExists mn (var, range, body) args tnewvars)
+     tnewvars = addComma tnv'
+     newargs  = addComma $ map (last.words) tnv'
+     args'    = if null newargs then argswt else argswt ++ "," ++ newargs
+ in (mn ++ "(" ++ args' ++ ")", methodExists mn (var, range, body) args tnewvars)
 
 
 methodExists :: String -> (String, String, String) -> String -> String -> String
@@ -371,8 +374,9 @@ methodExists mn (tvar, range, body) args tnv =
  let var = last $ words tvar 
      low = getLowBoundary range var
      top = getTopBoundary range var
+     args' = if null tnv then args else args ++ "," ++ tnv
  in
-    "public static boolean " ++ mn ++ "(" ++ args ++ tnv ++ ") {\n" 
+    "public static boolean " ++ mn ++ "(" ++ args' ++ ") {\n" 
  ++ "      boolean r = false;\n\n"
  ++ "      for (" ++ tvar ++ " = " ++ low ++ " ; " ++ var ++ " <= " ++ top ++ " ; " ++ var ++ "++) {\n"
  ++ "          if (true) {\n"
