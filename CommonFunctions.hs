@@ -133,7 +133,9 @@ getConstTnv c oldExpM =
             Just xs -> let cn    = contractName c
                            vdec  = VarDecl cn VarInitNil
                            typE  = "Old_" ++ cn
-                       in [Var VarModifierNil typE [vdec]]
+                       in if null xs
+                          then []
+                          else [Var VarModifierNil typE [vdec]]
 
 
 ---------------------------------------
