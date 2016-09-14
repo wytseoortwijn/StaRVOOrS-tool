@@ -295,12 +295,12 @@ makeTransitionAlg1Cond ns e events c env =
      act   = "h" ++ show (chGet c) ++ ".send(id);"
  in if (length xs == 1)
     then Transition ns (Arrow e c' act) ns
-    else let ident = "_nyckelord"
+    else let ident = cn
              ys    = map (splitOnIdentifier ident) (tail xs)
              bindn = getClassVar c events EVEntry
              ys'   = removeDuplicates $ map head ys
              oexpr = fromJust $ Map.lookup cn (oldExpTypes env)
-             zs    = map (\xs -> cn ++ xs ++ ident ++ " = " ++ getExpForOld oexpr (tail xs) ++ ";") ys' --change to new initilisation
+             zs    = map (\xs -> cn ++ xs ++ " = " ++ getExpForOld oexpr (tail xs) ++ ";") ys' --change to new initilisation
              act'  = act ++ " " ++ concat zs
          in if null oexpr
             then error "Error: Cannot get proper expression for the operationalisation of an \\old expresion.\n"
@@ -342,12 +342,12 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e events env =
     then let semicol = if (act == "") then "" else ";"
              act'    = " if (HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(id);}"
          in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
-    else let ident   = "_nyckelord"
+    else let ident   = cn
              ys      = map (splitOnIdentifier ident) (tail xs)
              bindn   = getClassVar c events EVEntry
              ys'     = removeDuplicates $ map head ys
              oexpr = fromJust $ Map.lookup cn (oldExpTypes env)
-             zs      = map (\xs -> cn ++ xs ++ ident ++ " = " ++ getExpForOld oexpr (tail xs) ++ ";") ys'--change to new initilisation
+             zs      = map (\xs -> cn ++ xs ++ " = " ++ getExpForOld oexpr (tail xs) ++ ";") ys'--change to new initilisation
              semicol = if (act == "") then "" else ";"
              act'    = " if (HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(id); " ++ concat zs ++ "}"
          in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
