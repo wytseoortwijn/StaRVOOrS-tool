@@ -13,7 +13,7 @@ import Data.Maybe
 
 
 --TODO: Possible problem when operationalising nested properties
-operationalizeOldResultBind :: UpgradePPD PPDATE -> Map.Map ContractName [(String,Type)] -> (UpgradePPD PPDATE, [(Contract, Variables)])
+operationalizeOldResultBind :: UpgradePPD PPDATE -> Map.Map ContractName [(String,Type)] -> UpgradePPD PPDATE
 operationalizeOldResultBind ppd oldExprTypesM =
  let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
      global   = globalGet ppdate
@@ -27,7 +27,7 @@ operationalizeOldResultBind ppd oldExprTypesM =
      newvars  = genNewVarsOld global (concat (map (\(x,y,z) -> y) xs))
      global'  = updateGlobal global (Ctxt newvars (events $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
      ppdate'  = ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ PPDATE (importsGet ppdate) global' (cinvariantsGet ppdate) consts' (methodsGet ppdate))
- in (ppdate', map (\(x,y,z) -> (x,y)) xs)
+ in ppdate'
 
 
 operationalizePrePostORB :: Contract -> [(String, ClassInfo, [(Type, Id)])] -> Events -> [(String, ClassInfo, [String])] -> Map.Map ContractName [(String,Type)] -> (Contract, Variables,OldExprM)
@@ -37,7 +37,8 @@ operationalizePrePostORB c vars events methods oldExprTypesM =
      p'                  = post c
      (xsPost, oldExprl)  = operationalizeOld p' cn
      ysPost              = operationalizeResult xsPost
-     (oldExprl', tvars)  = addType2NewVars cn oldExprTypesM oldExprl
+     oldExprl'           = addType2NewVars cn oldExprTypesM oldExprl
+     tvars               = getConstTnv c (Map.singleton cn oldExprl'')
      const'              = updatePost c ysPost
      oldExprl''          = bindOldExp c vars events methods oldExprl'
  in (bindCV const' vars events methods, tvars,Map.singleton cn oldExprl'')
@@ -159,14 +160,11 @@ getExpName ((a,_,c):xss) exp cn = if exp == a
                                   then cn ++ "_"  ++ c ++ "_nyckelord"
                                   else getExpName xss exp cn
 
-addType2NewVars :: ContractName -> Map.Map ContractName [(String,Type)] -> OldExprL -> (OldExprL, Variables)
-addType2NewVars cn _ []                      = ([],[])
+addType2NewVars :: ContractName -> Map.Map ContractName [(String,Type)] -> OldExprL -> OldExprL
+addType2NewVars cn _ []                      = []
 addType2NewVars cn mtypes oexpr@((v,t,e):vs) = 
- let vdec  = VarDecl (cn ++ "_" ++ e ++ "_nyckelord") VarInitNil
-     typE  = getType v cn mtypes
-     tvar  = Var VarModifierNil typE [vdec]                                          
-     (a,b) = addType2NewVars cn mtypes vs
- in ((v,typE,e):a, tvar:b)
+ let typE  = getType v cn mtypes     
+ in (v,typE,e):addType2NewVars cn mtypes vs
 
 genNewVarsOld :: Global -> Variables -> Variables
 genNewVarsOld global ss = 
