@@ -6,7 +6,7 @@ import Data.List.Split
 import Data.Either
 import Types
 import ErrM
-
+import qualified Data.Map as Map
 
 readIdentifier :: String -> Err (String, String)
 readIdentifier text 
@@ -122,6 +122,18 @@ addComma :: [String] -> String
 addComma []       = ""
 addComma [xs]     = xs
 addComma (xs:xss) = xs ++ "," ++ addComma xss
+
+
+getConstTnv :: Contract -> OldExprM -> Variables
+getConstTnv c oldExpM = 
+  if Map.null oldExpM 
+  then []
+  else case Map.lookup (contractName c) oldExpM of
+            Nothing -> []
+            Just xs -> let cn    = contractName c
+                           vdec  = VarDecl cn VarInitNil
+                           typE  = "Old_" ++ cn
+                       in [Var VarModifierNil typE [vdec]]
 
 
 ---------------------------------------

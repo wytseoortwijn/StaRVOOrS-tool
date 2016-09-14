@@ -15,20 +15,21 @@ import Data.Maybe
 -- HoareTriples.java --
 -----------------------
 
-contractsJavaFileGen :: UpgradePPD PPDATE -> FilePath -> [(Contract, Variables)] -> IO ()
-contractsJavaFileGen ppd output_add tnewvars = 
+contractsJavaFileGen :: UpgradePPD PPDATE -> FilePath -> IO ()
+contractsJavaFileGen ppd output_add = 
  let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
      imp           = importsGet ppdate
      global        = globalGet ppdate
      events        = getAllEvents global
      consts        = contractsGet ppdate
-     forallop      = map (\c -> genMethodsForConstForall c env tnewvars) consts
+     oldExpM       = oldExpTypes env
+     forallop      = map (\c -> genMethodsForConstForall c env oldExpM) consts
      new_methods   = map snd forallop
      consts'       = map fst forallop
-     existsop      = map (\c -> genMethodsForConstExists c env tnewvars) consts'
+     existsop      = map (\c -> genMethodsForConstExists c env oldExpM) consts'
      new_methods'  = map snd existsop
      consts''      = map fst existsop
-     methods       = map (\ c -> (methodForPre c env, methodForPost c env tnewvars)) consts''
+     methods       = map (\ c -> (methodForPre c env, methodForPost c env oldExpM)) consts''
      body          = concat $ map joinInfo $ zip3 methods new_methods new_methods'
  in do 
        let address = output_add ++ "HoareTriples.java"
@@ -57,9 +58,9 @@ genImports' :: Imports -> String
 genImports' xss = getImports' xss
 
 -- Contracts methods
-genMethodsForConstForall :: Contract -> Env -> [(Contract, Variables)] -> (Contract, String)
-genMethodsForConstForall c env tnewvars =
- let (body_pre, body_post) = operationalizeForall c env tnewvars
+genMethodsForConstForall :: Contract -> Env -> OldExprM -> (Contract, String)
+genMethodsForConstForall c env oldExpM =
+ let (body_pre, body_post) = operationalizeForall c env oldExpM
      newpre  = flattenBody body_pre
      newpost = flattenBody body_post
      pre_opmethods  = concat $ extracMethodDefinitions body_pre
@@ -69,9 +70,9 @@ genMethodsForConstForall c env tnewvars =
  in (c'', pre_opmethods ++ post_opmethods)
 
 
-genMethodsForConstExists :: Contract -> Env -> [(Contract, Variables)] -> (Contract, String)
-genMethodsForConstExists c env tnewvars =
- let (body_pre, body_post) = operationalizeExists c env tnewvars
+genMethodsForConstExists :: Contract -> Env -> OldExprM -> (Contract, String)
+genMethodsForConstExists c env oldExpM =
+ let (body_pre, body_post) = operationalizeExists c env oldExpM
      newpre  = flattenBody body_pre
      newpost = flattenBody body_post
      pre_opmethods  = concat $ extracMethodDefinitions body_pre
@@ -86,10 +87,10 @@ auxNewVars []                          = []
 auxNewVars (Var _ t [VarDecl id _]:xs) = (t ++ " " ++ id):auxNewVars xs
 
 
-methodForPost :: Contract -> Env -> [(Contract, Variables)] -> String
-methodForPost c env ctnewvars =
+methodForPost :: Contract -> Env -> OldExprM -> String
+methodForPost c env oldExpM =
  let (argsPost, argsPostwt) = lookForAllExitEventArgs env (fst $ methodCN c) (snd $ methodCN c)
-     tnvs      = getConstTnv c ctnewvars
+     tnvs      = getConstTnv c oldExpM
      tnvs'     = auxNewVars tnvs
      newargs   = addComma tnvs'
      nargs     = if (null tnvs) then "" else "," ++ newargs
@@ -98,13 +99,6 @@ methodForPost c env ctnewvars =
   ++ "  public static boolean " ++ (contractName c) ++ "_post(" ++ argsPost ++ nargs ++ ") {\n"
   ++ "    return " ++ (post c) ++ ";\n" 
   ++ "  }\n\n"
-
-
-getConstTnv :: Contract ->  [(Contract, Variables)] -> Variables
-getConstTnv c []             = []
-getConstTnv c ((c',tnvs):cs) = if (contractName c == contractName c')
-                               then tnvs
-                               else getConstTnv c cs 
 
 --check opt for new predicates for the precondition due to partial proof
 methodForPre :: Contract -> Env -> String

@@ -70,13 +70,12 @@ staticAnalysis' jpath ppd output_add =
                generateReport xml' output_addr
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
                oldExpTypes <- inferTypesOldExprs ppdate' jpath (output_addr ++ "workspace/")
-               putStrLn (show oldExpTypes)
                let (ppdate'', tnewvars) = operationalizeOldResultBind ppdate' oldExpTypes
                let add = output_add ++ "/ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
                createDirectoryIfMissing True (output_addr ++ annotated_add)
-               contractsJavaFileGen ppdate'' add tnewvars
+               contractsJavaFileGen ppdate'' add
                idFileGen add
                oldExprFileGen add ppdate''
                copyFiles jpath (output_addr ++ annotated_add)
@@ -91,7 +90,7 @@ staticAnalysis' jpath ppd output_add =
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
                createDirectoryIfMissing True (output_addr ++ annotated_add)
-               contractsJavaFileGen ppdate'' add tnewvars
+               contractsJavaFileGen ppdate'' add
                idFileGen add
                oldExprFileGen add ppdate''
                methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)

@@ -201,8 +201,8 @@ operationalizeResult s =
 -- \forall --
 -------------
 
-operationalizeForall :: Contract -> Env -> [(Contract, Variables)] -> ([Either (String, String) String], [Either (String, String) String])
-operationalizeForall c env ctnv = 
+operationalizeForall :: Contract -> Env -> OldExprM -> ([Either (String, String) String], [Either (String, String) String])
+operationalizeForall c env oldExpM = 
  let mn                 = snd $ methodCN c
      cinfo              = fst $ methodCN c
      p                  = pre c
@@ -211,16 +211,11 @@ operationalizeForall c env ctnv =
      (exargs, exargswt) = lookForAllExitEventArgs env cinfo mn
      xs                 = splitInQuantifiedExpression p "\\forall"
      ys                 = splitInQuantifiedExpression p' "\\forall"
-     tnewvars           = lookForNewVarsConst c ctnv 
+     tnewvars           = getConstTnv c oldExpM 
      xs_pre             = applyGenMethodForall xs (contractName c) 1 enargs enargswt "_pre" []
      ys_post            = applyGenMethodForall ys (contractName c) 1 exargs exargswt "_post" tnewvars
  in (xs_pre, ys_post)
 
-lookForNewVarsConst :: Contract -> [(Contract, Variables)] -> Variables
-lookForNewVarsConst c' []            = []
-lookForNewVarsConst c' ((c, tnv):cs) = if (c == c') 
-                                       then tnv
-                                       else lookForNewVarsConst c' cs
 
 applyGenMethodForall :: [Either String String] -> ContractName -> Int -> String -> String -> String -> Variables -> [Either (String, String) String]
 applyGenMethodForall [] _ _ _ _ _ _                        = []
@@ -332,8 +327,8 @@ lookforEnd n acum (x:xs) = if (x == ')')
 -- \exist --
 ------------
 
-operationalizeExists :: Contract -> Env -> [(Contract, Variables)] -> ([Either (String, String) String], [Either (String, String) String])
-operationalizeExists c es ctnv = 
+operationalizeExists :: Contract -> Env -> OldExprM -> ([Either (String, String) String], [Either (String, String) String])
+operationalizeExists c es oldExpM = 
  let mn                 = snd $ methodCN c
      cinfo              = fst $ methodCN c
      p                  = pre c
@@ -342,7 +337,7 @@ operationalizeExists c es ctnv =
      (exargs, exargswt) = lookForAllExitEventArgs es cinfo mn
      xs                 = splitInQuantifiedExpression p "\\exists"
      ys                 = splitInQuantifiedExpression p' "\\exists"
-     tnewvars           = lookForNewVarsConst c ctnv
+     tnewvars           = getConstTnv c oldExpM
      xs_pre             = applyGenMethodExists xs (contractName c) 1 enargs enargswt "_pre" []
      ys_post            = applyGenMethodExists ys (contractName c) 1 exargs exargswt "_post" tnewvars
  in (xs_pre, ys_post)
