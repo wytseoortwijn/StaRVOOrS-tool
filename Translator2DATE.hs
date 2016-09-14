@@ -34,7 +34,7 @@ getImports []            = ""
 getImports (Import s:xs) = "import " ++ s ++ ";\n" ++ getImports xs
 
 writeImports :: Imports -> Contracts -> String
-writeImports xss const = let newImp = "import ppArtifacts.HoareTriples;\nimport ppArtifacts.Id;\n"
+writeImports xss const = let newImp = "import ppArtifacts.*;\n"
                          in if null const 
                             then "IMPORTS {\n" ++ getImports xss ++ "}\n\n"
                             else "IMPORTS {\n" ++ getImports xss ++ newImp  ++ "}\n\n"

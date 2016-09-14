@@ -178,7 +178,7 @@ oldExpGen c oldExpM =
  in ("package ppArtifacts;\n\n"
     ++ "public class " ++ nameClass ++ " {\n\n"
     ++ varDeclOldExpr xs
-    ++ "  " ++ nameClass ++ "(" ++ addComma (map (\(x,y) -> x ++ " " ++ y) xs) ++ ") }\n"
+    ++ "  public " ++ nameClass ++ "(" ++ addComma (map (\(x,y) -> x ++ " " ++ y) xs) ++ ") {\n"
     ++ constructorOldExpr xs 
     ++ "  }\n\n"
     ++ "}\n", nameClass++".java")
