@@ -292,7 +292,7 @@ makeTransitionAlg1Cond ns e events c env =
      c'      = "HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")"
      act     = getExpForOld oldExpM cn ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
      zs      = getExpForOld oldExpM cn
-     type_   = if null zs then "" else "Old_" ++ cn
+     type_   = if null zs then "PPD" else "Old_" ++ cn
      old     = if null zs then "" else "," ++ cn
      msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
  in Transition ns (Arrow e c' act) ns
@@ -326,7 +326,7 @@ makeExtraTransitionAlg2 ts c e es ns env = let esinf   = map getInfoEvent es
                                                zs      = getExpForOld oldExpM cn
                                                arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
                                                pre'    = "HoareTriples." ++ (contractName c) ++ "_pre(" ++ arg ++ ")"
-                                               type_   = if null zs then "" else "Old_" ++ cn
+                                               type_   = if null zs then "PPD" else "Old_" ++ cn
                                                old     = if null zs then "" else "," ++ cn
                                                msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
                                                c'      = makeExtraTransitionAlg2Cond ts ++ pre'
@@ -341,7 +341,7 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e events env =
      arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
      semicol = if (act == "") then "" else ";"     
      zs      = getExpForOld oldExpM cn
-     type_   = if null zs then "" else "Old_" ++ cn
+     type_   = if null zs then "PPD" else "Old_" ++ cn
      old     = if null zs then "" else "," ++ cn
      msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
      act'    = " if (HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")) {" ++ zs ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "}"
@@ -413,7 +413,7 @@ generateEventRA :: String -> Env -> ContractName -> Int -> String
 generateEventRA fs env cn n =
  let oldExpM  = oldExpTypes env
      zs       = getOldExpr oldExpM cn
-     nvar     = if null zs then "" else "Old_" ++ cn
+     nvar     = if null zs then "PPD" else "Old_" ++ cn
  in "rh" ++ show n ++ "(Messages" ++ nvar ++ " msg) = {h"++ show n ++ ".receive(msg)} where {id=msg.id;"
     ++ fs ++  "}\n"
 

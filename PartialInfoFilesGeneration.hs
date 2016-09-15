@@ -201,19 +201,19 @@ messagesFileGen :: FilePath -> Env -> IO [()]
 messagesFileGen output_add env = 
  let oldExpM  = oldExpTypes env
      cns      = map ("Old_"++) [x | (x,y) <- Map.toList oldExpM, (not.null) y]
-     files    = (output_add ++ "Messages.java") : map (\s -> output_add ++ "Messages" ++ s ++ ".java") cns
+     files    = (output_add ++ "MessagesPPD.java") : map (\s -> output_add ++ "Messages" ++ s ++ ".java") cns
      xs       = messagesGen : map messageOldExpGen cns
  in sequence $ map (uncurry writeFile) $ zip files xs
     
 messagesGen :: String
 messagesGen =
  "package ppArtifacts;\n\n"
-  ++ "public class Messages {\n\n"
+  ++ "public class MessagesPPD {\n\n"
   ++ "  public Integer id; \n\n"
-  ++ "  public Messages (Integer id) { \n"
+  ++ "  public MessagesPPD (Integer id) { \n"
   ++ "     this.id = id; \n" 
   ++ "  }\n\n"
-  ++ "  public static int getId(Messages m) {\n"
+  ++ "  public static int getId(MessagesPPD m) {\n"
   ++ "     return m.id;\n"
   ++ "  }\n"
   ++ "}\n"
@@ -221,7 +221,7 @@ messagesGen =
 messageOldExpGen :: String -> String
 messageOldExpGen t =
  "package ppArtifacts;\n\n"
-  ++ "public class Messages" ++ t ++ " extends Messages  {\n\n"
+  ++ "public class Messages" ++ t ++ " extends MessagesPPD  {\n\n"
   ++ "  public " ++ t ++ " oldExpr; \n\n"
   ++ "  public Messages" ++ t ++ " (Integer id, " ++ t ++ " oldExpr) { \n"
   ++ "     super(id); \n" 

@@ -38,7 +38,7 @@ makeTransitions c n esinf es env =
        nvar     = if null zs then "" else "oldExpAux = MessagesOld_" ++ cn ++ ".getOldExpr(msg); "
        idle_to_postok = Arrow event (checkId ++ "HoareTriples." ++ cn ++ "_post(" ++ init arg ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_postOK \\n \");")
        idle_to_bad    = Arrow event (checkId ++ "!HoareTriples." ++ cn ++ "_post(" ++ init arg ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_bad \\n \");")
-       start_to_idle  = Arrow ("rh" ++ show n) "" ("idAux = Messages.getId(msg) ; " ++ nvar ++ "System.out.println(\"    " ++ cn ++ "_preOK \\n\");")
+       start_to_idle  = Arrow ("rh" ++ show n) "" ("idAux = MessagesPPD.getId(msg) ; " ++ nvar ++ "System.out.println(\"    " ++ cn ++ "_preOK \\n\");")
    in [Transition "start" start_to_idle "idle",
       Transition "idle" idle_to_postok "postOK",
       Transition "idle" idle_to_bad "bad"
