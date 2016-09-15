@@ -199,7 +199,7 @@ createTriggerExit (cn,mn,(rt,mn',xs)) n =
  let trnm = mn ++ "_ex" 
      nvar = "cv" ++ "_" ++ (show n)
      cn'  = cn ++ " " ++ nvar
-     ret  = "r" ++ (show n) in
+     ret  = "ret_ppd" ++ (show n) in
  if (mn == mn')
  then if (rt == "void")
       then let cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [])

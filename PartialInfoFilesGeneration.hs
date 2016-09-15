@@ -94,9 +94,10 @@ methodForPost c env oldExpM =
      tnvs'     = auxNewVars tnvs
      newargs   = addComma tnvs'
      nargs     = if (null tnvs) then "" else "," ++ newargs
+     args      = addComma $ map unwords $ map (\s -> if isInfixOf "ret_ppd" (head $ tail s) then (head s):["ret"] else s) $ map words $ splitOnIdentifier "," (argsPost ++ nargs)
  in 
   "  // " ++ (contractName c) ++ "\n"
-  ++ "  public static boolean " ++ (contractName c) ++ "_post(" ++ argsPost ++ nargs ++ ") {\n"
+  ++ "  public static boolean " ++ (contractName c) ++ "_post(" ++ args ++ ") {\n"
   ++ "    return " ++ (post c) ++ ";\n" 
   ++ "  }\n\n"
 

@@ -44,7 +44,7 @@ translateEPATH :: EPath -> EPath
 translateEPATH epath = epath { pathCondition = translate $ pathCondition epath }
 
 symbolsXML :: [(String,String)]
-symbolsXML = [("&amp;","&&"), ("&gt;=",">="), ("&gt;", ">"), (" =","=="), ("&quot;","\""),("&apos;","\\"),("&lt;","<"),("&lt;=","<=")]
+symbolsXML = [("&amp;","&&"), ("&gt;=",">="), ("&gt;", ">"), (" =","=="), ("&quot;","\""),("&apos;","\\"),("&lt;","<"),("&lt;=","<="),("TRUE","true"),("FALSE","false")]
 
 translate :: String -> String
 translate s = (\ x -> replaceSymbols x symbolsXML) s

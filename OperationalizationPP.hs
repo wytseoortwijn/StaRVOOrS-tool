@@ -64,11 +64,11 @@ bindCV c vars es methods =
 bindOldExp :: Contract -> [(String, ClassInfo, [(String, String)])] -> Events -> [(String, ClassInfo, [String])] -> OldExprL -> OldExprL
 bindOldExp c vars es _ []             = []
 bindOldExp c vars es ms ((x,y,z):xss) = 
- let bindExit  = getClassVar c es (EVExit [])
+ let bindEntry = getClassVar c es (EVEntry)
      varsc     = getVarsToControl (fst $ methodCN c) vars
-     x'        = concat $ bindVars bindExit varsc x
+     x'        = concat $ bindVars bindEntry varsc x
      ms'       = getMethodsToControl (fst $ methodCN c) ms
-     x''       = concat $ bindMethods bindExit ms' x'
+     x''       = concat $ bindMethods bindEntry ms' x'
  in (x'',y,z):bindOldExp c vars es ms xss
 
 
