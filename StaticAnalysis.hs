@@ -77,6 +77,7 @@ staticAnalysis' jpath ppd output_add =
                createDirectoryIfMissing True (output_addr ++ annotated_add)
                contractsJavaFileGen ppdate'' add
                idFileGen add
+               cloningFileGen add
                oldExprFileGen add ppdate''
                messagesFileGen add (getEnvVal ppdate'')
                copyFiles jpath (output_addr ++ annotated_add)
@@ -93,6 +94,7 @@ staticAnalysis' jpath ppd output_add =
                createDirectoryIfMissing True (output_addr ++ annotated_add)
                contractsJavaFileGen ppdate'' add
                idFileGen add
+               cloningFileGen add
                oldExprFileGen add ppdate''
                messagesFileGen add (getEnvVal ppdate'')
                methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)

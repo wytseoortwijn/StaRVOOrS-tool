@@ -384,9 +384,9 @@ generateProp ((es,ps):eps)  env =
  let cn       = snd ps
      oldExpM  = oldExpTypes env
      zs       = getOldExpr oldExpM cn
-     nvar     = if null zs then "" else "Old_" ++ cn ++ " oldExpAux;\n" 
+     nvar     = if null zs then "" else "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n" 
  in "FOREACH (Integer id) {\n\n"
-    ++ "VARIABLES {\n" ++ " Integer idAux ;\n " ++ nvar ++ "}\n\n"
+    ++ "VARIABLES {\n" ++ " Integer idAux = new Integer(0);\n " ++ nvar ++ "}\n\n"
     ++ "EVENTS {\n" ++ es ++ "}\n\n"
     ++ fst ps
     ++ "}\n\n"
@@ -398,7 +398,7 @@ getInfoEvent (EventDef en args ce w) = case ce of
                                                 case bind of
                                                      BindType t id -> (en, splitOnIdentifier "," $ getBindArgs' ((BindType t id):args))
                                                      otherwise     -> (en, splitOnIdentifier "," $ getBindArgs' args)
-                                            otherwise -> error "Error: Trying to generate a replicated automaton for an incorrect event.\n"
+                                            otherwise -> error $ "Error: Problem when generating a replicated automaton associated to the trigger " ++ en ++  " .\n"
 
 
 

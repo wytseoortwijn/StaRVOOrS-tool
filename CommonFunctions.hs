@@ -145,7 +145,6 @@ getOldExpr oldExpM cn =
                  then ""
                  else "," ++ cn
 
-
 ---------------------------------------
 -- Manipulating the parsed .xml file --
 ---------------------------------------

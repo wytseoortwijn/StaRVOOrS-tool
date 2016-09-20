@@ -1,4 +1,4 @@
-module PartialInfoFilesGeneration (contractsJavaFileGen, idFileGen, oldExprFileGen,messagesFileGen) where
+module PartialInfoFilesGeneration (contractsJavaFileGen, idFileGen, oldExprFileGen,messagesFileGen,cloningFileGen) where
 
 import Types
 import System.Directory
@@ -179,6 +179,7 @@ oldExpGen c oldExpM =
  in ("package ppArtifacts;\n\n"
     ++ "public class " ++ nameClass ++ " {\n\n"
     ++ varDeclOldExpr xs
+    ++ "  public " ++ nameClass ++ "() { }\n\n"
     ++ "  public " ++ nameClass ++ "(" ++ addComma (map (\(x,y) -> x ++ " " ++ y) xs) ++ ") {\n"
     ++ constructorOldExpr xs 
     ++ "  }\n\n"
@@ -232,3 +233,47 @@ messageOldExpGen t =
   ++ "     return m.oldExpr;\n"
   ++ "  }\n"
   ++ "}\n"
+
+
+------------------------------------
+-- Cloning reference type objects --
+------------------------------------
+
+cloningFileGen :: FilePath -> IO ()
+cloningFileGen output_add = writeFile (output_add ++ "CopyUtilsPPD.java") cloningGen
+    
+cloningGen :: String
+cloningGen =
+ "package ppArtifacts;\n\n"
+  ++ "import java.lang.reflect.Field;\nimport java.lang.reflect.Modifier;\n\n"
+  ++ "public class CopyUtilsPPD {\n\n"
+  ++ "  private CopyUtilsPPD() {}\n\n"
+  ++ "  public static void copy(Object src, Object dest) {\n"
+  ++ "     copyFields(src, dest, src.getClass());\n"
+  ++ "  }\n\n"
+  ++ "  private static void copyFields(Object src, Object dest, Class<?> cl) {\n"
+  ++ "     Field[] fields = cl.getDeclaredFields();\n"
+  ++ "     for (Field f : fields) {\n"
+  ++ "        if (copyableField(f)) {\n"
+  ++ "           f.setAccessible(true);\n"
+  ++ "           copyFieldValue(src, dest, f);\n"
+  ++ "        }\n"
+  ++ "     }\n"
+  ++ "     cl = cl.getSuperclass();\n"
+  ++ "     if (cl != null) {\n"
+  ++ "        copyFields(src, dest, cl);\n"
+  ++ "     }\n"
+  ++ "  }\n\n"
+  ++ "  private static void copyFieldValue(Object src, Object dest, Field f) {\n"
+  ++ "     try {\n"
+  ++ "         Object value = f.get(src);\n"
+  ++ "         f.set(dest, value);\n"
+  ++ "     } catch (ReflectiveOperationException e) {\n"
+  ++ "         throw new RuntimeException(e);\n"
+  ++ "     }\n"
+  ++ "  }\n\n"
+  ++ "  private static boolean copyableField(Field f) {\n"
+  ++ "     return !Modifier.isStatic(f.getModifiers());\n"
+  ++ "  }\n\n"
+  ++ "}\n"
+
