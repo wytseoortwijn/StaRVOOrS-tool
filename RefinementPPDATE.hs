@@ -85,15 +85,19 @@ updateContracts (x:xs) consts es = updateContracts xs (updateContract x consts e
 
 updateContract :: (MethodName, ContractName, [Pre],String) -> Contracts -> Events -> Contracts
 updateContract (mn,cn,pres,path) [] _      = []
-updateContract (mn,cn,pres,path) (c:cs) es = if (contractName c == cn && (snd.methodCN) c == mn)
-                                             then if (null pres)
-                                                  then c:updateContract (mn,cn,pres,path) cs es
-                                                  else let clvar = getClassVar c es EVEntry
-                                                           pres' = removeDuplicates pres
-                                                           opt'  = map (addParenthesisNot.(replaceSelfWith clvar)) pres'
-                                                           opt'' = '(':introduceOr opt' ++ [')']
-                                                       in (updatePath (updateOpt c [opt'']) path) :cs
-                                             else c:updateContract (mn,cn,pres,path) cs es
+updateContract (mn,cn,pres,path) (c:cs) es = 
+ if (contractName c == cn && (snd.methodCN) c == mn)
+ then if (null pres)
+      then c:updateContract (mn,cn,pres,path) cs es
+      else let clvar = getClassVar c es EVEntry
+               pres' = removeDuplicates pres
+               opt'  = map (addParenthesisNot.(replaceSelfWith clvar).removeDLstrContent) pres'
+               opt'' = '(':introduceOr opt' ++ [')']
+               c'    = updatePath (updateOpt c [opt'']) path
+               c''   = updatePre c' $ removeDLstrContent (pre c)
+               c'''  = updatePost c'' $ removeDLstrContent (post c)
+           in c''':cs
+ else c:updateContract (mn,cn,pres,path) cs es
 
 getClassVar :: Contract -> Events -> EventVariation -> String
 getClassVar c es ev = lookupClassVar es c ev
