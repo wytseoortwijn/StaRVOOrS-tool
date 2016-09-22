@@ -39,4 +39,14 @@ replaceSelfWith with s = let xs = splitOnIdentifier "self" s
                          in head xs ++ concat (map (with ++) (tail xs))
 
 
+--------------------------
+-- Remove dl_strContent --
+--------------------------
+
+removeDLstrContent :: String -> String
+removeDLstrContent s =
+ let xs = splitOnIdentifier "\\dl_strContent(" s
+ in if length xs == 1 
+    then s 
+    else concat $ head xs:map (uncurry (++).splitAtClosingParen 0) (tail xs)
 

@@ -6,13 +6,15 @@ import ReplicatedAutomataGenerator
 import RefinementPPDATE
 import UpgradePPDATE
 import ErrM
+import qualified Data.Map as Map
+import Data.Maybe
 
 
 translate :: UpgradePPD PPDATE -> FilePath -> IO ()
 translate ppd fpath =
  do let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
     putStrLn "Translating ppDATE to DATE."
-    writeFile fpath (writeImports (importsGet ppdate))
+    writeFile fpath (writeImports (importsGet ppdate) (contractsGet ppdate))
     let consts = assocChannel2Contracts 1 $ (contractsGet ppdate)
     let ppdate' = updateContractsPP ppdate consts
     appendFile fpath (writeGlobal ppdate' env)
@@ -31,9 +33,11 @@ getImports :: Imports -> String
 getImports []            = ""
 getImports (Import s:xs) = "import " ++ s ++ ";\n" ++ getImports xs
 
-writeImports :: Imports -> String
-writeImports xss = let newImp = "import ppArtifacts.Contracts;\nimport ppArtifacts.Id;\n"
-                   in "IMPORTS {\n" ++ getImports xss ++ newImp  ++ "}\n\n"
+writeImports :: Imports -> Contracts -> String
+writeImports xss const = let newImp = "import ppArtifacts.*;\n"
+                         in if null const 
+                            then "IMPORTS {\n" ++ getImports xss ++ "}\n\n"
+                            else "IMPORTS {\n" ++ getImports xss ++ newImp  ++ "}\n\n"
 
 --------------------
 -- GLOBAL section --
@@ -186,24 +190,24 @@ writeProperties :: Property -> Contracts -> Events -> Env -> String
 writeProperties PNIL _ _ _         = ""
 writeProperties prop consts es env =
  let fors   = forsVars env --list of foreach variables
-     xs     = getProperties prop consts es
-     ra     = generateReplicatedAutomata consts fors es
+     xs     = getProperties prop consts es env
+     ra     = generateReplicatedAutomata consts fors es env
  in if (null fors)
     then xs ++ ra ++ "\n}\n"
     else xs ++ ra ++ "\n}\n}\n"
 
 
-getProperties :: Property -> Contracts -> Events -> String
-getProperties prop cs es = writeProperty prop cs es
+getProperties :: Property -> Contracts -> Events -> Env -> String
+getProperties = writeProperty
 
-writeProperty :: Property -> Contracts -> Events -> String
-writeProperty PNIL _ _                                 = ""
-writeProperty (Property name states trans props) cs es =
+writeProperty :: Property -> Contracts -> Events -> Env -> String
+writeProperty PNIL _ _ _                                   = ""
+writeProperty (Property name states trans props) cs es env =
   "PROPERTY " ++ name ++ " \n{\n\n"
   ++ writeStates states
-  ++ writeTransitions trans cs states es
+  ++ writeTransitions trans cs states es env
   ++ "}\n\n"
-  ++ writeProperty props cs es
+  ++ writeProperty props cs es env
 
 writeStates :: States -> String
 writeStates (States acc bad normal start) =
@@ -233,71 +237,79 @@ getInitCode' (InitProg java) = "{" ++ init java ++ "}"
 
 --Contracts [] -> Replicated Automata
 --Contracts non-empty -> Property transitions instrumentation
-writeTransitions :: Transitions -> Contracts -> States -> Events -> String
-writeTransitions ts [] _ _ =
+writeTransitions :: Transitions -> Contracts -> States -> Events -> Env -> String
+writeTransitions ts [] _ _ _ =
  "TRANSITIONS \n{ \n"
  ++ concat (map getTransition ts)
  ++ "}\n\n"
-writeTransitions ts (c:cs) states es =
+writeTransitions ts (c:cs) states es env =
  "TRANSITIONS \n{ \n"
-  ++ (concat (map getTransition (getTransitionsGeneral (c:cs) states ts es)))
+  ++ (concat (map getTransition (getTransitionsGeneral (c:cs) states ts es env)))
   ++ "}\n\n"
 
 getTransition :: Transition -> String
 getTransition (Transition q (Arrow e c act) q') =
      q ++ " -> " ++ q' ++ " [" ++ e ++ " \\ "  ++ c ++ " \\ " ++ act ++ "]\n"
 
-getTransitionsGeneral :: Contracts -> States -> Transitions -> Events -> Transitions
-getTransitionsGeneral cs (States acc bad nor star) ts es =
- let ts1 = generateTransitions acc cs ts es
-     ts2 = generateTransitions bad cs ts1 es
-     ts3 = generateTransitions nor cs ts2 es
-     ts4 = generateTransitions star cs ts3 es
+getTransitionsGeneral :: Contracts -> States -> Transitions -> Events -> Env -> Transitions
+getTransitionsGeneral cs (States acc bad nor star) ts es env =
+ let ts1 = generateTransitions acc cs ts es env
+     ts2 = generateTransitions bad cs ts1 es env
+     ts3 = generateTransitions nor cs ts2 es env 
+     ts4 = generateTransitions star cs ts3 es env
  in ts4
 
-generateTransitions :: [State] -> Contracts -> Transitions -> Events -> Transitions
-generateTransitions [] _ ts _                            = ts
-generateTransitions ((State ns ic []):xs) cs ts es       = generateTransitions xs cs ts es
-generateTransitions ((State ns ic l@(_:_)):xs) cs ts es  = let ts' = accumTransitions l ns cs ts es
-                                                           in generateTransitions xs cs ts' es
+generateTransitions :: [State] -> Contracts -> Transitions -> Events -> Env -> Transitions
+generateTransitions [] _ ts _ _                              = ts
+generateTransitions ((State ns ic []):xs) cs ts es env       = generateTransitions xs cs ts es env
+generateTransitions ((State ns ic l@(_:_)):xs) cs ts es env  = let ts' = accumTransitions l ns cs ts es env
+                                                               in generateTransitions xs cs ts' es env
 
-accumTransitions :: [ContractName] -> NameState -> Contracts -> Transitions -> Events -> Transitions
-accumTransitions [] _ _ ts _              = ts
-accumTransitions (cn:cns) ns consts ts es =
- let ts' = generateTransition cn ns consts ts es
- in accumTransitions cns ns consts ts' es
+accumTransitions :: [ContractName] -> NameState -> Contracts -> Transitions -> Events -> Env -> Transitions
+accumTransitions [] _ _ ts _ _                = ts
+accumTransitions (cn:cns) ns consts ts es env =
+ let ts' = generateTransition cn ns consts ts es env
+ in accumTransitions cns ns consts ts' es env
 
-generateTransition :: ContractName -> NameState -> Contracts -> Transitions -> Events -> Transitions
-generateTransition p ns cs ts es = let c             = lookForContract p cs
-                                       mn            = snd $ methodCN c
-                                       e             = lookForEntryEvent es mn
-                                       (lts, nonlts) = lookForLeavingTransitions e ns ts
-                                   in if (null lts)
-                                      then ts ++ [(makeTransitionAlg1Cond ns e es c)]
-                                      else let ext = makeExtraTransitionAlg2 lts c e es ns
-                                               xs  = map (\x -> instrumentTransitionAlg2 c x e es) lts
-                                           in nonlts ++ xs ++ [ext]
+generateTransition :: ContractName -> NameState -> Contracts -> Transitions -> Events -> Env -> Transitions
+generateTransition p ns cs ts es env = let c             = lookForContract p cs
+                                           mn            = snd $ methodCN c
+                                           e             = lookForEntryEvent es mn
+                                           (lts, nonlts) = lookForLeavingTransitions e ns ts
+                                       in if (null lts)
+                                          then ts ++ [(makeTransitionAlg1Cond ns e es c env)]
+                                          else let ext = makeExtraTransitionAlg2 lts c e es ns env
+                                                   xs  = map (\x -> instrumentTransitionAlg2 c x e es env) lts
+                                               in nonlts ++ xs ++ [ext]
 
 
-makeTransitionAlg1Cond :: NameState -> Event -> Events -> Contract -> Transition
-makeTransitionAlg1Cond ns e events c =
- let p     = pre c
-     p'    = post c
-     cn    = contractName c
-     xs    = splitOnIdentifier cn p'
-     esinf = map getInfoEvent events
-     arg   = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
-     c'    = "Contracts." ++ cn ++ "_pre(" ++ arg ++ ")"
-     act   = "h" ++ show (chGet c) ++ ".send(id);"
- in if (length xs == 1)
-    then Transition ns (Arrow e c' act) ns
-    else let ident = "_nyckelord"
-             ys    = map (splitOnIdentifier ident) (tail xs)
-             bindn = getClassVar c events
-             ys'   = removeDuplicates $ map head ys
-             zs    = map (\xs -> cn ++ xs ++ ident ++ " = " ++ bindn ++ "." ++ (tail xs) ++ ";") ys'
-             act'  = act ++ " " ++ concat zs
-         in Transition ns (Arrow e c' act') ns
+makeTransitionAlg1Cond :: NameState -> Event -> Events -> Contract -> Env -> Transition
+makeTransitionAlg1Cond ns e events c env =
+ let cn      = contractName c
+     oldExpM = oldExpTypes env
+     esinf   = map getInfoEvent events
+     arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
+     c'      = "HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")"
+     act     = getExpForOld oldExpM cn ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
+     zs      = getExpForOld oldExpM cn
+     type_   = if null zs then "PPD" else "Old_" ++ cn
+     old     = if null zs then "" else "," ++ cn
+     msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
+ in Transition ns (Arrow e c' act) ns
+
+getExpForOld :: OldExprM -> ContractName -> String
+getExpForOld oldExpM cn = 
+ case Map.lookup cn oldExpM of
+      Nothing -> ""
+      Just xs -> if null xs 
+                 then ""
+                 else cn ++ " = " ++ initOldExpr xs cn ++ ";"
+
+initOldExpr :: OldExprL -> ContractName -> String
+initOldExpr oel cn = 
+ "new Old_" ++ cn ++ "(" ++ addComma (map (\(x,_,_) -> x) oel) ++ ")"
+
+
 
 makeExtraTransitionAlg2Cond :: Transitions -> String
 makeExtraTransitionAlg2Cond []     = ""
@@ -307,34 +319,33 @@ makeExtraTransitionAlg2Cond (t:ts) =
  in
  "!("++ cond'' ++ ") && " ++ makeExtraTransitionAlg2Cond ts
 
-makeExtraTransitionAlg2 :: Transitions -> Contract -> Event -> Events -> NameState -> Transition
-makeExtraTransitionAlg2 ts c e es ns = let esinf = map getInfoEvent es
-                                           arg   = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
-                                           pre'  = "Contracts." ++ (contractName c) ++ "_pre(" ++ arg ++ ")"
-                                           c'    = makeExtraTransitionAlg2Cond ts ++ pre'
-                                       in Transition ns (Arrow e c' ("h" ++ show (chGet c) ++ ".send(id);")) ns
+makeExtraTransitionAlg2 :: Transitions -> Contract -> Event -> Events -> NameState -> Env -> Transition
+makeExtraTransitionAlg2 ts c e es ns env = let esinf   = map getInfoEvent es
+                                               oldExpM = oldExpTypes env
+                                               cn      = contractName c
+                                               zs      = getExpForOld oldExpM cn
+                                               arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
+                                               pre'    = "HoareTriples." ++ (contractName c) ++ "_pre(" ++ arg ++ ")"
+                                               type_   = if null zs then "PPD" else "Old_" ++ cn
+                                               old     = if null zs then "" else "," ++ cn
+                                               msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
+                                               c'      = makeExtraTransitionAlg2Cond ts ++ pre'
+                                           in Transition ns (Arrow e c' (zs ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");")) ns
 
 
-instrumentTransitionAlg2 :: Contract -> Transition -> Event -> Events -> Transition
-instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e events =
- let p  = pre c
-     p' = post c
-     cn = contractName c
-     xs = splitOnIdentifier cn p'
-     esinf = map getInfoEvent events
-     arg = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
- in if (length xs == 1)
-    then let semicol = if (act == "") then "" else ";"
-             act'    = " if (Contracts." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(id);}"
-         in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
-    else let ident   = "_nyckelord"
-             ys      = map (splitOnIdentifier ident) (tail xs)
-             bindn   = getClassVar c events
-             ys'     = removeDuplicates $ map head ys
-             zs      = map (\xs -> cn ++ xs ++ ident ++ " = " ++ bindn ++ "." ++ (tail xs) ++ ";") ys'
-             semicol = if (act == "") then "" else ";"
-             act'    = " if (Contracts." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(id); " ++ concat zs ++ "}"
-         in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
+instrumentTransitionAlg2 :: Contract -> Transition -> Event -> Events -> Env -> Transition
+instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e events env =
+ let cn      = contractName c
+     oldExpM = oldExpTypes env
+     esinf   = map getInfoEvent events
+     arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
+     semicol = if (act == "") then "" else ";"     
+     zs      = getExpForOld oldExpM cn
+     type_   = if null zs then "PPD" else "Old_" ++ cn
+     old     = if null zs then "" else "," ++ cn
+     msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
+     act'    = " if (HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")) {" ++ zs ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "}"
+ in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
 
 lookForContract :: PropertyName -> Contracts -> Contract
 lookForContract p []     = error $ "Wow! The impossible happened when checking the property "++ p ++ " on a state.\n"
@@ -355,25 +366,31 @@ lookForLeavingTransitions e ns (t@(Transition q (Arrow e' c act) q'):ts) = if (e
 -- Replicated Automata --
 -------------------------
 
-generateReplicatedAutomata :: Contracts -> [Id] -> Events -> String
-generateReplicatedAutomata cs fs es = let n      = length cs
-                                          ys     = zip cs [1..n]
-                                          esinf  = map getInfoEvent es
-                                          props  = map (uncurry (generateRAString esinf es)) ys
-                                          fors   = generateWhereInfo fs
-                                          events = generateEventsRA fors n
-                                          eps    = zip events props
-                                      in generateProp eps
+generateReplicatedAutomata :: Contracts -> [Id] -> Events -> Env -> String
+generateReplicatedAutomata cs fs es env = 
+ let n      = length cs
+     ys     = zip cs [1..n]
+     esinf  = map getInfoEvent es
+     props  = map (uncurry (generateRAString esinf es env)) ys
+     fors   = generateWhereInfo fs
+     events = generateEventsRA fors (map (\(x,y) -> (contractName x,y)) ys) env
+     eps    = zip events props
+ in generateProp eps env
 
 
-generateProp :: [(String,String)] -> String
-generateProp []            = ""
-generateProp ((es,ps):eps) = "FOREACH (Integer id) {\n\n"
-                             ++ "VARIABLES {\n" ++ "Integer idAux ;\n " ++ "}\n\n"
-                             ++ "EVENTS {\n" ++ es ++ "}\n\n"
-                             ++ ps
-                             ++ "}\n\n"
-                             ++ generateProp eps
+generateProp :: [(String,(String,ContractName))] -> Env -> String
+generateProp [] _               = ""
+generateProp ((es,ps):eps)  env = 
+ let cn       = snd ps
+     oldExpM  = oldExpTypes env
+     zs       = getOldExpr oldExpM cn
+     nvar     = if null zs then "" else "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n" 
+ in "FOREACH (Integer id) {\n\n"
+    ++ "VARIABLES {\n" ++ " Integer idAux = new Integer(0);\n " ++ nvar ++ "}\n\n"
+    ++ "EVENTS {\n" ++ es ++ "}\n\n"
+    ++ fst ps
+    ++ "}\n\n"
+    ++ generateProp eps env
 
 getInfoEvent :: EventDef -> (Event, [String])
 getInfoEvent (EventDef en args ce w) = case ce of
@@ -381,7 +398,7 @@ getInfoEvent (EventDef en args ce w) = case ce of
                                                 case bind of
                                                      BindType t id -> (en, splitOnIdentifier "," $ getBindArgs' ((BindType t id):args))
                                                      otherwise     -> (en, splitOnIdentifier "," $ getBindArgs' args)
-                                            otherwise -> error "Error: Trying to generate a replicated automaton for an incorrect event.\n"
+                                            otherwise -> error $ "Error: Problem when generating a replicated automaton associated to the trigger " ++ en ++  " .\n"
 
 
 
@@ -389,22 +406,25 @@ generateWhereInfo :: [Id] -> String
 generateWhereInfo []     = ""
 generateWhereInfo (f:fs) = f ++ "=null;" ++ generateWhereInfo fs
 
-generateEventsRA :: String -> Int -> [String]
-generateEventsRA fs n = map (generateEventRA fs) [1..n]
+generateEventsRA :: String -> [(ContractName,Int)] -> Env -> [String]
+generateEventsRA fs ns env = map (uncurry (generateEventRA fs env)) ns
 
-generateEventRA :: String -> Int -> String
-generateEventRA fs n =
-  "rh" ++ show n ++ "(Integer idfrom) = {h"++ show n ++ ".receive(idfrom)} where {id=idfrom;"
-   ++ fs ++  "}\n"
+generateEventRA :: String -> Env -> ContractName -> Int -> String
+generateEventRA fs env cn n =
+ let oldExpM  = oldExpTypes env
+     zs       = getOldExpr oldExpM cn
+     nvar     = if null zs then "PPD" else "Old_" ++ cn
+ in "rh" ++ show n ++ "(Messages" ++ nvar ++ " msg) = {h"++ show n ++ ".receive(msg)} where {id=msg.id;"
+    ++ fs ++  "}\n"
 
-generateRAString :: [(Event, [String])] -> Events -> Contract -> Int -> String
-generateRAString esinf es c n =
-  let ra = generateRA esinf es c n
+generateRAString :: [(Event, [String])] -> Events -> Env -> Contract -> Int -> (String,ContractName)
+generateRAString esinf es env c n =
+  let ra = generateRA esinf es c n env
       cn = pName ra
-  in "PROPERTY " ++ cn ++ "\n{\n\n"
+  in ("PROPERTY " ++ cn ++ "\n{\n\n"
      ++ writeStates (pStates ra)
-     ++ writeTransitions (pTransitions ra) [] (States [] [] [] []) []
-     ++ "}\n\n"
+     ++ writeTransitions (pTransitions ra) [] (States [] [] [] []) [] emptyEnv
+     ++ "}\n\n",cn)
 
 
 -------------
