@@ -1,4 +1,4 @@
-module PartialInfoFilesGeneration (contractsJavaFileGen, idFileGen) where
+module PartialInfoFilesGeneration (contractsJavaFileGen, idFileGen, oldExprFileGen,messagesFileGen,cloningFileGen) where
 
 import Types
 import System.Directory
@@ -8,25 +8,28 @@ import OperationalizationPP
 import UpgradePPDATE
 import ErrM
 import Data.List
+import qualified Data.Map as Map
+import Data.Maybe
 
 -----------------------
 -- HoareTriples.java --
 -----------------------
 
-contractsJavaFileGen :: UpgradePPD PPDATE -> FilePath -> [(Contract, Variables)] -> IO ()
-contractsJavaFileGen ppd output_add tnewvars = 
+contractsJavaFileGen :: UpgradePPD PPDATE -> FilePath -> IO ()
+contractsJavaFileGen ppd output_add = 
  let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
      imp           = importsGet ppdate
      global        = globalGet ppdate
      events        = getAllEvents global
      consts        = contractsGet ppdate
-     forallop      = map (\c -> genMethodsForConstForall c env tnewvars) consts
+     oldExpM       = oldExpTypes env
+     forallop      = map (\c -> genMethodsForConstForall c env oldExpM) consts
      new_methods   = map snd forallop
      consts'       = map fst forallop
-     existsop      = map (\c -> genMethodsForConstExists c env tnewvars) consts'
+     existsop      = map (\c -> genMethodsForConstExists c env oldExpM) consts'
      new_methods'  = map snd existsop
      consts''      = map fst existsop
-     methods       = map (\ c -> (methodForPre c env, methodForPost c env tnewvars)) consts''
+     methods       = map (\ c -> (methodForPre c env, methodForPost c env oldExpM)) consts''
      body          = concat $ map joinInfo $ zip3 methods new_methods new_methods'
  in do 
        let address = output_add ++ "HoareTriples.java"
@@ -55,9 +58,9 @@ genImports' :: Imports -> String
 genImports' xss = getImports' xss
 
 -- Contracts methods
-genMethodsForConstForall :: Contract -> Env -> [(Contract, Variables)] -> (Contract, String)
-genMethodsForConstForall c env tnewvars =
- let (body_pre, body_post) = operationalizeForall c env tnewvars
+genMethodsForConstForall :: Contract -> Env -> OldExprM -> (Contract, String)
+genMethodsForConstForall c env oldExpM =
+ let (body_pre, body_post) = operationalizeForall c env oldExpM
      newpre  = flattenBody body_pre
      newpost = flattenBody body_post
      pre_opmethods  = concat $ extracMethodDefinitions body_pre
@@ -67,9 +70,9 @@ genMethodsForConstForall c env tnewvars =
  in (c'', pre_opmethods ++ post_opmethods)
 
 
-genMethodsForConstExists :: Contract -> Env -> [(Contract, Variables)] -> (Contract, String)
-genMethodsForConstExists c env tnewvars =
- let (body_pre, body_post) = operationalizeExists c env tnewvars
+genMethodsForConstExists :: Contract -> Env -> OldExprM -> (Contract, String)
+genMethodsForConstExists c env oldExpM =
+ let (body_pre, body_post) = operationalizeExists c env oldExpM
      newpre  = flattenBody body_pre
      newpost = flattenBody body_post
      pre_opmethods  = concat $ extracMethodDefinitions body_pre
@@ -84,25 +87,19 @@ auxNewVars []                          = []
 auxNewVars (Var _ t [VarDecl id _]:xs) = (t ++ " " ++ id):auxNewVars xs
 
 
-methodForPost :: Contract -> Env -> [(Contract, Variables)] -> String
-methodForPost c env ctnewvars =
+methodForPost :: Contract -> Env -> OldExprM -> String
+methodForPost c env oldExpM =
  let (argsPost, argsPostwt) = lookForAllExitEventArgs env (fst $ methodCN c) (snd $ methodCN c)
-     tnvs      = getConstTnv c ctnewvars
+     tnvs      = getConstTnv c oldExpM
      tnvs'     = auxNewVars tnvs
      newargs   = addComma tnvs'
      nargs     = if (null tnvs) then "" else "," ++ newargs
+     args      = addComma $ map unwords $ map (\s -> if isInfixOf "ret_ppd" (head $ tail s) then (head s):["ret"] else s) $ map words $ splitOnIdentifier "," (argsPost ++ nargs)
  in 
   "  // " ++ (contractName c) ++ "\n"
-  ++ "  public static boolean " ++ (contractName c) ++ "_post(" ++ argsPost ++ nargs ++ ") {\n" 
+  ++ "  public static boolean " ++ (contractName c) ++ "_post(" ++ args ++ ") {\n"
   ++ "    return " ++ (post c) ++ ";\n" 
   ++ "  }\n\n"
-
-
-getConstTnv :: Contract ->  [(Contract, Variables)] -> Variables
-getConstTnv c []             = []
-getConstTnv c ((c',tnvs):cs) = if (c == c')
-                               then tnvs
-                               else getConstTnv c cs 
 
 --check opt for new predicates for the precondition due to partial proof
 methodForPre :: Contract -> Env -> String
@@ -142,10 +139,7 @@ lookforArgs (x:xs) e = if (fst x==e)
 -------------
 
 idFileGen :: FilePath -> IO ()
-idFileGen output_add = 
- do 
-    let output_add' = output_add ++ "Id.java"
-    writeFile output_add' idGen
+idFileGen output_add = writeFile (output_add ++ "Id.java") idGen
     
 idGen :: String
 idGen =
@@ -160,5 +154,126 @@ idGen =
   ++ "     count = 0;\n"
   ++ "  return r;\n"
   ++ "}\n\n"
+  ++ "}\n"
+
+-------------------
+-- OldExpr Files --
+-------------------
+
+oldExprFileGen :: FilePath -> UpgradePPD PPDATE -> IO [()]
+oldExprFileGen output_add ppd = 
+ let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
+     consts        = contractsGet ppdate      
+     oldExpM       = oldExpTypes env 
+     consts'       = [c | c <- consts, noOldExprInHT $ Map.lookup (contractName c) oldExpM]    
+ in if Map.null oldExpM
+    then return [()]
+    else sequence [writeFile (output_add ++ (snd $ oldExpGen c oldExpM)) (fst $ oldExpGen c oldExpM) | c <- consts']
+                     where noOldExprInHT v = v /= Nothing && (not.null.fromJust) v 
+
+oldExpGen :: Contract -> OldExprM -> (String,String)
+oldExpGen c oldExpM = 
+ let cn = contractName c
+     nameClass = "Old_" ++ cn
+     xs        = map (\(x,y,z) -> (y,z)) $ fromJust $ Map.lookup cn oldExpM
+ in ("package ppArtifacts;\n\n"
+    ++ "public class " ++ nameClass ++ " {\n\n"
+    ++ varDeclOldExpr xs
+    ++ "  public " ++ nameClass ++ "() { }\n\n"
+    ++ "  public " ++ nameClass ++ "(" ++ addComma (map (\(x,y) -> x ++ " " ++ y) xs) ++ ") {\n"
+    ++ constructorOldExpr xs 
+    ++ "  }\n\n"
+    ++ "}\n", nameClass ++ ".java")
+
+
+varDeclOldExpr :: [(String,String)] -> String
+varDeclOldExpr []           = "\n"
+varDeclOldExpr ((t,exp):xs) = 
+ "  public " ++ t ++ " " ++ exp ++ ";\n" ++ varDeclOldExpr xs
+ 
+constructorOldExpr :: [(String,String)] -> String
+constructorOldExpr []           = ""
+constructorOldExpr ((t,exp):xs) = "    " ++ "this." ++ exp ++ " = " ++ exp ++ ";\n" ++ constructorOldExpr xs
+
+----------------------------------------
+-- Messages to send over the channels --
+----------------------------------------
+
+messagesFileGen :: FilePath -> Env -> IO [()]
+messagesFileGen output_add env = 
+ let oldExpM  = oldExpTypes env
+     cns      = map ("Old_"++) [x | (x,y) <- Map.toList oldExpM, (not.null) y]
+     files    = (output_add ++ "MessagesPPD.java") : map (\s -> output_add ++ "Messages" ++ s ++ ".java") cns
+     xs       = messagesGen : map messageOldExpGen cns
+ in sequence $ map (uncurry writeFile) $ zip files xs
+    
+messagesGen :: String
+messagesGen =
+ "package ppArtifacts;\n\n"
+  ++ "public class MessagesPPD {\n\n"
+  ++ "  public Integer id; \n\n"
+  ++ "  public MessagesPPD (Integer id) { \n"
+  ++ "     this.id = id; \n" 
+  ++ "  }\n\n"
+  ++ "  public static int getId(MessagesPPD m) {\n"
+  ++ "     return m.id;\n"
+  ++ "  }\n"
+  ++ "}\n"
+ 
+messageOldExpGen :: String -> String
+messageOldExpGen t =
+ "package ppArtifacts;\n\n"
+  ++ "public class Messages" ++ t ++ " extends MessagesPPD  {\n\n"
+  ++ "  public " ++ t ++ " oldExpr; \n\n"
+  ++ "  public Messages" ++ t ++ " (Integer id, " ++ t ++ " oldExpr) { \n"
+  ++ "     super(id); \n" 
+  ++ "     this.oldExpr = oldExpr; \n" 
+  ++ "  }\n\n"  
+  ++ "  public static " ++ t ++ " getOldExpr(Messages" ++ t ++ " m) {\n"
+  ++ "     return m.oldExpr;\n"
+  ++ "  }\n"
+  ++ "}\n"
+
+
+------------------------------------
+-- Cloning reference type objects --
+------------------------------------
+
+cloningFileGen :: FilePath -> IO ()
+cloningFileGen output_add = writeFile (output_add ++ "CopyUtilsPPD.java") cloningGen
+    
+cloningGen :: String
+cloningGen =
+ "package ppArtifacts;\n\n"
+  ++ "import java.lang.reflect.Field;\nimport java.lang.reflect.Modifier;\n\n"
+  ++ "public class CopyUtilsPPD {\n\n"
+  ++ "  private CopyUtilsPPD() {}\n\n"
+  ++ "  public static void copy(Object src, Object dest) {\n"
+  ++ "     copyFields(src, dest, src.getClass());\n"
+  ++ "  }\n\n"
+  ++ "  private static void copyFields(Object src, Object dest, Class<?> cl) {\n"
+  ++ "     Field[] fields = cl.getDeclaredFields();\n"
+  ++ "     for (Field f : fields) {\n"
+  ++ "        if (copyableField(f)) {\n"
+  ++ "           f.setAccessible(true);\n"
+  ++ "           copyFieldValue(src, dest, f);\n"
+  ++ "        }\n"
+  ++ "     }\n"
+  ++ "     cl = cl.getSuperclass();\n"
+  ++ "     if (cl != null) {\n"
+  ++ "        copyFields(src, dest, cl);\n"
+  ++ "     }\n"
+  ++ "  }\n\n"
+  ++ "  private static void copyFieldValue(Object src, Object dest, Field f) {\n"
+  ++ "     try {\n"
+  ++ "         Object value = f.get(src);\n"
+  ++ "         f.set(dest, value);\n"
+  ++ "     } catch (ReflectiveOperationException e) {\n"
+  ++ "         throw new RuntimeException(e);\n"
+  ++ "     }\n"
+  ++ "  }\n\n"
+  ++ "  private static boolean copyableField(Field f) {\n"
+  ++ "     return !Modifier.isStatic(f.getModifiers());\n"
+  ++ "  }\n\n"
   ++ "}\n"
 

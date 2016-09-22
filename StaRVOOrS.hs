@@ -14,6 +14,7 @@ import StaticAnalysis
 import Translator2DATE
 import System.Console.GetOpt
 import Instrumentation
+import Data.Functor
 
 -----------
 -- Flags --
@@ -63,30 +64,11 @@ main =
                        return ()
 
 
-generateLarvaFileName :: Filename -> Filename
-generateLarvaFileName fn = 
- let (ext, _:name) = break ('.' ==) $ reverse fn 
-     xs = splitOnIdentifier "/" name     
- in if (length xs == 1)
-    then reverse name ++ ".lrv"
-    else reverse (head xs) ++ ".lrv"
+--Runs StaRVOOrS --
 
-isPPDATEfile :: FilePath -> IO String
-isPPDATEfile ppdate_fn = 
- do b1 <- doesFileExist ppdate_fn
-    if (not b1)
-    then return $ "\nError: File " ++ ppdate_fn ++ " does not exist.\n"
-    else let (ext,_) = break ('.' ==) $ reverse ppdate_fn
-         in if (ext == "dpp")
-            then return ""
-            else return $ "\nError: File " ++ ppdate_fn ++ " is not a ppDATE file.\n"
-
-
---Runs StaRVOOrS
 run :: [Flag] -> FilePath -> FilePath -> FilePath -> IO ()
 run flags java_fn_add ppdate_fn output_add =  
  do putStrLn "\nWelcome to StaRVOOrS\n"
-    b1 <- doesFileExist ppdate_fn
     b2 <- doesDirectoryExist output_add
     b3 <- doesDirectoryExist java_fn_add
     if (not b3)
@@ -102,8 +84,7 @@ run flags java_fn_add ppdate_fn output_add =
               do let java_fn_add' = if ((last $ trim java_fn_add) == '/') 
                                     then java_fn_add 
                                     else java_fn_add ++ "/"
-                 ppdate_txt <- readFile ppdate_fn
-                 let ppdateP = parse ppdate_txt
+                 ppdateP <- fmap parse $ readFile ppdate_fn
                  case ppdateP of
                       Bad s        -> do putStrLn $ "\nThe parsing has failed: " ++ s
                       Ok absppdate -> 
@@ -112,9 +93,7 @@ run flags java_fn_add ppdate_fn output_add =
                                               then output_add
                                               else output_add ++ "/"
                             let output_add' = output_addr ++ "out"
-                            b <- doesDirectoryExist output_add'
-                            if b then removeDirectoryRecursive output_add'
-                                 else return ()
+                            checkOutputDirectory output_add'
                             createDirectoryIfMissing False output_add'      
                             createDirectoryIfMissing False (output_add' ++ "/workspace")
                             let ppd = upgradePPD absppdate
@@ -124,16 +103,44 @@ run flags java_fn_add ppdate_fn output_add =
                                              ppdate <- programMethods ppd' java_fn_add'
                                              putStrLn "Initiating static verification of Hoare triples with KeY."
                                              ppdate' <- staticAnalysis java_fn_add' ppdate output_add'                                
-                                             putStrLn "Initiating LARVA files generation."
+                                             putStrLn "Initiating monitor files generation."
                                              let larva_fn  = generateLarvaFileName ppdate_fn
                                              let larva_add = output_addr ++ "out/" ++ larva_fn
                                              writeFile larva_add ""
                                              translate ppdate' larva_add
-                                             eapp_add <- getExecutablePath
-                                             let eapp_add' = reverse $ snd $ splitAtIdentifier '/' $ reverse eapp_add
-                                             let app_add   = eapp_add' ++ "larvag"
-                                             rawSystem app_add [larva_add,output_add']
-                                             putStrLn "LARVA files generation complete."
+                                             putStrLn "Running LARVA..."
+                                             rawSystem "java" ["-cp","larva.jar","compiler.Compiler",larva_add,"-o",output_add']
+                                             putStrLn "Monitor files generation completed."
                                              removeDirectoryRecursive (output_add' ++ "/workspace") 
                                              out_dir_content <- getDirectoryContents output_add'
                                              putStrLn "StaRVOOrS has finished successfully.\n"
+
+-------------------------
+-- Auxiliary Functions --
+-------------------------
+
+checkOutputDirectory :: FilePath -> IO ()
+checkOutputDirectory file = 
+ do b <- doesDirectoryExist file
+    if b then removeDirectoryRecursive file
+         else return ()
+
+generateLarvaFileName :: Filename -> Filename
+generateLarvaFileName fn = 
+ let (ext, _:name) = break ('.' ==) $ reverse fn 
+     xs = splitOnIdentifier "/" name     
+ in if (length xs == 1)
+    then reverse name ++ ".lrv"
+    else reverse (head xs) ++ ".lrv"
+
+--Checks if the the file in FilePath has .ppd extension (i.e., is a ppDATE file)
+isPPDATEfile :: FilePath -> IO String
+isPPDATEfile ppdate_fn = 
+ do b1 <- doesFileExist ppdate_fn
+    if (not b1)
+    then return $ "\nError: File " ++ ppdate_fn ++ " does not exist.\n"
+    else let (ext,_) = break ('.' ==) $ reverse ppdate_fn
+         in if (ext == "dpp")
+            then return ""
+            else return $ "\nError: File " ++ ppdate_fn ++ " is not a ppDATE file.\n"
+

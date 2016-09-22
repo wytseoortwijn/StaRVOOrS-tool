@@ -14,10 +14,10 @@ refinePPDATE :: UpgradePPD PPDATE -> [Proof] -> UpgradePPD PPDATE
 refinePPDATE ppd proofs = 
  let ppdate                = getValue ppd 
      consts                = contractsGet ppdate
-     nproved               = filter (\(x,y,z) -> (not.null) z) $ map getInfoFromProof proofs
-     proved                = filter (\(x,y,z) -> (null z)) $ map getInfoFromProof proofs
-     consts'               = [c | c <- consts, (x,y,z) <- nproved, contractName c == y]  
-     cproved               = [c | c <- consts, (x,y,z) <- proved, contractName c == y]  
+     nproved               = filter (\(x,y,z,t) -> (not.null) z) $ map getInfoFromProof proofs
+     proved                = filter (\(x,y,z,t) -> (null z)) $ map getInfoFromProof proofs
+     consts'               = [c | c <- consts, (x,y,z,t) <- nproved, contractName c == y]  
+     cproved               = [c | c <- consts, (x,y,z,t) <- proved, contractName c == y]  
      ppd'                  = generateNewTriggers ppd consts'
      ppdate'               = getValue ppd'
      global                = globalGet ppdate'
@@ -78,22 +78,26 @@ removePropInState cn (cn':cns) = if (cn == cn')
 -- Get information from the results produced by KeY --
 ------------------------------------------------------
 
-updateContracts :: [(MethodName, ContractName, [Pre])] -> Contracts -> Events -> Contracts
+updateContracts :: [(MethodName, ContractName, [Pre],String)] -> Contracts -> Events -> Contracts
 updateContracts [] consts _      = consts
 updateContracts (x:xs) consts es = updateContracts xs (updateContract x consts es) es
 
 
-updateContract :: (MethodName, ContractName, [Pre]) -> Contracts -> Events -> Contracts
-updateContract (mn,cn,pres) [] _      = []
-updateContract (mn,cn,pres) (c:cs) es = if (contractName c == cn && (snd.methodCN) c == mn)
-                                          then if (null pres)
-                                               then c:updateContract (mn,cn,pres) cs es
-                                               else let clvar = getClassVar c es EVEntry
-                                                        pres' = removeDuplicates pres
-                                                        opt'  = map (addParenthesisNot.(replaceSelfWith clvar)) pres'
-                                                        opt'' = '(':introduceOr opt' ++ [')']
-                                                    in (updateOpt c [opt'']):cs
-                                          else c:updateContract (mn,cn,pres) cs es
+updateContract :: (MethodName, ContractName, [Pre],String) -> Contracts -> Events -> Contracts
+updateContract (mn,cn,pres,path) [] _      = []
+updateContract (mn,cn,pres,path) (c:cs) es = 
+ if (contractName c == cn && (snd.methodCN) c == mn)
+ then if (null pres)
+      then c:updateContract (mn,cn,pres,path) cs es
+      else let clvar = getClassVar c es EVEntry
+               pres' = removeDuplicates pres
+               opt'  = map (addParenthesisNot.(replaceSelfWith clvar).removeDLstrContent) pres'
+               opt'' = '(':introduceOr opt' ++ [')']
+               c'    = updatePath (updateOpt c [opt'']) path
+               c''   = updatePre c' $ removeDLstrContent (pre c)
+               c'''  = updatePost c'' $ removeDLstrContent (post c)
+           in c''':cs
+ else c:updateContract (mn,cn,pres,path) cs es
 
 getClassVar :: Contract -> Events -> EventVariation -> String
 getClassVar c es ev = lookupClassVar es c ev
@@ -199,7 +203,7 @@ createTriggerExit (cn,mn,(rt,mn',xs)) n =
  let trnm = mn ++ "_ex" 
      nvar = "cv" ++ "_" ++ (show n)
      cn'  = cn ++ " " ++ nvar
-     ret  = "r" ++ (show n) in
+     ret  = "ret_ppd" ++ (show n) in
  if (mn == mn')
  then if (rt == "void")
       then let cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [])

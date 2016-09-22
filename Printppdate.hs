@@ -197,8 +197,8 @@ instance Print EventList where
 
 instance Print EventVariation where
   prt i e = case e of
-   EVEntry  -> prPrec i 0 (concatD [])
-   EVExit varss -> prPrec i 0 (concatD [doc (showString "uponReturning") , doc (showString "(") , prt 0 varss , doc (showString ")")])
+   EVEntry  -> prPrec i 0 (concatD [doc (showString "entry")])
+   EVExit varss -> prPrec i 0 (concatD [doc (showString "exit") , doc (showString "(") , prt 0 varss , doc (showString ")")])
    EVThrow varss -> prPrec i 0 (concatD [doc (showString "uponThrowing") , doc (showString "(") , prt 0 varss , doc (showString ")")])
    EVHadle varss -> prPrec i 0 (concatD [doc (showString "uponHandling") , doc (showString "(") , prt 0 varss , doc (showString ")")])
 

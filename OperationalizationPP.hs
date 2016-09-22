@@ -13,7 +13,7 @@ import Data.Maybe
 
 
 --TODO: Possible problem when operationalising nested properties
-operationalizeOldResultBind :: UpgradePPD PPDATE -> Map.Map ContractName [(String,Type)] -> (UpgradePPD PPDATE, [(Contract, Variables)])
+operationalizeOldResultBind :: UpgradePPD PPDATE -> Map.Map ContractName [(String,Type)] -> UpgradePPD PPDATE
 operationalizeOldResultBind ppd oldExprTypesM =
  let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
      global   = globalGet ppdate
@@ -27,7 +27,7 @@ operationalizeOldResultBind ppd oldExprTypesM =
      newvars  = genNewVarsOld global (concat (map (\(x,y,z) -> y) xs))
      global'  = updateGlobal global (Ctxt newvars (events $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
      ppdate'  = ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ PPDATE (importsGet ppdate) global' (cinvariantsGet ppdate) consts' (methodsGet ppdate))
- in (ppdate', map (\(x,y,z) -> (x,y)) xs)
+ in ppdate'
 
 
 operationalizePrePostORB :: Contract -> [(String, ClassInfo, [(Type, Id)])] -> Events -> [(String, ClassInfo, [String])] -> Map.Map ContractName [(String,Type)] -> (Contract, Variables,OldExprM)
@@ -37,8 +37,8 @@ operationalizePrePostORB c vars events methods oldExprTypesM =
      p'                  = post c
      (xsPost, oldExprl)  = operationalizeOld p' cn
      ysPost              = operationalizeResult xsPost
-     typeList            = getListOfTypesAndVars (fst $ methodCN c) vars
-     (oldExprl', tvars)  = addType2NewVars cn typeList oldExprTypesM oldExprl 
+     oldExprl'           = addType2NewVars cn oldExprTypesM oldExprl
+     tvars               = getConstTnv c (Map.singleton cn oldExprl'')
      const'              = updatePost c ysPost
      oldExprl''          = bindOldExp c vars events methods oldExprl'
  in (bindCV const' vars events methods, tvars,Map.singleton cn oldExprl'')
@@ -64,11 +64,11 @@ bindCV c vars es methods =
 bindOldExp :: Contract -> [(String, ClassInfo, [(String, String)])] -> Events -> [(String, ClassInfo, [String])] -> OldExprL -> OldExprL
 bindOldExp c vars es _ []             = []
 bindOldExp c vars es ms ((x,y,z):xss) = 
- let bindExit  = getClassVar c es (EVExit [])
+ let bindEntry = getClassVar c es (EVEntry)
      varsc     = getVarsToControl (fst $ methodCN c) vars
-     x'        = concat $ bindVars bindExit varsc x
+     x'        = concat $ bindVars bindEntry varsc x
      ms'       = getMethodsToControl (fst $ methodCN c) ms
-     x''       = concat $ bindMethods bindExit ms' x'
+     x''       = concat $ bindMethods bindEntry ms' x'
  in (x'',y,z):bindOldExp c vars es ms xss
 
 
@@ -145,33 +145,26 @@ operationalizeOld post cn =
              ys    = tail xs
              zs    = map ((\(x,y) -> (trim (tail x), clean $ tail y)) . (splitAtClosingParen 0)) ys
              fszs  = foldr (\(x,y) xs -> (x,"","e" ++ show y):xs) [] $ zip (removeDuplicates (map fst zs)) [1..length zs]
-             --s'    = begin ++ flattenOld zs cn
-             s'    = begin ++ flattenOld' zs cn fszs
+             s'    = begin ++ flattenOld zs cn fszs
          in (s',fszs)
 
-flattenOld :: [(String, String)] -> ContractName -> String
-flattenOld [] cn            = ""
-flattenOld ((xs,ys):xss) cn = cn ++ "_" ++ xs ++ "_nyckelord " ++ ys ++ flattenOld xss cn
-
-flattenOld' :: [(String, String)] -> ContractName -> OldExprL -> String
-flattenOld' [] cn _             = ""
-flattenOld' ((xs,ys):xss) cn zs = 
+flattenOld :: [(String, String)] -> ContractName -> OldExprL -> String
+flattenOld [] cn _             = ""
+flattenOld ((xs,ys):xss) cn zs = 
  let xs' = getExpName zs xs cn
- in xs' ++ " " ++ ys ++ flattenOld' xss cn zs
+ in xs' ++ " " ++ ys ++ flattenOld xss cn zs
 
 getExpName :: OldExprL -> String -> ContractName -> String
 getExpName [] exp _             = error "Error: Cannot get type to operationalise \\old expresion"
 getExpName ((a,_,c):xss) exp cn = if exp == a
-                                  then cn ++ "_"  ++ c ++ "_nyckelord"
+                                  then cn ++ "."  ++ c
                                   else getExpName xss exp cn
 
-addType2NewVars :: ContractName -> [(Type, Id)] -> Map.Map ContractName [(String,Type)] -> OldExprL -> (OldExprL, Variables)
-addType2NewVars cn vars _ []                = ([],[])
-addType2NewVars cn vars mtypes ((v,t,e):vs) = let vdec  = VarDecl (cn ++ "_" ++ e ++ "_nyckelord") VarInitNil
-                                                  typE  = getType v mtypes vars
-                                                  tvar  = Var VarModifierNil typE [vdec]                                          
-                                                  (a,b) = addType2NewVars cn vars mtypes vs
-                                              in ((v,typE,e):a, tvar:b)
+addType2NewVars :: ContractName -> Map.Map ContractName [(String,Type)] -> OldExprL -> OldExprL
+addType2NewVars cn _ []                      = []
+addType2NewVars cn mtypes oexpr@((v,t,e):vs) = 
+ let typE  = getType v cn mtypes     
+ in (v,typE,e):addType2NewVars cn mtypes vs
 
 genNewVarsOld :: Global -> Variables -> Variables
 genNewVarsOld global ss = 
@@ -180,26 +173,14 @@ genNewVarsOld global ss =
      then ss
      else ss ++ vars
 
---TODO: After a bug detection, this method was introduced as a temporary partial fix 
---      it is in the process of being replace by a proper type inference
-getType :: Id -> Map.Map ContractName [(String,Type)] -> [(Type, Id)] -> Type
-getType var oldExprTypesM []             = checkType oldExprTypesM var
-getType var oldExprTypesM ((type',v):vs) = 
- if (var == v)
- then type'
- else getType var oldExprTypesM vs
+getType :: Id -> ContractName -> Map.Map ContractName [(String,Type)] -> Type
+getType var cn oldExprTypesM = 
+ let xs = fromJust $ Map.lookup cn oldExprTypesM 
+     ys = [t | (y,t) <- xs, y==var]
+ in if (null ys)
+    then ""
+    else head ys
 
-checkType :: Map.Map ContractName [(String,Type)] -> String -> Type
-checkType _ s 
- | (or.map (\c -> isInfixOf c s)) boolSymbols = "boolean"
- | (or.map (\c -> isInfixOf c s)) intSymbols  = "int"
- | otherwise                                  = "int"
- 
-boolSymbols :: [String]
-boolSymbols = ["<","<=","==",">",">=","&&","||","!"]
-
-intSymbols :: [String]
-intSymbols = ["+","-","*"]
 
 -------------
 -- \result --
@@ -218,8 +199,8 @@ operationalizeResult s =
 -- \forall --
 -------------
 
-operationalizeForall :: Contract -> Env -> [(Contract, Variables)] -> ([Either (String, String) String], [Either (String, String) String])
-operationalizeForall c env ctnv = 
+operationalizeForall :: Contract -> Env -> OldExprM -> ([Either (String, String) String], [Either (String, String) String])
+operationalizeForall c env oldExpM = 
  let mn                 = snd $ methodCN c
      cinfo              = fst $ methodCN c
      p                  = pre c
@@ -228,16 +209,11 @@ operationalizeForall c env ctnv =
      (exargs, exargswt) = lookForAllExitEventArgs env cinfo mn
      xs                 = splitInQuantifiedExpression p "\\forall"
      ys                 = splitInQuantifiedExpression p' "\\forall"
-     tnewvars           = lookForNewVarsConst c ctnv 
+     tnewvars           = getConstTnv c oldExpM 
      xs_pre             = applyGenMethodForall xs (contractName c) 1 enargs enargswt "_pre" []
      ys_post            = applyGenMethodForall ys (contractName c) 1 exargs exargswt "_post" tnewvars
  in (xs_pre, ys_post)
 
-lookForNewVarsConst :: Contract -> [(Contract, Variables)] -> Variables
-lookForNewVarsConst c' []            = []
-lookForNewVarsConst c' ((c, tnv):cs) = if (c == c') 
-                                       then tnv
-                                       else lookForNewVarsConst c' cs
 
 applyGenMethodForall :: [Either String String] -> ContractName -> Int -> String -> String -> String -> Variables -> [Either (String, String) String]
 applyGenMethodForall [] _ _ _ _ _ _                        = []
@@ -250,26 +226,28 @@ applyGenMethodForall ((Left x):xs) cn n args argswt s  tnv =
 generateMethodForall :: ContractName -> Int -> (String, String, String) -> String -> String -> String -> Variables -> (String, String)
 generateMethodForall cn n (var, range, body) args argswt s [] = 
  let mn = cn ++ s ++ "_opF_" ++ show n
- in (mn ++ "(" ++ argswt ++ ")", methodForall mn (var, range, body) args "")
+ in (mn ++ "(" ++ argswt ++ ")", methodForall mn (var, range, body) args)
 generateMethodForall cn n (var, range, body) args argswt s tnv = 
  let mn   = cn ++ s ++ "_opF_" ++ show n
      tnv' = auxNewVars tnv
-     tnewvars = init $ foldr (\ x xs -> x ++ "," ++ xs) "" tnv'
-     newargs  =  init $ foldr (\ x xs -> x ++ "," ++ xs) "" $ map (last.words) tnv'
- in (mn ++ "(" ++ argswt ++ newargs ++ ")", methodForall mn (var, range, body) args tnewvars)
+     tnewvars = addComma tnv'
+     newargs  = addComma $ map (last.words) tnv'
+     argswt'  = if null newargs then argswt else argswt ++ "," ++ newargs
+     args'    = if null tnewvars then args else args ++ "," ++ tnewvars
+ in (mn ++ "(" ++ argswt' ++ ")", methodForall mn (var, range, body) args')
 
 
 auxNewVars :: Variables -> [String]
 auxNewVars []                          = []
 auxNewVars (Var _ t [VarDecl id _]:xs) = (t ++ " " ++ id):auxNewVars xs
 
-methodForall :: String -> (String, String, String) -> String -> String -> String
-methodForall mn (tvar, range, body) args tnv = 
- let var = last $ words tvar 
-     low = getLowBoundary range var
-     top = getTopBoundary range var
+methodForall :: String -> (String, String, String) -> String -> String
+methodForall mn (tvar, range, body) args = 
+ let var   = last $ words tvar 
+     low   = getLowBoundary range var
+     top   = getTopBoundary range var
  in
-    "public static boolean " ++ mn ++ "(" ++ args ++ tnv ++ ") {\n" 
+    "public static boolean " ++ mn ++ "(" ++ args ++ ") {\n" 
  ++ "      boolean r = true;\n\n"
  ++ "      for (" ++ tvar ++ " = " ++ low ++ " ; " ++ var ++ " <= " ++ top ++ " ; " ++ var ++ "++) {\n"
  ++ "          if (true) {\n"
@@ -347,8 +325,8 @@ lookforEnd n acum (x:xs) = if (x == ')')
 -- \exist --
 ------------
 
-operationalizeExists :: Contract -> Env -> [(Contract, Variables)] -> ([Either (String, String) String], [Either (String, String) String])
-operationalizeExists c es ctnv = 
+operationalizeExists :: Contract -> Env -> OldExprM -> ([Either (String, String) String], [Either (String, String) String])
+operationalizeExists c es oldExpM = 
  let mn                 = snd $ methodCN c
      cinfo              = fst $ methodCN c
      p                  = pre c
@@ -357,7 +335,7 @@ operationalizeExists c es ctnv =
      (exargs, exargswt) = lookForAllExitEventArgs es cinfo mn
      xs                 = splitInQuantifiedExpression p "\\exists"
      ys                 = splitInQuantifiedExpression p' "\\exists"
-     tnewvars           = lookForNewVarsConst c ctnv
+     tnewvars           = getConstTnv c oldExpM
      xs_pre             = applyGenMethodExists xs (contractName c) 1 enargs enargswt "_pre" []
      ys_post            = applyGenMethodExists ys (contractName c) 1 exargs exargswt "_post" tnewvars
  in (xs_pre, ys_post)
@@ -378,9 +356,10 @@ generateMethodExists cn n (var, range, body) args argswt s []  =
 generateMethodExists cn n (var, range, body) args argswt s tnv = 
  let mn = cn ++ s ++ "_opE_" ++ show n
      tnv' = auxNewVars tnv
-     tnewvars = init $ foldr (\ x xs -> x ++ "," ++ xs) "" tnv'
-     newargs  =  init $ foldr (\ x xs -> x ++ "," ++ xs) "" $ map (last.words) tnv'
- in (mn ++ "(" ++ argswt ++ newargs ++ ")", methodExists mn (var, range, body) args tnewvars)
+     tnewvars = addComma tnv'
+     newargs  = addComma $ map (last.words) tnv'
+     args'    = if null newargs then argswt else argswt ++ "," ++ newargs
+ in (mn ++ "(" ++ args' ++ ")", methodExists mn (var, range, body) args tnewvars)
 
 
 methodExists :: String -> (String, String, String) -> String -> String -> String
@@ -388,8 +367,9 @@ methodExists mn (tvar, range, body) args tnv =
  let var = last $ words tvar 
      low = getLowBoundary range var
      top = getTopBoundary range var
+     args' = if null tnv then args else args ++ "," ++ tnv
  in
-    "public static boolean " ++ mn ++ "(" ++ args ++ tnv ++ ") {\n" 
+    "public static boolean " ++ mn ++ "(" ++ args' ++ ") {\n" 
  ++ "      boolean r = false;\n\n"
  ++ "      for (" ++ tvar ++ " = " ++ low ++ " ; " ++ var ++ " <= " ++ top ++ " ; " ++ var ++ "++) {\n"
  ++ "          if (true) {\n"
