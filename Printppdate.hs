@@ -140,7 +140,7 @@ instance Print Global where
 
 instance Print Context where
   prt i e = case e of
-   Ctxt variables events properties foreaches -> prPrec i 0 (concatD [prt 0 variables , prt 0 events , prt 0 properties , prt 0 foreaches])
+   Ctxt variables ievents triggers properties foreaches -> prPrec i 0 (concatD [prt 0 variables , prt 0 ievents , prt 0 triggers , prt 0 properties , prt 0 foreaches])
 
 
 instance Print Variables where
@@ -163,24 +163,38 @@ instance Print VarModifier where
    VarModifierNil  -> prPrec i 0 (concatD [])
 
 
-instance Print Events where
+instance Print IEvents where
   prt i e = case e of
-   EventsNil  -> prPrec i 0 (concatD [])
-   EventsDef events -> prPrec i 0 (concatD [doc (showString "TRIGGERS") , doc (showString "{") , prt 0 events , doc (showString "}")])
+   IEventsNil  -> prPrec i 0 (concatD [])
+   IEventsDef ievents -> prPrec i 0 (concatD [doc (showString "IEVENTS") , doc (showString "{") , prt 0 ievents , doc (showString "}")])
 
 
-instance Print Event where
+instance Print IEvent where
   prt i e = case e of
-   Event id binds compoundevent whereclause -> prPrec i 0 (concatD [prt 0 id , doc (showString "(") , prt 0 binds , doc (showString ")") , doc (showString "=") , prt 0 compoundevent , prt 0 whereclause])
+   IEvent id -> prPrec i 0 (concatD [prt 0 id])
+
+  prtList es = case es of
+   [x] -> (concatD [prt 0 x])
+   x:xs -> (concatD [prt 0 x , doc (showString ",") , prt 0 xs])
+
+instance Print Triggers where
+  prt i e = case e of
+   TriggersNil  -> prPrec i 0 (concatD [])
+   TriggersDef triggers -> prPrec i 0 (concatD [doc (showString "TRIGGERS") , doc (showString "{") , prt 0 triggers , doc (showString "}")])
+
+
+instance Print Trigger where
+  prt i e = case e of
+   Trigger id binds compoundtrigger whereclause -> prPrec i 0 (concatD [prt 0 id , doc (showString "(") , prt 0 binds , doc (showString ")") , doc (showString "=") , prt 0 compoundtrigger , prt 0 whereclause])
 
   prtList es = case es of
    [x] -> (concatD [prt 0 x])
    x:xs -> (concatD [prt 0 x , prt 0 xs])
 
-instance Print CompoundEvent where
+instance Print CompoundTrigger where
   prt i e = case e of
-   Collection eventlist -> prPrec i 0 (concatD [prt 0 eventlist])
-   NormalEvent binding id varss eventvariation -> prPrec i 0 (concatD [doc (showString "{") , prt 0 binding , prt 0 id , doc (showString "(") , prt 0 varss , doc (showString ")") , prt 0 eventvariation , doc (showString "}")])
+   Collection triggerlist -> prPrec i 0 (concatD [prt 0 triggerlist])
+   NormalEvent binding id varss triggervariation -> prPrec i 0 (concatD [doc (showString "{") , prt 0 binding , prt 0 id , doc (showString "(") , prt 0 varss , doc (showString ")") , prt 0 triggervariation , doc (showString "}")])
    ClockEvent id n -> prPrec i 0 (concatD [doc (showString "{") , prt 0 id , doc (showString "@") , prt 0 n , doc (showString "}")])
    OnlyId id -> prPrec i 0 (concatD [doc (showString "{") , prt 0 id , doc (showString "}")])
    OnlyIdPar id -> prPrec i 0 (concatD [doc (showString "{") , prt 0 id , doc (showString "(") , doc (showString ")") , doc (showString "}")])
@@ -190,12 +204,12 @@ instance Print CompoundEvent where
    [x] -> (concatD [prt 0 x])
    x:xs -> (concatD [prt 0 x , doc (showString "|") , prt 0 xs])
 
-instance Print EventList where
+instance Print TriggerList where
   prt i e = case e of
-   CECollection compoundevents -> prPrec i 0 (concatD [doc (showString "{") , prt 0 compoundevents , doc (showString "}")])
+   CECollection compoundtriggers -> prPrec i 0 (concatD [doc (showString "{") , prt 0 compoundtriggers , doc (showString "}")])
 
 
-instance Print EventVariation where
+instance Print TriggerVariation where
   prt i e = case e of
    EVEntry  -> prPrec i 0 (concatD [doc (showString "entry")])
    EVExit varss -> prPrec i 0 (concatD [doc (showString "exit") , doc (showString "(") , prt 0 varss , doc (showString ")")])

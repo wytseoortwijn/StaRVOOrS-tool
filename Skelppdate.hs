@@ -46,7 +46,7 @@ transGlobal x = case x of
 
 transContext :: Context -> Result
 transContext x = case x of
-  Ctxt variables events properties foreaches  -> failure x
+  Ctxt variables ievents triggers properties foreaches  -> failure x
 
 
 transVariables :: Variables -> Result
@@ -66,33 +66,44 @@ transVarModifier x = case x of
   VarModifierNil  -> failure x
 
 
-transEvents :: Events -> Result
-transEvents x = case x of
-  EventsNil  -> failure x
-  EventsDef events  -> failure x
+transIEvents :: IEvents -> Result
+transIEvents x = case x of
+  IEventsNil  -> failure x
+  IEventsDef ievents  -> failure x
 
 
-transEvent :: Event -> Result
-transEvent x = case x of
-  Event id binds compoundevent whereclause  -> failure x
+transIEvent :: IEvent -> Result
+transIEvent x = case x of
+  IEvent id  -> failure x
 
 
-transCompoundEvent :: CompoundEvent -> Result
-transCompoundEvent x = case x of
-  Collection eventlist  -> failure x
-  NormalEvent binding id varss eventvariation  -> failure x
+transTriggers :: Triggers -> Result
+transTriggers x = case x of
+  TriggersNil  -> failure x
+  TriggersDef triggers  -> failure x
+
+
+transTrigger :: Trigger -> Result
+transTrigger x = case x of
+  Trigger id binds compoundtrigger whereclause  -> failure x
+
+
+transCompoundTrigger :: CompoundTrigger -> Result
+transCompoundTrigger x = case x of
+  Collection triggerlist  -> failure x
+  NormalEvent binding id varss triggervariation  -> failure x
   ClockEvent id n  -> failure x
   OnlyId id  -> failure x
   OnlyIdPar id  -> failure x
 
 
-transEventList :: EventList -> Result
-transEventList x = case x of
-  CECollection compoundevents  -> failure x
+transTriggerList :: TriggerList -> Result
+transTriggerList x = case x of
+  CECollection compoundtriggers  -> failure x
 
 
-transEventVariation :: EventVariation -> Result
-transEventVariation x = case x of
+transTriggerVariation :: TriggerVariation -> Result
+transTriggerVariation x = case x of
   EVEntry  -> failure x
   EVExit varss  -> failure x
   EVThrow varss  -> failure x

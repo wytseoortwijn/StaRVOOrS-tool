@@ -75,7 +75,8 @@ updatePath (Contract cn m p po ass opt ch p2it) p2it' = Contract cn m p po ass o
 
 data Context =
    Ctxt { variables :: Variables
-        , events :: Events
+        , ievents  :: IEvents
+        , triggers :: Triggers
         , property :: Property
         , foreaches :: Foreaches
         }
@@ -204,14 +205,14 @@ data States = States
 
 type Transitions = [Transition]
 
-type Event = String
-type Cond = String
-type Action = String
+type Trigger = String
+type Cond    = String
+type Action  = String
 
 data Arrow = Arrow 
-  { event  :: Event
-  , cond   ::  Cond
-  , action :: Action
+  { trigger :: Trigger
+  , cond    ::  Cond
+  , action  :: Action
   } deriving (Show, Eq,Read)
 
 
@@ -230,38 +231,46 @@ data Property = Property
   } | PNIL deriving (Show, Eq,Read)
 
 
-------------
--- EVENTS --
-------------
+-------------
+-- IEvents --
+-------------
 
--- Events = Triggers
+type IEvents = [IEvent]
+
+data IEvent =
+   IEvent Id
+  deriving (Eq,Ord,Show,Read)
+
+--------------
+-- Triggers --
+--------------
 
 type WhereClause = String
 
-data EventDef = EventDef 
-  { eName :: Event
+data TriggerDef = TriggerDef 
+  { tName :: Trigger
   , args :: [Bind]
-  , compEvent :: CompoundEvent
+  , compTrigger :: CompoundTrigger
   , whereClause :: WhereClause
   } deriving (Show, Eq,Read)
 
-data CompoundEvent =
-   NormalEvent Binding Id [Bind] EventVariation
+data CompoundTrigger =
+   NormalEvent Binding Id [Bind] TriggerVariation
  | ClockEvent Id Integer
  | OnlyId Id
  | OnlyIdPar Id
- | Collection EventList
+ | Collection TriggerList
   deriving (Eq,Show,Read)
 
-data EventVariation =
+data TriggerVariation =
    EVEntry
  | EVExit [Bind]
  | EVThrow [Bind]
  | EVHadle [Bind]
   deriving (Eq,Show,Read)
 
-data EventList =
-   CECollection [CompoundEvent]
+data TriggerList =
+   CECollection [CompoundTrigger]
   deriving (Eq,Show,Read)
 
 data Bind =
@@ -286,24 +295,24 @@ data Binding =
 getBind :: Binding -> Bind
 getBind (BindingVar bn) = bn
 
-updateEventArgs :: EventDef -> [Bind] -> EventDef
-updateEventArgs (EventDef e arg cpes wc) arg' = EventDef e arg' cpes wc
+updateTriggerArgs :: TriggerDef -> [Bind] -> TriggerDef
+updateTriggerArgs (TriggerDef e arg cpes wc) arg' = TriggerDef e arg' cpes wc
 
-updateMethodCallName :: EventDef -> MethodName -> EventDef
-updateMethodCallName (EventDef e arg cpes wc) mn = EventDef e arg (updateCpeMethodName cpes mn) wc
+updateMethodCallName :: TriggerDef -> MethodName -> TriggerDef
+updateMethodCallName (TriggerDef e arg cpes wc) mn = TriggerDef e arg (updateCpeMethodName cpes mn) wc
 
-updateCpeMethodName :: CompoundEvent -> MethodName -> CompoundEvent
+updateCpeMethodName :: CompoundTrigger -> MethodName -> CompoundTrigger
 updateCpeMethodName (NormalEvent bind id bs ev) id' = NormalEvent bind id' bs ev
 updateCpeMethodName cpe _                           = cpe
 
-updateCpeMethodCallBody :: CompoundEvent -> [Bind] -> CompoundEvent
+updateCpeMethodCallBody :: CompoundTrigger -> [Bind] -> CompoundTrigger
 updateCpeMethodCallBody (NormalEvent bind id bs ev) bs' = NormalEvent bind id bs' ev
 updateCpeMethodCallBody cpe _                           = cpe
 
-updateMethodCallBody :: EventDef -> [Bind] -> EventDef
-updateMethodCallBody (EventDef e arg cpes wc) bs = EventDef e arg (updateCpeMethodCallBody cpes bs) wc
+updateMethodCallBody :: TriggerDef -> [Bind] -> TriggerDef
+updateMethodCallBody (TriggerDef e arg cpes wc) bs = TriggerDef e arg (updateCpeMethodCallBody cpes bs) wc
 
-type Events = [EventDef]
+type Triggers = [TriggerDef]
 
 
 -------------------------------------------------------------------

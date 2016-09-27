@@ -30,7 +30,7 @@ data Global =
   deriving (Eq,Ord,Show,Read)
 
 data Context =
-   Ctxt Variables Events Properties Foreaches
+   Ctxt Variables IEvents Triggers Properties Foreaches
   deriving (Eq,Ord,Show,Read)
 
 data Variables =
@@ -47,28 +47,37 @@ data VarModifier =
  | VarModifierNil
   deriving (Eq,Ord,Show,Read)
 
-data Events =
-   EventsNil
- | EventsDef [Event]
+data IEvents =
+   IEventsNil
+ | IEventsDef [IEvent]
   deriving (Eq,Ord,Show,Read)
 
-data Event =
-   Event Id [Bind] CompoundEvent WhereClause
+data IEvent =
+   IEvent Id
   deriving (Eq,Ord,Show,Read)
 
-data CompoundEvent =
-   Collection EventList
- | NormalEvent Binding Id [Vars] EventVariation
+data Triggers =
+   TriggersNil
+ | TriggersDef [Trigger]
+  deriving (Eq,Ord,Show,Read)
+
+data Trigger =
+   Trigger Id [Bind] CompoundTrigger WhereClause
+  deriving (Eq,Ord,Show,Read)
+
+data CompoundTrigger =
+   Collection TriggerList
+ | NormalEvent Binding Id [Vars] TriggerVariation
  | ClockEvent Id Integer
  | OnlyId Id
  | OnlyIdPar Id
   deriving (Eq,Ord,Show,Read)
 
-data EventList =
-   CECollection [CompoundEvent]
+data TriggerList =
+   CECollection [CompoundTrigger]
   deriving (Eq,Ord,Show,Read)
 
-data EventVariation =
+data TriggerVariation =
    EVEntry
  | EVExit [Vars]
  | EVThrow [Vars]

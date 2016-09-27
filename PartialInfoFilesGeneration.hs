@@ -20,7 +20,6 @@ contractsJavaFileGen ppd output_add =
  let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
      imp           = importsGet ppdate
      global        = globalGet ppdate
-     events        = getAllEvents global
      consts        = contractsGet ppdate
      oldExpM       = oldExpTypes env
      forallop      = map (\c -> genMethodsForConstForall c env oldExpM) consts
@@ -89,7 +88,7 @@ auxNewVars (Var _ t [VarDecl id _]:xs) = (t ++ " " ++ id):auxNewVars xs
 
 methodForPost :: Contract -> Env -> OldExprM -> String
 methodForPost c env oldExpM =
- let (argsPost, argsPostwt) = lookForAllExitEventArgs env (fst $ methodCN c) (snd $ methodCN c)
+ let (argsPost, argsPostwt) = lookForAllExitTriggerArgs env (fst $ methodCN c) (snd $ methodCN c)
      tnvs      = getConstTnv c oldExpM
      tnvs'     = auxNewVars tnvs
      newargs   = addComma tnvs'
@@ -104,7 +103,7 @@ methodForPost c env oldExpM =
 --check opt for new predicates for the precondition due to partial proof
 methodForPre :: Contract -> Env -> String
 methodForPre c env =
- let (argsPre, _) = lookForAllEntryEventArgs env (fst $ methodCN c) (snd $ methodCN c)     
+ let (argsPre, _) = lookForAllEntryTriggerArgs env (fst $ methodCN c) (snd $ methodCN c)     
  in 
   "  // " ++ (contractName c) ++ "\n"
   ++ "  public static boolean " ++ (contractName c) ++ "_pre(" ++ argsPre ++ ") {\n" 
@@ -127,7 +126,7 @@ flattenBody []             = ""
 flattenBody ((Right x):xs) = x ++ flattenBody xs
 flattenBody ((Left x):xs)  = (fst x) ++ flattenBody xs
 
-lookforArgs :: [(Event, [String])] -> Event -> [String]
+lookforArgs :: [(Trigger, [String])] -> Trigger -> [String]
 lookforArgs [] _     = []
 lookforArgs (x:xs) e = if (fst x==e)
                        then snd x

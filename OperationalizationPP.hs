@@ -20,18 +20,18 @@ operationalizeOldResultBind ppd oldExprTypesM =
      consts   = contractsGet ppdate
      mfiles   = methodsInFiles env
      methods  = map (\(x,y,z) -> (x,y,map (\(x,y,z) -> y) z)) mfiles
-     es       = getAllEvents global
+     es       = getAllTriggers global
      xs       = map (\ c -> operationalizePrePostORB c (varsInFiles env) es methods oldExprTypesM) consts
      oldExpT  = Map.unions $ map (\(x,y,z) -> z) xs
      consts'  = map (\(x,y,z) -> x) xs
      newvars  = genNewVarsOld global (concat (map (\(x,y,z) -> y) xs))
-     global'  = updateGlobal global (Ctxt newvars (events $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
+     global'  = updateGlobal global (Ctxt newvars (ievents $ ctxtGet global) (triggers $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
      ppdate'  = ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ PPDATE (importsGet ppdate) global' (cinvariantsGet ppdate) consts' (methodsGet ppdate))
  in ppdate'
 
 
-operationalizePrePostORB :: Contract -> [(String, ClassInfo, [(Type, Id)])] -> Events -> [(String, ClassInfo, [String])] -> Map.Map ContractName [(String,Type)] -> (Contract, Variables,OldExprM)
-operationalizePrePostORB c vars events methods oldExprTypesM = 
+operationalizePrePostORB :: Contract -> [(String, ClassInfo, [(Type, Id)])] -> Triggers -> [(String, ClassInfo, [String])] -> Map.Map ContractName [(String,Type)] -> (Contract, Variables,OldExprM)
+operationalizePrePostORB c vars trigs methods oldExprTypesM = 
  let cn                  = contractName c
      p                   = pre c
      p'                  = post c
@@ -40,8 +40,8 @@ operationalizePrePostORB c vars events methods oldExprTypesM =
      oldExprl'           = addType2NewVars cn oldExprTypesM oldExprl
      tvars               = getConstTnv c (Map.singleton cn oldExprl'')
      const'              = updatePost c ysPost
-     oldExprl''          = bindOldExp c vars events methods oldExprl'
- in (bindCV const' vars events methods, tvars,Map.singleton cn oldExprl'')
+     oldExprl''          = bindOldExp c vars trigs methods oldExprl'
+ in (bindCV const' vars trigs methods, tvars,Map.singleton cn oldExprl'')
 
 
 --------------------------
@@ -49,7 +49,7 @@ operationalizePrePostORB c vars events methods oldExprTypesM =
 --------------------------
 
 -- TODO: if classes with the same name in different folders, then fix this method
-bindCV :: Contract -> [(String, ClassInfo, [(String, String)])] -> Events -> [(String, ClassInfo, [String])] -> Contract
+bindCV :: Contract -> [(String, ClassInfo, [(String, String)])] -> Triggers -> [(String, ClassInfo, [String])] -> Contract
 bindCV c vars es methods =
  let bindEntry = getClassVar c es EVEntry
      bindExit  = getClassVar c es (EVExit [])
@@ -61,7 +61,7 @@ bindCV c vars es methods =
      post'' = concat $ bindMethods bindExit mnames post'
  in updatePre (updatePost c post'') pre''
 
-bindOldExp :: Contract -> [(String, ClassInfo, [(String, String)])] -> Events -> [(String, ClassInfo, [String])] -> OldExprL -> OldExprL
+bindOldExp :: Contract -> [(String, ClassInfo, [(String, String)])] -> Triggers -> [(String, ClassInfo, [String])] -> OldExprL -> OldExprL
 bindOldExp c vars es _ []             = []
 bindOldExp c vars es ms ((x,y,z):xss) = 
  let bindEntry = getClassVar c es (EVEntry)
@@ -204,9 +204,9 @@ operationalizeForall c env oldExpM =
  let mn                 = snd $ methodCN c
      cinfo              = fst $ methodCN c
      p                  = pre c
-     (enargs, enargswt) = lookForAllEntryEventArgs env cinfo mn
+     (enargs, enargswt) = lookForAllEntryTriggerArgs env cinfo mn
      p'                 = post c 
-     (exargs, exargswt) = lookForAllExitEventArgs env cinfo mn
+     (exargs, exargswt) = lookForAllExitTriggerArgs env cinfo mn
      xs                 = splitInQuantifiedExpression p "\\forall"
      ys                 = splitInQuantifiedExpression p' "\\forall"
      tnewvars           = getConstTnv c oldExpM 
@@ -330,9 +330,9 @@ operationalizeExists c es oldExpM =
  let mn                 = snd $ methodCN c
      cinfo              = fst $ methodCN c
      p                  = pre c
-     (enargs, enargswt) = lookForAllEntryEventArgs es cinfo mn
+     (enargs, enargswt) = lookForAllEntryTriggerArgs es cinfo mn
      p'                 = post c 
-     (exargs, exargswt) = lookForAllExitEventArgs es cinfo mn
+     (exargs, exargswt) = lookForAllExitTriggerArgs es cinfo mn
      xs                 = splitInQuantifiedExpression p "\\exists"
      ys                 = splitInQuantifiedExpression p' "\\exists"
      tnewvars           = getConstTnv c oldExpM

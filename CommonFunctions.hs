@@ -51,29 +51,29 @@ checkIfParseErrors es = let (ls, rs) = partitionEithers es
                            else Right rs
 
 
-lookForExitEvent :: Events -> MethodName -> Event
-lookForExitEvent [] mn     = error $ "Missing exit event for method " ++ mn ++ ".\n"
-lookForExitEvent (e:es) mn = 
- case (compEvent e) of 
+lookForExitTrigger :: Triggers -> MethodName -> Trigger
+lookForExitTrigger [] mn     = error $ "Missing exit event for method " ++ mn ++ ".\n"
+lookForExitTrigger (e:es) mn = 
+ case (compTrigger e) of 
       NormalEvent _ id _ evar -> 
               case evar of
                    EVExit _ -> if (mn == id)
-                               then eName e
-                               else lookForExitEvent es mn
-                   _        -> lookForExitEvent es mn
-      otherwise -> lookForExitEvent es mn
+                               then tName e
+                               else lookForExitTrigger es mn
+                   _        -> lookForExitTrigger es mn
+      otherwise -> lookForExitTrigger es mn
 
-lookForEntryEvent :: Events -> MethodName -> Event
-lookForEntryEvent [] mn     = error $ "Missing entry event for method " ++ mn ++ ".\n"
-lookForEntryEvent (e:es) mn = 
- case (compEvent e) of 
+lookForEntryTrigger :: Triggers -> MethodName -> Trigger
+lookForEntryTrigger [] mn     = error $ "Missing entry event for method " ++ mn ++ ".\n"
+lookForEntryTrigger (e:es) mn = 
+ case (compTrigger e) of 
       NormalEvent _ id _ evar -> 
               case evar of
                    EVEntry -> if (mn == id)
-                               then eName e
-                               else lookForEntryEvent es mn
-                   _       -> lookForEntryEvent es mn
-      otherwise -> lookForEntryEvent es mn
+                               then tName e
+                               else lookForEntryTrigger es mn
+                   _       -> lookForEntryTrigger es mn
+      otherwise -> lookForEntryTrigger es mn
 
 openingBracket :: String -> Bool
 openingBracket "" = False
@@ -202,13 +202,13 @@ introduceOr [x]    = x
 introduceOr (x:xs) = x ++ " || " ++ introduceOr xs
 
 
-getAllEvents :: Global -> Events
-getAllEvents (Global (Ctxt vars es prop [])) = es 
-getAllEvents (Global (Ctxt vars es prop [Foreach args ctxt])) = es ++ getEventsCtxt ctxt
+getAllTriggers :: Global -> Triggers
+getAllTriggers (Global (Ctxt vars ies trigs prop []))                  = trigs
+getAllTriggers (Global (Ctxt vars ies trigs prop [Foreach args ctxt])) = trigs ++ getTriggersCtxt ctxt
 
-getEventsCtxt :: Context -> Events
-getEventsCtxt (Ctxt vars es prop [])    = es
-getEventsCtxt (Ctxt vars es prop [Foreach args ctxt]) = es ++ getEventsCtxt ctxt
+getTriggersCtxt :: Context -> Triggers
+getTriggersCtxt (Ctxt vars ies trigs prop [])                  = trigs
+getTriggersCtxt (Ctxt vars ies trigs prop [Foreach args ctxt]) = trigs ++ getTriggersCtxt ctxt
 
 
 makeAddFile :: Import -> IO (String, ClassInfo)

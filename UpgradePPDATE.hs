@@ -62,15 +62,16 @@ genGlobal (Abs.Global ctxt) =
 -- Context --
 
 getCtxt :: Abs.Context -> UpgradePPD Context
-getCtxt (Abs.Ctxt vars es prop foreaches) =
+getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
  do env <- get
     let cns = contractsNames env
-    es' <- getEvents es
+    trigs' <- getTriggers trigs
     fors <- getForeaches foreaches
     let vars' = getVars vars
-    let prop' = getProperty prop (map eName es')
+    let prop' = getProperty prop (map tName trigs')
+    let ies' = getIEvents ies
     case runWriter prop' of
-         (PNIL,_)                              -> return (Ctxt vars' es' PNIL fors)
+         (PNIL,_)                              -> return (Ctxt vars' ies' trigs' PNIL fors)
          (Property pname states trans props,s) -> let accep  = checkAllContractsExist (getAccepting states) cns pname
                                                       bad    = checkAllContractsExist (getBad states) cns pname
                                                       normal = checkAllContractsExist (getNormal states) cns pname
@@ -80,7 +81,7 @@ getCtxt (Abs.Ctxt vars es prop foreaches) =
                                                                then "Error: Triggers [" ++ s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" ++ errs
                                                                else errs
                                                   in if (null s')
-                                                     then return (Ctxt vars' es' (Property pname states trans props) fors)
+                                                     then return (Ctxt vars' ies' trigs' (Property pname states trans props) fors)
                                                      else fail s'
 
 
@@ -118,13 +119,19 @@ getVarModif Abs.VarModifierNil   = VarModifierNil
 getVarDecl :: Abs.VarDecl -> VarDecl
 getVarDecl (Abs.VarDecl id varinit) = VarDecl (getIdAbs id) (getVarInitAbs varinit)
 
+-- IEvents --
+
+getIEvents :: Abs.IEvents -> IEvents
+getIEvents Abs.IEventsNil       = []
+getIEvents (Abs.IEventsDef ies) = map (\(Abs.IEvent ie) -> IEvent (getIdAbs ie)) ies
+
 -- Triggers --
 
-getEvents :: Abs.Events -> UpgradePPD Events
-getEvents Abs.EventsNil      = return []
-getEvents (Abs.EventsDef es) =
+getTriggers :: Abs.Triggers -> UpgradePPD Triggers
+getTriggers Abs.TriggersNil      = return []
+getTriggers (Abs.TriggersDef es) =
  do env <- get
-    let xs = map getEvent' es
+    let xs = map getTrigger' es
     let (ls, rs) = partitionErr (map (\e -> CM.evalStateT e env) xs)
     if (null ls)
     then sequence xs
@@ -134,15 +141,15 @@ joinBad :: Err a -> String -> String
 joinBad (Bad s1) s2 = s1 ++ s2
 joinBad _ _         = error "ppDATE refinement failure: joinBad \n"
 
-getEvent' :: Abs.Event -> UpgradePPD EventDef
-getEvent' (Abs.Event id binds ce wc)      =
+getTrigger' :: Abs.Trigger -> UpgradePPD TriggerDef
+getTrigger' (Abs.Trigger id binds ce wc)      =
  do env  <- get
     let id'' = getIdAbs id
-    let err  = if (elem id'' (allEventsId env)) then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") else ""
+    let err  = if (elem id'' (allTriggersId env)) then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") else ""
     do case runWriter (getBindsArgs binds) of
          (bs, s) ->
            let err0 = if (not.null) s then (err ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s ++ "].\n") else err
-           in case runWriter (getCompEvents ce) of
+           in case runWriter (getCompTriggers ce) of
                  (ce',s') ->
                    let err1 = if (not.null) s'
                               then err0 ++ ("Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s' ++ "] in the method component.\n")
@@ -162,12 +169,12 @@ getEvent' (Abs.Event id binds ce wc)      =
                                                           (b,zs) ->
                                                             if b
                                                              then if (not.null) err1 then fail err1 else
-                                                                 do let env' = updateEntryEventsInfo env (id'', getEventClass bind, (map bindToArgs bs)) bs mn bind
-                                                                    put env' { allEventsId = id'' : allEventsId env }
-                                                                    return EventDef { eName = id''
-                                                                                    , args  = bs
-                                                                                    , compEvent = ce'
-                                                                                    , whereClause = getWhereClause wc
+                                                                 do let env' = updateEntryTriggersInfo env (id'', getTriggerClass bind, (map bindToArgs bs)) bs mn bind
+                                                                    put env' { allTriggersId = id'' : allTriggersId env }
+                                                                    return TriggerDef { tName = id''
+                                                                                      , args  = bs
+                                                                                      , compTrigger = ce'
+                                                                                      , whereClause = getWhereClause wc
                                                                                     }
                                                             else fail (err1 ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n")
                                        EVExit rs -> let id  = getIdBind bind
@@ -181,26 +188,26 @@ getEvent' (Abs.Event id binds ce wc)      =
                                                           (b,zs) ->
                                                             if (b && (checkRetVar rs argss))
                                                             then if (not.null) err1 then fail err1 else
-                                                                 do let env' = updateExitEventsInfo env (id'', getEventClass bind, (map bindToArgs bs)) bs mn bind
-                                                                    put env' { allEventsId = id'' : allEventsId env }
-                                                                    return EventDef { eName = id''
-                                                                                    , args  = bs
-                                                                                    , compEvent = ce'
-                                                                                    , whereClause = wc'
-                                                                                    }
+                                                                 do let env' = updateExitTriggersInfo env (id'', getTriggerClass bind, (map bindToArgs bs)) bs mn bind
+                                                                    put env' { allTriggersId = id'' : allTriggersId env }
+                                                                    return TriggerDef { tName = id''
+                                                                                      , args  = bs
+                                                                                      , compTrigger = ce'
+                                                                                      , whereClause = wc'
+                                                                                      }
                                                             else fail (err1 ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n")
-                                       _        -> return EventDef { eName = id''
-                                                                   , args  = bs
-                                                                   , compEvent = ce'
-                                                                   , whereClause = getWhereClause wc
-                                                                   }
+                                       _        -> return TriggerDef { tName = id''
+                                                                     , args  = bs
+                                                                     , compTrigger = ce'
+                                                                     , whereClause = getWhereClause wc
+                                                                     }
                           _  -> if (not.null) err1 then fail err1 else
-                                do put env { allEventsId = id'' : allEventsId env }
-                                   return EventDef { eName = id''
-                                                   , args  = bs
-                                                   , compEvent = ce'
-                                                   , whereClause = getWhereClause wc
-                                                   }
+                                do put env { allTriggersId = id'' : allTriggersId env }
+                                   return TriggerDef { tName = id''
+                                                     , args  = bs
+                                                     , compTrigger = ce'
+                                                     , whereClause = getWhereClause wc
+                                                     }
 
 checkAllArgs :: [Id] -> [Id] -> Bind -> Writer [String] Bool
 checkAllArgs argss allArgs bind =
@@ -239,15 +246,15 @@ getIdBind (BindType _ id) = id
 getIdBind (BindId id)     = id
 getIdBind _                 = ""
 
-getCompEvent :: Abs.CompoundEvent -> Writer String CompoundEvent
-getCompEvent ce =
+getCompTrigger :: Abs.CompoundTrigger -> Writer String CompoundTrigger
+getCompTrigger ce =
  case ce of
-     Abs.NormalEvent (Abs.BindingVar bind) id binds eventv ->
+     Abs.NormalEvent (Abs.BindingVar bind) id binds trv ->
         case runWriter (getBindsBody (map getVarsAbs binds)) of
              (bs, s) -> do let id' = getIdAbs id
-                           let eventv' = getEventVariation eventv
+                           let trv' = getTriggerVariation trv
                            tell s
-                           return (NormalEvent (BindingVar (getBind_ bind)) id' bs eventv')
+                           return (NormalEvent (BindingVar (getBind_ bind)) id' bs trv')
      Abs.ClockEvent id int -> do let id' = getIdAbs id
                                  return (ClockEvent id' int)
      Abs.OnlyId id         -> do let id' = getIdAbs id
@@ -255,13 +262,13 @@ getCompEvent ce =
      Abs.OnlyIdPar id      -> do let id' = getIdAbs id
                                  return (OnlyIdPar id')
 
-getCompEvents :: Abs.CompoundEvent -> Writer String CompoundEvent
-getCompEvents ce@(Abs.NormalEvent _ _ _ _)            = getCompEvent ce
-getCompEvents ce@(Abs.ClockEvent _ _)                 = getCompEvent ce
-getCompEvents ce@(Abs.OnlyId _)                       = getCompEvent ce
-getCompEvents ce@(Abs.OnlyIdPar _)                    = getCompEvent ce
-getCompEvents (Abs.Collection (Abs.CECollection esl)) = do
-                                                           let xs = map getCompEvent esl
+getCompTriggers :: Abs.CompoundTrigger -> Writer String CompoundTrigger
+getCompTriggers ce@(Abs.NormalEvent _ _ _ _)            = getCompTrigger ce
+getCompTriggers ce@(Abs.ClockEvent _ _)                 = getCompTrigger ce
+getCompTriggers ce@(Abs.OnlyId _)                       = getCompTrigger ce
+getCompTriggers ce@(Abs.OnlyIdPar _)                    = getCompTrigger ce
+getCompTriggers (Abs.Collection (Abs.CECollection esl)) = do
+                                                           let xs = map getCompTrigger esl
                                                            ce <- sequence xs
                                                            return (Collection (CECollection ce))
 getBindsArgs :: [Abs.Bind] -> Writer String [Bind]
@@ -291,11 +298,11 @@ getBind_ Abs.BindStar        = BindStar
 getBind_ (Abs.BindType t id) = BindType (getTypeAbs t) (getIdAbs id)
 getBind_ (Abs.BindId id)     = BindId (getIdAbs id)
 
-getEventVariation :: Abs.EventVariation -> EventVariation
-getEventVariation Abs.EVEntry        = EVEntry
-getEventVariation (Abs.EVExit vars)  = EVExit (map (getBind_.getVarsAbs) vars)
-getEventVariation (Abs.EVThrow vars) = EVThrow (map (getBind_.getVarsAbs) vars)
-getEventVariation (Abs.EVHadle vars) = EVHadle (map (getBind_.getVarsAbs) vars)
+getTriggerVariation :: Abs.TriggerVariation -> TriggerVariation
+getTriggerVariation Abs.EVEntry        = EVEntry
+getTriggerVariation (Abs.EVExit vars)  = EVExit (map (getBind_.getVarsAbs) vars)
+getTriggerVariation (Abs.EVThrow vars) = EVThrow (map (getBind_.getVarsAbs) vars)
+getTriggerVariation (Abs.EVHadle vars) = EVHadle (map (getBind_.getVarsAbs) vars)
 
 -- Also removes white spaces added by printTree after ';'
 getWhereClause :: Abs.WhereClause -> WhereClause
@@ -310,7 +317,7 @@ getProperty Abs.PropertiesNil _                           = return PNIL
 getProperty (Abs.ProperiesDef id states trans props) enms =
  let props' = getProperty props enms
      trans' = getTransitions trans
-     ts     = map (event.arrow) trans' in
+     ts     = map (trigger.arrow) trans' in
  case runWriter props' of
       (p, s)    -> let xs = [x | x <- ts, not(elem x enms)]
                    in do tell (mAppend (addComma xs) s)
@@ -365,10 +372,10 @@ getTransition' (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) = Trans
                                                                                       , toState = getIdAbs q2
                                                                                       }
 getArrow :: Abs.Arrow -> Arrow
-getArrow (Abs.Arrow id Abs.Cond1)        = Arrow { event = getIdAbs id, cond = "", action = "" }
+getArrow (Abs.Arrow id Abs.Cond1)        = Arrow { trigger = getIdAbs id, cond = "", action = "" }
 getArrow (Abs.Arrow id (Abs.Cond2 cond)) = case cond of
-                                                Abs.CondExpDef cexp     -> Arrow { event = getIdAbs id, cond = printTree cexp, action = "" }
-                                                Abs.CondAction cexp act -> Arrow { event = getIdAbs id, cond = printTree cexp, action = (trim.printTree) act }
+                                                Abs.CondExpDef cexp     -> Arrow { trigger = getIdAbs id, cond = printTree cexp, action = "" }
+                                                Abs.CondAction cexp act -> Arrow { trigger = getIdAbs id, cond = printTree cexp, action = (trim.printTree) act }
 
 
 
@@ -395,7 +402,7 @@ genClassInvariants :: Abs.CInvariants -> CInvariants
 genClassInvariants Abs.CInvempty           = []
 genClassInvariants (Abs.CInvariants cinvs) = getCInvs cinvs
 
---TODO: Modify when ppDATE operators are added to the JML specification
+--TODO: Modify if ppDATE operators are added to the JML specification
 getCInvs :: [Abs.CInvariant] -> [CInvariant]
 getCInvs []                    = []
 getCInvs (Abs.CI id jml:cinvs) = CI (getIdAbs id) (getJML jml):getCInvs cinvs
@@ -501,16 +508,16 @@ joinImport [ys]   = ys
 joinImport (xs:ys:iss) = xs ++ "." ++ joinImport (ys:iss)
 
 
-lookForAllEntryEventArgs :: Env -> ClassInfo -> MethodName -> (String, String)
-lookForAllEntryEventArgs env cinf mn =
- case Map.lookup cinf (entryEventsInfo env) of
-      Nothing -> case Map.lookup "*" (entryEventsInfo env) of
+lookForAllEntryTriggerArgs :: Env -> ClassInfo -> MethodName -> (String, String)
+lookForAllEntryTriggerArgs env cinf mn =
+ case Map.lookup cinf (entryTriggersInfo env) of
+      Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
                       Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                       Just m' -> case Map.lookup mn m' of
                                       Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                                       Just _  -> error $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"                           
       Just m  -> case Map.lookup mn m of
-                      Nothing -> case Map.lookup "*" (entryEventsInfo env) of
+                      Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
                                       Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                                       Just m' -> case Map.lookup mn m' of
                                                  Nothing ->  error $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
@@ -531,16 +538,16 @@ lookForAllEntryEventArgs env cinf mn =
                                                    else (trim varClass')  ++ "," ++ flattenArgs argsPre
                            in (argsPre', argsPrewt'')
 
-lookForAllExitEventArgs :: Env -> ClassInfo -> MethodName -> (String, String)
-lookForAllExitEventArgs env cinf mn =
- case Map.lookup cinf (exitEventsInfo env) of
-      Nothing -> case Map.lookup "*" (entryEventsInfo env) of
+lookForAllExitTriggerArgs :: Env -> ClassInfo -> MethodName -> (String, String)
+lookForAllExitTriggerArgs env cinf mn =
+ case Map.lookup cinf (exitTriggersInfo env) of
+      Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
                       Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                       Just m' -> case Map.lookup mn m' of
                                       Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                                       Just _  -> error $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
       Just m  -> case Map.lookup mn m of
-                      Nothing -> case Map.lookup "*" (entryEventsInfo env) of
+                      Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
                                       Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                                       Just m' -> case Map.lookup mn m' of
                                                  Nothing ->  error $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
@@ -567,9 +574,9 @@ flattenArgs [(Args t id)]    = t ++ " " ++ id
 flattenArgs ((Args t id):xs) = t ++ " " ++ id ++ "," ++ flattenArgs xs
 
 -- Get the variable name of a bind
--- It is used to get the name of the class variable associated to an entry/exit event
-getEventClass :: Bind -> String
-getEventClass bn = case bn of
+-- It is used to get the name of the class variable associated to an entry/exit Trigger
+getTriggerClass :: Bind -> String
+getTriggerClass bn = case bn of
                         BindType t id' -> t ++ " " ++ id'
                         BindId id'     -> id'
                         BindStar       -> "*"
@@ -583,9 +590,9 @@ type MapTrigger = Map.Map MethodName (Id, String, [Args]) --(trigger_name,type c
 --Triggers associated to methods in Hoare triples should include: type class_variable
 data Env = Env
  { forsVars            :: [Id]
- , entryEventsInfo     :: Map.Map ClassInfo MapTrigger
- , exitEventsInfo      :: Map.Map ClassInfo MapTrigger
- , allEventsId         :: [Id]
+ , entryTriggersInfo     :: Map.Map ClassInfo MapTrigger
+ , exitTriggersInfo      :: Map.Map ClassInfo MapTrigger
+ , allTriggersId         :: [Id]
  , contractsNames      :: [ContractName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
  , methodsInFiles      :: [(String, ClassInfo, [(Type,Id,[String])])] --[(path_to_class,class_name,[(returned_type,method_name,arguments)])]
@@ -597,69 +604,69 @@ type UpgradePPD a = CM.StateT Env Err a
 
 emptyEnv :: Env
 emptyEnv = Env { forsVars            = []
-               , entryEventsInfo     = Map.empty
-               , exitEventsInfo      = Map.empty
-               , allEventsId         = []
+               , entryTriggersInfo   = Map.empty
+               , exitTriggersInfo    = Map.empty
+               , allTriggersId       = []
                , contractsNames      = []
                , varsInFiles         = []
                , methodsInFiles      = []
                , oldExpTypes         = Map.empty
                }
 
-updateEntryEventsInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
-updateEntryEventsInfo env einfo args mn BindStar        = 
+updateEntryTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
+updateEntryTriggersInfo env einfo args mn BindStar        = 
  let t = "*" in
- case Map.lookup t (entryEventsInfo env) of
+ case Map.lookup t (entryTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
-                 in env { entryEventsInfo = Map.insert t mapeinfo' (entryEventsInfo env) }
+                 in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
       Just mapeinfo -> 
            let mapeinfo' = Map.insert mn einfo mapeinfo
-           in env { entryEventsInfo = Map.insert t mapeinfo' (entryEventsInfo env) }
-updateEntryEventsInfo env einfo args mn (BindType t id) = 
- case Map.lookup t (entryEventsInfo env) of
+           in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
+updateEntryTriggersInfo env einfo args mn (BindType t id) = 
+ case Map.lookup t (entryTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
-                 in env { entryEventsInfo = Map.insert t mapeinfo' (entryEventsInfo env) }
+                 in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
       Just mapeinfo -> 
            let mapeinfo' = Map.insert mn einfo mapeinfo
-           in env { entryEventsInfo = Map.insert t mapeinfo' (entryEventsInfo env) }
-updateEntryEventsInfo env einfo args mn (BindId id)     = 
+           in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
+updateEntryTriggersInfo env einfo args mn (BindId id)     = 
  let ts = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
  in if (length ts /= 1)
     then error $ "The entry trigger associated to method " ++ mn ++ " does not include a class variable declaration.\n"
-    else case Map.lookup (head ts) (entryEventsInfo env) of
+    else case Map.lookup (head ts) (entryTriggersInfo env) of
               Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
-                         in env { entryEventsInfo = Map.insert (head ts) mapeinfo' (entryEventsInfo env) }
+                         in env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) }
               Just mapeinfo -> 
                    let mapeinfo' = Map.insert mn einfo mapeinfo
-                   in env { entryEventsInfo = Map.insert (head ts) mapeinfo' (entryEventsInfo env) }
+                   in env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) }
 
 
-updateExitEventsInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
-updateExitEventsInfo env einfo args mn BindStar        = 
+updateExitTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
+updateExitTriggersInfo env einfo args mn BindStar        = 
  let t = "*" in
- case Map.lookup t (exitEventsInfo env) of
+ case Map.lookup t (exitTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
-                 in env { exitEventsInfo = Map.insert t mapeinfo' (exitEventsInfo env) }
+                 in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
       Just mapeinfo -> 
            let mapeinfo' = Map.insert mn einfo mapeinfo
-           in env { exitEventsInfo = Map.insert t mapeinfo' (exitEventsInfo env) }
-updateExitEventsInfo env einfo args mn (BindType t id) = 
- case Map.lookup t (exitEventsInfo env) of
+           in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
+updateExitTriggersInfo env einfo args mn (BindType t id) = 
+ case Map.lookup t (exitTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
-                 in env { exitEventsInfo = Map.insert t mapeinfo' (exitEventsInfo env) }
+                 in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
       Just mapeinfo -> 
            let mapeinfo' = Map.insert mn einfo mapeinfo
-           in env { exitEventsInfo = Map.insert t mapeinfo' (exitEventsInfo env) }
-updateExitEventsInfo env einfo args mn (BindId id)     = 
+           in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
+updateExitTriggersInfo env einfo args mn (BindId id)     = 
  let ts = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
  in if (length ts /= 1)
     then error $ "The exit trigger associated to method " ++ mn ++ " does not include a class variable declaration.\n"
-    else case Map.lookup (head ts) (exitEventsInfo env) of
+    else case Map.lookup (head ts) (exitTriggersInfo env) of
               Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
-                         in env { exitEventsInfo = Map.insert (head ts) mapeinfo' (exitEventsInfo env) }
+                         in env { exitTriggersInfo = Map.insert (head ts) mapeinfo' (exitTriggersInfo env) }
               Just mapeinfo -> 
                    let mapeinfo' = Map.insert mn einfo mapeinfo
-                   in env { exitEventsInfo = Map.insert (head ts) mapeinfo' (exitEventsInfo env) }
+                   in env { exitTriggersInfo = Map.insert (head ts) mapeinfo' (exitTriggersInfo env) }
 
  
 ----------------------------
@@ -676,17 +683,17 @@ getValue uppd = fst . (\(Ok x) -> x) $ runStateT uppd emptyEnv
 getEnvVal :: UpgradePPD a -> Env
 getEnvVal uppd = snd . (\(Ok x) -> x) $ runStateT uppd emptyEnv
 
-getEntryEventsEnv :: UpgradePPD a -> Map.Map ClassInfo MapTrigger
-getEntryEventsEnv ppd = let env = CM.execStateT ppd emptyEnv
+getEntryTriggersEnv :: UpgradePPD a -> Map.Map ClassInfo MapTrigger
+getEntryTriggersEnv ppd = let env = CM.execStateT ppd emptyEnv
                         in case env of
                                 Bad _ -> Map.empty
-                                Ok fs -> entryEventsInfo fs
+                                Ok fs -> entryTriggersInfo fs
 
-getExitEventsEnv :: UpgradePPD a -> Map.Map ClassInfo MapTrigger
-getExitEventsEnv ppd = let env = CM.execStateT ppd emptyEnv
+getExitTriggersEnv :: UpgradePPD a -> Map.Map ClassInfo MapTrigger
+getExitTriggersEnv ppd = let env = CM.execStateT ppd emptyEnv
                        in case env of
                                Bad _ -> Map.empty
-                               Ok fs -> exitEventsInfo fs
+                               Ok fs -> exitTriggersInfo fs
 
 getForeachVarsEnv :: UpgradePPD a -> [Id]
 getForeachVarsEnv ppd = let env = CM.execStateT ppd emptyEnv

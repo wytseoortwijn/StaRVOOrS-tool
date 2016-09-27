@@ -47,7 +47,7 @@ writeGlobal :: PPDATE -> Env -> String
 writeGlobal ppdate env = let global = ctxtGet $ globalGet ppdate
                              consts = contractsGet ppdate
                              vars   = variables global
-                             es     = events global
+                             es     = triggers global
                              prop   = property global
                              fors   = foreaches global
                              vars'  = if (null consts)
@@ -55,7 +55,7 @@ writeGlobal ppdate env = let global = ctxtGet $ globalGet ppdate
                                       else "VARIABLES {\n" ++ makeChannels (length consts) ++ writeVariables vars ++ "}\n\n"
                          in "GLOBAL {\n\n"
                             ++ vars'
-                            ++ writeEvents es consts
+                            ++ writeTriggers es consts
                             ++ writeProperties prop consts es env
                             ++ writeForeach fors consts env
                             -- ++ "}\n"
@@ -93,22 +93,22 @@ generateChannels :: Int -> String
 generateChannels 0 = "\n"
 generateChannels n = generateChannels (n-1) ++ " Channel h" ++ show n ++ " = new Channel();\n"
 
-------------
--- Events --
-------------
+--------------
+-- Triggers --
+--------------
 
-writeEvents :: Events -> Contracts -> String
-writeEvents [] _      = ""
-writeEvents es consts = "EVENTS {\n"
-                        ++ writeAllEvents (instrumentEvents es consts)
+writeTriggers :: Triggers -> Contracts -> String
+writeTriggers [] _      = ""
+writeTriggers es consts = "EVENTS {\n"
+                        ++ writeAllTriggers (instrumentTriggers es consts)
                         ++ "}\n\n"
 
-writeAllEvents :: Events -> String
-writeAllEvents []     = ""
-writeAllEvents (e:es) = (getEvent e) ++ writeAllEvents es
+writeAllTriggers :: Triggers -> String
+writeAllTriggers []     = ""
+writeAllTriggers (e:es) = (getTrigger e) ++ writeAllTriggers es
 
-getEvent :: EventDef -> String
-getEvent (EventDef e arg cpe wc) =
+getTrigger :: TriggerDef -> String
+getTrigger (TriggerDef e arg cpe wc) =
  let wc' = if (wc == "") then "" else " where {" ++ wc ++ "}"
  in e ++ "(" ++ getBindArgs' arg ++ ") = " ++ getCpe cpe ++ wc' ++ "\n"
 
@@ -120,26 +120,26 @@ getBindArgs' ((BindType t id):y:ys) = t ++ " " ++ id ++ "," ++ getBindArgs' (y:y
 getBindArgs' _                      = ""
 
 
-getCpe :: CompoundEvent -> String
-getCpe (Collection (CECollection xs)) = "{" ++ getCollectionCpeCompoundEvent xs ++ "}"
-getCpe ce@(OnlyIdPar _)               = getCpeCompoundEvent ce
-getCpe ce@(OnlyId _)                  = getCpeCompoundEvent ce
-getCpe ce@(ClockEvent _ _)            = getCpeCompoundEvent ce
-getCpe ce@(NormalEvent _ _ _ _)       = getCpeCompoundEvent ce
+getCpe :: CompoundTrigger -> String
+getCpe (Collection (CECollection xs)) = "{" ++ getCollectionCpeCompoundTrigger xs ++ "}"
+getCpe ce@(OnlyIdPar _)               = getCpeCompoundTrigger ce
+getCpe ce@(OnlyId _)                  = getCpeCompoundTrigger ce
+getCpe ce@(ClockEvent _ _)            = getCpeCompoundTrigger ce
+getCpe ce@(NormalEvent _ _ _ _)       = getCpeCompoundTrigger ce
 
 
-getCollectionCpeCompoundEvent :: [CompoundEvent] -> String
-getCollectionCpeCompoundEvent []   = ""
-getCollectionCpeCompoundEvent [ce] = getCpeCompoundEvent ce
-getCollectionCpeCompoundEvent (ce:y:ys) = getCpeCompoundEvent ce ++ " | " ++ getCollectionCpeCompoundEvent (y:ys)
+getCollectionCpeCompoundTrigger :: [CompoundTrigger] -> String
+getCollectionCpeCompoundTrigger []   = ""
+getCollectionCpeCompoundTrigger [ce] = getCpeCompoundTrigger ce
+getCollectionCpeCompoundTrigger (ce:y:ys) = getCpeCompoundTrigger ce ++ " | " ++ getCollectionCpeCompoundTrigger (y:ys)
 
-getCpeCompoundEvent :: CompoundEvent -> String
-getCpeCompoundEvent (OnlyIdPar id)                 = "{" ++ id ++ "()" ++ "}"
-getCpeCompoundEvent (OnlyId id)                    = "{" ++ id ++ "}"
-getCpeCompoundEvent (ClockEvent id n)              = "{" ++ id ++ "@" ++ show n ++ "}"
-getCpeCompoundEvent (NormalEvent bind id bs ev)    = "{" ++ getBinding bind ++ id ++ "(" ++ getBindArgs bs ++ ")"
-                                                     ++ getEventVariation' ev ++ "}"
-getCpeCompoundEvent _                              = ""
+getCpeCompoundTrigger :: CompoundTrigger -> String
+getCpeCompoundTrigger (OnlyIdPar id)                 = "{" ++ id ++ "()" ++ "}"
+getCpeCompoundTrigger (OnlyId id)                    = "{" ++ id ++ "}"
+getCpeCompoundTrigger (ClockEvent id n)              = "{" ++ id ++ "@" ++ show n ++ "}"
+getCpeCompoundTrigger (NormalEvent bind id bs ev)    = "{" ++ getBinding bind ++ id ++ "(" ++ getBindArgs bs ++ ")"
+                                                     ++ getTriggerVariation' ev ++ "}"
+getCpeCompoundTrigger _                              = ""
 
 getBindArgs :: [Bind] -> String
 getBindArgs []                 = ""
@@ -152,41 +152,41 @@ getBinding (BindingVar BindStar)        = "*."
 getBinding (BindingVar (BindType t id)) = t ++ " " ++ id ++ "."
 getBinding (BindingVar (BindId id))     = id ++ "."
 
-getEventVariation' :: EventVariation -> String
-getEventVariation' EVEntry      = ""
-getEventVariation' (EVExit xs)  = "uponReturning(" ++ auxGetEventVariation' xs ++ ")"
-getEventVariation' (EVThrow xs) = "uponThrowing(" ++ auxGetEventVariation' xs ++ ")"
-getEventVariation' (EVHadle xs) = "uponHandling(" ++ auxGetEventVariation' xs ++ ")"
+getTriggerVariation' :: TriggerVariation -> String
+getTriggerVariation' EVEntry      = ""
+getTriggerVariation' (EVExit xs)  = "uponReturning(" ++ auxGetTriggerVariation' xs ++ ")"
+getTriggerVariation' (EVThrow xs) = "uponThrowing(" ++ auxGetTriggerVariation' xs ++ ")"
+getTriggerVariation' (EVHadle xs) = "uponHandling(" ++ auxGetTriggerVariation' xs ++ ")"
 
-auxGetEventVariation' :: [Bind] -> String
-auxGetEventVariation' []           = ""
-auxGetEventVariation' [BindId ret] = ret
+auxGetTriggerVariation' :: [Bind] -> String
+auxGetTriggerVariation' []           = ""
+auxGetTriggerVariation' [BindId ret] = ret
 
 
 
--- Checks if the event to control has to be the auxiliary one (in case of optimization by key)
-instrumentEvents :: Events -> Contracts -> Events
-instrumentEvents [] cs     = []
-instrumentEvents (e:es) cs = let (b,mn,bs) = lookupContractForEvent e cs in
+-- Checks if the trigger to control has to be the auxiliary one (in case of optimization by key)
+instrumentTriggers :: Triggers -> Contracts -> Triggers
+instrumentTriggers [] cs     = []
+instrumentTriggers (e:es) cs = let (b,mn,bs) = lookupContractForTrigger e cs in
                              if b
                              then let e'  = updateMethodCallName e (mn++"Aux")
-                                      e'' = updateEventArgs e' ((args e') ++ [BindType "Integer" "id"])
-                                  in updateMethodCallBody e'' (bs++[BindId "id"]):instrumentEvents es cs
-                             else e:instrumentEvents es cs
+                                      e'' = updateTriggerArgs e' ((args e') ++ [BindType "Integer" "id"])
+                                  in updateMethodCallBody e'' (bs++[BindId "id"]):instrumentTriggers es cs
+                             else e:instrumentTriggers es cs
 
-lookupContractForEvent :: EventDef -> Contracts -> (Bool, MethodName, [Bind])
-lookupContractForEvent e []     = (False,"", [])
-lookupContractForEvent e (c:cs) = case compEvent e of
+lookupContractForTrigger :: TriggerDef -> Contracts -> (Bool, MethodName, [Bind])
+lookupContractForTrigger e []     = (False,"", [])
+lookupContractForTrigger e (c:cs) = case compTrigger e of
                                        NormalEvent _ id bs _ -> if (id == snd (methodCN c))
                                                                 then (True, id, bs)
-                                                                else lookupContractForEvent e cs
-                                       otherwise             -> lookupContractForEvent e cs
+                                                                else lookupContractForTrigger e cs
+                                       otherwise             -> lookupContractForTrigger e cs
 
 ----------------
 -- Properties --
 ----------------
 
-writeProperties :: Property -> Contracts -> Events -> Env -> String
+writeProperties :: Property -> Contracts -> Triggers -> Env -> String
 writeProperties PNIL _ _ _         = ""
 writeProperties prop consts es env =
  let fors   = forsVars env --list of foreach variables
@@ -197,10 +197,10 @@ writeProperties prop consts es env =
     else xs ++ ra ++ "\n}\n}\n"
 
 
-getProperties :: Property -> Contracts -> Events -> Env -> String
+getProperties :: Property -> Contracts -> Triggers -> Env -> String
 getProperties = writeProperty
 
-writeProperty :: Property -> Contracts -> Events -> Env -> String
+writeProperty :: Property -> Contracts -> Triggers -> Env -> String
 writeProperty PNIL _ _ _                                   = ""
 writeProperty (Property name states trans props) cs es env =
   "PROPERTY " ++ name ++ " \n{\n\n"
@@ -237,7 +237,7 @@ getInitCode' (InitProg java) = "{" ++ init java ++ "}"
 
 --Contracts [] -> Replicated Automata
 --Contracts non-empty -> Property transitions instrumentation
-writeTransitions :: Transitions -> Contracts -> States -> Events -> Env -> String
+writeTransitions :: Transitions -> Contracts -> States -> Triggers -> Env -> String
 writeTransitions ts [] _ _ _ =
  "TRANSITIONS \n{ \n"
  ++ concat (map getTransition ts)
@@ -251,7 +251,7 @@ getTransition :: Transition -> String
 getTransition (Transition q (Arrow e c act) q') =
      q ++ " -> " ++ q' ++ " [" ++ e ++ " \\ "  ++ c ++ " \\ " ++ act ++ "]\n"
 
-getTransitionsGeneral :: Contracts -> States -> Transitions -> Events -> Env -> Transitions
+getTransitionsGeneral :: Contracts -> States -> Transitions -> Triggers -> Env -> Transitions
 getTransitionsGeneral cs (States acc bad nor star) ts es env =
  let ts1 = generateTransitions acc cs ts es env
      ts2 = generateTransitions bad cs ts1 es env
@@ -259,22 +259,22 @@ getTransitionsGeneral cs (States acc bad nor star) ts es env =
      ts4 = generateTransitions star cs ts3 es env
  in ts4
 
-generateTransitions :: [State] -> Contracts -> Transitions -> Events -> Env -> Transitions
+generateTransitions :: [State] -> Contracts -> Transitions -> Triggers -> Env -> Transitions
 generateTransitions [] _ ts _ _                              = ts
 generateTransitions ((State ns ic []):xs) cs ts es env       = generateTransitions xs cs ts es env
 generateTransitions ((State ns ic l@(_:_)):xs) cs ts es env  = let ts' = accumTransitions l ns cs ts es env
                                                                in generateTransitions xs cs ts' es env
 
-accumTransitions :: [ContractName] -> NameState -> Contracts -> Transitions -> Events -> Env -> Transitions
+accumTransitions :: [ContractName] -> NameState -> Contracts -> Transitions -> Triggers -> Env -> Transitions
 accumTransitions [] _ _ ts _ _                = ts
 accumTransitions (cn:cns) ns consts ts es env =
  let ts' = generateTransition cn ns consts ts es env
  in accumTransitions cns ns consts ts' es env
 
-generateTransition :: ContractName -> NameState -> Contracts -> Transitions -> Events -> Env -> Transitions
+generateTransition :: ContractName -> NameState -> Contracts -> Transitions -> Triggers -> Env -> Transitions
 generateTransition p ns cs ts es env = let c             = lookForContract p cs
                                            mn            = snd $ methodCN c
-                                           e             = lookForEntryEvent es mn
+                                           e             = lookForEntryTrigger es mn
                                            (lts, nonlts) = lookForLeavingTransitions e ns ts
                                        in if (null lts)
                                           then ts ++ [(makeTransitionAlg1Cond ns e es c env)]
@@ -283,11 +283,11 @@ generateTransition p ns cs ts es env = let c             = lookForContract p cs
                                                in nonlts ++ xs ++ [ext]
 
 
-makeTransitionAlg1Cond :: NameState -> Event -> Events -> Contract -> Env -> Transition
-makeTransitionAlg1Cond ns e events c env =
+makeTransitionAlg1Cond :: NameState -> Trigger -> Triggers -> Contract -> Env -> Transition
+makeTransitionAlg1Cond ns e triggers c env =
  let cn      = contractName c
      oldExpM = oldExpTypes env
-     esinf   = map getInfoEvent events
+     esinf   = map getInfoTrigger triggers
      arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
      c'      = "HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")"
      act     = getExpForOld oldExpM cn ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
@@ -319,8 +319,8 @@ makeExtraTransitionAlg2Cond (t:ts) =
  in
  "!("++ cond'' ++ ") && " ++ makeExtraTransitionAlg2Cond ts
 
-makeExtraTransitionAlg2 :: Transitions -> Contract -> Event -> Events -> NameState -> Env -> Transition
-makeExtraTransitionAlg2 ts c e es ns env = let esinf   = map getInfoEvent es
+makeExtraTransitionAlg2 :: Transitions -> Contract -> Trigger -> Triggers -> NameState -> Env -> Transition
+makeExtraTransitionAlg2 ts c e es ns env = let esinf   = map getInfoTrigger es
                                                oldExpM = oldExpTypes env
                                                cn      = contractName c
                                                zs      = getExpForOld oldExpM cn
@@ -333,11 +333,11 @@ makeExtraTransitionAlg2 ts c e es ns env = let esinf   = map getInfoEvent es
                                            in Transition ns (Arrow e c' (zs ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");")) ns
 
 
-instrumentTransitionAlg2 :: Contract -> Transition -> Event -> Events -> Env -> Transition
-instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e events env =
+instrumentTransitionAlg2 :: Contract -> Transition -> Trigger -> Triggers -> Env -> Transition
+instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e triggers env =
  let cn      = contractName c
      oldExpM = oldExpTypes env
-     esinf   = map getInfoEvent events
+     esinf   = map getInfoTrigger triggers
      arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
      semicol = if (act == "") then "" else ";"     
      zs      = getExpForOld oldExpM cn
@@ -353,7 +353,7 @@ lookForContract p (c:cs) = if (contractName c == p)
                              then c
                              else lookForContract p cs
 
-lookForLeavingTransitions :: Event -> NameState -> Transitions -> (Transitions, Transitions)
+lookForLeavingTransitions :: Trigger -> NameState -> Transitions -> (Transitions, Transitions)
 lookForLeavingTransitions e ns []                                        = ([],[])
 lookForLeavingTransitions e ns (t@(Transition q (Arrow e' c act) q'):ts) = if (e == e')
                                                                            then if (ns == q && ns /= q')
@@ -366,15 +366,15 @@ lookForLeavingTransitions e ns (t@(Transition q (Arrow e' c act) q'):ts) = if (e
 -- Replicated Automata --
 -------------------------
 
-generateReplicatedAutomata :: Contracts -> [Id] -> Events -> Env -> String
+generateReplicatedAutomata :: Contracts -> [Id] -> Triggers -> Env -> String
 generateReplicatedAutomata cs fs es env = 
  let n      = length cs
      ys     = zip cs [1..n]
-     esinf  = map getInfoEvent es
+     esinf  = map getInfoTrigger es
      props  = map (uncurry (generateRAString esinf es env)) ys
      fors   = generateWhereInfo fs
-     events = generateEventsRA fors (map (\(x,y) -> (contractName x,y)) ys) env
-     eps    = zip events props
+     triggers = generateTriggersRA fors (map (\(x,y) -> (contractName x,y)) ys) env
+     eps    = zip triggers props
  in generateProp eps env
 
 
@@ -392,8 +392,8 @@ generateProp ((es,ps):eps)  env =
     ++ "}\n\n"
     ++ generateProp eps env
 
-getInfoEvent :: EventDef -> (Event, [String])
-getInfoEvent (EventDef en args ce w) = case ce of
+getInfoTrigger :: TriggerDef -> (Trigger, [String])
+getInfoTrigger (TriggerDef en args ce w) = case ce of
                                             NormalEvent (BindingVar bind) _ _ _ ->
                                                 case bind of
                                                      BindType t id -> (en, splitOnIdentifier "," $ getBindArgs' ((BindType t id):args))
@@ -406,18 +406,18 @@ generateWhereInfo :: [Id] -> String
 generateWhereInfo []     = ""
 generateWhereInfo (f:fs) = f ++ "=null;" ++ generateWhereInfo fs
 
-generateEventsRA :: String -> [(ContractName,Int)] -> Env -> [String]
-generateEventsRA fs ns env = map (uncurry (generateEventRA fs env)) ns
+generateTriggersRA :: String -> [(ContractName,Int)] -> Env -> [String]
+generateTriggersRA fs ns env = map (uncurry (generateTriggerRA fs env)) ns
 
-generateEventRA :: String -> Env -> ContractName -> Int -> String
-generateEventRA fs env cn n =
+generateTriggerRA :: String -> Env -> ContractName -> Int -> String
+generateTriggerRA fs env cn n =
  let oldExpM  = oldExpTypes env
      zs       = getOldExpr oldExpM cn
      nvar     = if null zs then "PPD" else "Old_" ++ cn
  in "rh" ++ show n ++ "(Messages" ++ nvar ++ " msg) = {h"++ show n ++ ".receive(msg)} where {id=msg.id;"
     ++ fs ++  "}\n"
 
-generateRAString :: [(Event, [String])] -> Events -> Env -> Contract -> Int -> (String,ContractName)
+generateRAString :: [(Trigger, [String])] -> Triggers -> Env -> Contract -> Int -> (String,ContractName)
 generateRAString esinf es env c n =
   let ra = generateRA esinf es c n env
       cn = pName ra
@@ -435,7 +435,7 @@ writeForeach :: Foreaches -> Contracts -> Env -> String
 writeForeach [] _ _                         = ""
 writeForeach [Foreach args ctxt] consts env =
  let vars   = variables ctxt
-     es     = events ctxt
+     es     = triggers ctxt
      prop   = property ctxt
      fors   = foreaches ctxt
      vars'  = if (null vars)
@@ -443,7 +443,7 @@ writeForeach [Foreach args ctxt] consts env =
               else "VARIABLES {\n" ++ writeVariables vars ++ "}\n\n"
  in "FOREACH (" ++ getForeachArgs args ++ ") {\n\n"
     ++ vars'
-    ++ writeEvents es consts
+    ++ writeTriggers es consts
     ++ writeProperties prop consts es env
     ++ writeForeach fors consts env
     -- ++ "}\n"
