@@ -17,7 +17,7 @@ import JavaLanguage
 methodsInstrumentation :: UpgradePPD T.PPDATE -> FilePath -> FilePath -> IO ()
 methodsInstrumentation ppd jpath output_add =
  do let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
-    let consts        = T.contractsGet ppdate
+    let consts        = T.htsGet ppdate
     if (null consts)
     then return ()
     else methodsInstrumentation' ppd jpath output_add
@@ -25,7 +25,7 @@ methodsInstrumentation ppd jpath output_add =
 methodsInstrumentation' :: UpgradePPD T.PPDATE -> FilePath -> FilePath -> IO ()
 methodsInstrumentation' ppd jpath output_add =
   do let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
-     let consts        = T.contractsGet ppdate
+     let consts        = T.htsGet ppdate
      let imp           = T.importsGet ppdate
      sequence [ instrumentFile i consts jpath output_add
               | i <- imp, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
@@ -33,7 +33,7 @@ methodsInstrumentation' ppd jpath output_add =
      putStrLn "Java files generation completed."
 
 -- if same class name in different files, fix this method
-instrumentFile :: T.Import -> T.Contracts -> FilePath -> FilePath -> IO ()
+instrumentFile :: T.Import -> T.HTriples -> FilePath -> FilePath -> IO ()
 instrumentFile i consts jpath output_add =
  do (main, cl) <- makeAddFile i
     let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")

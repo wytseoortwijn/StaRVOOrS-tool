@@ -124,20 +124,20 @@ addComma [xs]     = xs
 addComma (xs:xss) = xs ++ "," ++ addComma xss
 
 
-getConstTnv :: Contract -> OldExprM -> Variables
+getConstTnv :: HT -> OldExprM -> Variables
 getConstTnv c oldExpM = 
   if Map.null oldExpM 
   then []
-  else case Map.lookup (contractName c) oldExpM of
+  else case Map.lookup (htName c) oldExpM of
             Nothing -> []
-            Just xs -> let cn    = contractName c
+            Just xs -> let cn    = htName c
                            vdec  = VarDecl cn VarInitNil
                            typE  = "Old_" ++ cn
                        in if null xs
                           then []
                           else [Var VarModifierNil typE [vdec]]
 
-getOldExpr :: OldExprM -> ContractName -> String
+getOldExpr :: OldExprM -> HTName -> String
 getOldExpr oldExpM cn = 
  case Map.lookup cn oldExpM of
       Nothing -> ""
@@ -149,18 +149,18 @@ getOldExpr oldExpM cn =
 -- Manipulating the parsed .xml file --
 ---------------------------------------
 
-removeNoneContracts :: [Proof] -> [ContractName] -> [Proof]
-removeNoneContracts [] _       = []
-removeNoneContracts (p:ps) cns = let cn = getContractNameErrConst (contractText p) (typee p) in
+removeNoneHTs :: [Proof] -> [HTName] -> [Proof]
+removeNoneHTs [] _       = []
+removeNoneHTs (p:ps) cns = let cn = getHTNameErrConst (contractText p) (typee p) in
                                  if ((cn /= "") && elem cn cns)
-                                 then p:removeNoneContracts ps cns
-                                 else removeNoneContracts ps cns
+                                 then p:removeNoneHTs ps cns
+                                 else removeNoneHTs ps cns
 
 
-getInfoFromProof :: Proof -> (MethodName, ContractName, [String],String)
+getInfoFromProof :: Proof -> (MethodName, HTName, [String],String)
 getInfoFromProof proof = let mn    = getMethodName' (target proof)
                              path  = typee proof
-                             cn    = getContractNameErrConst (contractText proof) (typee proof)
+                             cn    = getHTNameErrConst (contractText proof) (typee proof)
                              npres = getNewPreConds (executionPath proof)
                              aoft  = length $ filter (=="true") npres
                          in if (aoft >= 1)
@@ -176,20 +176,21 @@ getInfoFromProof proof = let mn    = getMethodName' (target proof)
 getMethodName' :: Target -> MethodName
 getMethodName' t = fst $ splitAtIdentifier '(' t                   
 
-getContractNameErrConst :: ContractText -> Type -> ContractName
-getContractNameErrConst ctext t = let (_, xs) = splitAtIdentifier ':' ctext
-                                      ys      = splitOnIdentifier t (tail xs)
-                                  in if (length ys == 1)
-                                     then ""
-                                     else trim $ fst $ splitAtIdentifier '=' $ (tail.head.tail) ys
+getHTNameErrConst :: ContractText -> Type -> HTName
+getHTNameErrConst ctext t = let (_, xs) = splitAtIdentifier ':' ctext
+                                ys      = splitOnIdentifier t (tail xs)
+                            in if (length ys == 1)
+                               then ""
+                               else trim $ fst $ splitAtIdentifier '=' $ (tail.head.tail) ys
 
-getContractNameErrVar :: ContractText -> ContractName
-getContractNameErrVar ctext = let (_, xs) = splitAtIdentifier ':' ctext
-                                  (_, ys) = splitAtIdentifier '.' $ tail xs
-                              in if (null ys)
-                                 then ""
-                                 else let (cn, _) = splitAtIdentifier '=' $ tail ys 
-                                      in trim cn
+getHTNameErrVar :: ContractText -> HTName
+getHTNameErrVar ctext = 
+ let (_, xs) = splitAtIdentifier ':' ctext
+     (_, ys) = splitAtIdentifier '.' $ tail xs
+ in if (null ys)
+    then ""
+    else let (cn, _) = splitAtIdentifier '=' $ tail ys 
+         in trim cn
 
 getNewPreConds :: [EPath] -> [String]
 getNewPreConds []       = []

@@ -17,9 +17,9 @@ upgradePPD (Abs.AbsPPDATE imports global cinvs consts methods) =
  do let imports' = genImports imports
     let cinvs'   = genClassInvariants cinvs
     let methods' = genMethods methods
-    case runStateT (genContracts consts) emptyEnv of
+    case runStateT (genHTs consts) emptyEnv of
          Bad s             -> fail s
-         Ok (consts', env) -> let cns = contractsNames env
+         Ok (consts', env) -> let cns = htsNames env
                                   dcs = getDuplicate cns
                               in case runStateT (genGlobal global) env of
                                       Bad s              -> if (not.null) dcs
@@ -31,11 +31,11 @@ upgradePPD (Abs.AbsPPDATE imports global cinvs consts methods) =
                                                                     return (PPDATE imports' global' cinvs' consts' methods')
 
 
-duplicateHT :: [ContractName] -> String
+duplicateHT :: [HTName] -> String
 duplicateHT []     = ""
 duplicateHT (c:cs) = "Error: Multiple definitions for Hoare triple " ++ c ++ ".\n" ++ duplicateHT cs
 
-getDuplicate :: [ContractName] -> [ContractName]
+getDuplicate :: [HTName] -> [HTName]
 getDuplicate []     = []
 getDuplicate (c:cs) = if elem c cs
                       then c:getDuplicate cs
@@ -64,7 +64,7 @@ genGlobal (Abs.Global ctxt) =
 getCtxt :: Abs.Context -> UpgradePPD Context
 getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
  do env <- get
-    let cns = contractsNames env
+    let cns = htsNames env
     trigs' <- getTriggers trigs
     fors <- getForeaches foreaches
     let vars' = getVars vars
@@ -72,10 +72,10 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
     let ies' = getIEvents ies
     case runWriter prop' of
          (PNIL,_)                              -> return (Ctxt vars' ies' trigs' PNIL fors)
-         (Property pname states trans props,s) -> let accep  = checkAllContractsExist (getAccepting states) cns pname
-                                                      bad    = checkAllContractsExist (getBad states) cns pname
-                                                      normal = checkAllContractsExist (getNormal states) cns pname
-                                                      start  = checkAllContractsExist (getStarting states) cns pname
+         (Property pname states trans props,s) -> let accep  = checkAllHTsExist (getAccepting states) cns pname
+                                                      bad    = checkAllHTsExist (getBad states) cns pname
+                                                      normal = checkAllHTsExist (getNormal states) cns pname
+                                                      start  = checkAllHTsExist (getStarting states) cns pname
                                                       errs   = concat $ accep ++ bad ++ normal ++ start
                                                       s'     = if (not.null) s
                                                                then "Error: Triggers [" ++ s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" ++ errs
@@ -85,20 +85,21 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
                                                      else fail s'
 
 
-checkAllContractsExist :: [State] -> [ContractName] -> PropertyName -> [String]
-checkAllContractsExist [] _ _        = []
-checkAllContractsExist (s:ss) cns pn = let ns   = getNS s
-                                           cns' = getCNList s
-                                           aux  = [x | x <- cns' , not (elem x cns)]
-                                       in if (null aux)
-                                          then checkAllContractsExist ss cns pn
-                                          else ("Error: On property " ++ pn
-                                                ++ ", in state " ++ ns ++ ", the Hoare triples(s) "
-                                                ++ commaAdd aux
-                                                ++ " do(es) not exist.\n") : checkAllContractsExist ss cns pn
-                                                          where commaAdd []       = ""
-                                                                commaAdd [xs]     = xs
-                                                                commaAdd (xs:xss) = xs ++ "," ++ commaAdd xss
+checkAllHTsExist :: [State] -> [HTName] -> PropertyName -> [String]
+checkAllHTsExist [] _ _        = []
+checkAllHTsExist (s:ss) cns pn = 
+ let ns   = getNS s
+     cns' = getCNList s
+     aux  = [x | x <- cns' , not (elem x cns)]
+ in if (null aux)
+    then checkAllHTsExist ss cns pn
+    else ("Error: On property " ++ pn
+         ++ ", in state " ++ ns ++ ", the Hoare triples(s) "
+         ++ commaAdd aux
+         ++ " do(es) not exist.\n") : checkAllHTsExist ss cns pn
+                              where commaAdd []       = ""
+                                    commaAdd [xs]     = xs
+                                    commaAdd (xs:xss) = xs ++ "," ++ commaAdd xss
 -- Variables --
 
 getVars :: Abs.Variables -> Variables
@@ -412,24 +413,24 @@ getCInvs (Abs.CI id jml:cinvs) = CI (getIdAbs id) (getJML jml):getCInvs cinvs
 -- Hoare Triples --
 -------------------
 
-genContracts :: Abs.Contracts -> UpgradePPD Contracts
-genContracts Abs.Constempty     = return []
-genContracts (Abs.Contracts cs) = sequence (map getContract cs)
+genHTs :: Abs.HTriples -> UpgradePPD HTriples
+genHTs Abs.HTempty     = return []
+genHTs (Abs.HTriples cs) = sequence (map getHT cs)
 
-getContract :: Abs.Contract -> UpgradePPD Contract
-getContract (Abs.Contract id pre' method post' (Abs.Assignable ass)) =
+getHT :: Abs.HT -> UpgradePPD HT
+getHT (Abs.HT id pre' method post' (Abs.Assignable ass)) =
  do env <- get
-    let cns = contractsNames env
-    put env { contractsNames = (getIdAbs id):(contractsNames env) }
-    return (Contract { contractName = getIdAbs id
-                     , methodCN     = (getMethodClassInfo method, getMethodMethodName method)
-                     , pre          = filter (/='\n') $ getPre pre'
-                     , post         = filter (/='\n') $ getPost post'
-                     , assignable   = joinAssignable $ map assig ass
-                     , optimized    = []
-                     , chGet        = 0
-                     , path2it      = ""
-                     })
+    let cns = htsNames env
+    put env { htsNames = (getIdAbs id):(htsNames env) }
+    return (HT { htName       = getIdAbs id
+               , methodCN     = (getMethodClassInfo method, getMethodMethodName method)
+               , pre          = filter (/='\n') $ getPre pre'
+               , post         = filter (/='\n') $ getPost post'
+               , assignable   = joinAssignable $ map assig ass
+               , optimized    = []
+               , chGet        = 0
+               , path2it      = ""
+               })
 
 assig :: Abs.Assig -> String
 assig (Abs.AssigJML jml) = getJML jml
@@ -473,7 +474,7 @@ getVarInitAbs (Abs.VarInit vexp) = VarInit (printTree vexp)
 getVarsAbs :: Abs.Vars -> Abs.Bind
 getVarsAbs (Abs.Vars bind) = bind
 
-getConstNameAbs :: Abs.ContractName -> Abs.Id
+getConstNameAbs :: Abs.HTName -> Abs.Id
 getConstNameAbs (Abs.CN id) = id
 
 getJML :: Abs.JML -> JML
@@ -593,7 +594,7 @@ data Env = Env
  , entryTriggersInfo     :: Map.Map ClassInfo MapTrigger
  , exitTriggersInfo      :: Map.Map ClassInfo MapTrigger
  , allTriggersId         :: [Id]
- , contractsNames      :: [ContractName]
+ , htsNames      :: [HTName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
  , methodsInFiles      :: [(String, ClassInfo, [(Type,Id,[String])])] --[(path_to_class,class_name,[(returned_type,method_name,arguments)])]
  , oldExpTypes         :: OldExprM
@@ -607,7 +608,7 @@ emptyEnv = Env { forsVars            = []
                , entryTriggersInfo   = Map.empty
                , exitTriggersInfo    = Map.empty
                , allTriggersId       = []
-               , contractsNames      = []
+               , htsNames      = []
                , varsInFiles         = []
                , methodsInFiles      = []
                , oldExpTypes         = Map.empty
@@ -701,11 +702,11 @@ getForeachVarsEnv ppd = let env = CM.execStateT ppd emptyEnv
                                 Bad _ -> []
                                 Ok fs -> forsVars fs
 
-getContractNamesEnv :: UpgradePPD a -> [ContractName]
-getContractNamesEnv ppd = let env = CM.execStateT ppd emptyEnv
+getHTNamesEnv :: UpgradePPD a -> [HTName]
+getHTNamesEnv ppd = let env = CM.execStateT ppd emptyEnv
                           in case env of
                                 Bad _ -> []
-                                Ok fs -> contractsNames fs
+                                Ok fs -> htsNames fs
 
 getOldExpTypesEnv :: UpgradePPD a -> OldExprM
 getOldExpTypesEnv ppd = let env = CM.execStateT ppd emptyEnv

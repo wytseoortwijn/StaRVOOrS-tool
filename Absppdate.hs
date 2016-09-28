@@ -10,7 +10,7 @@ module Absppdate where
 newtype Id = Id String deriving (Eq,Ord,Show,Read)
 newtype Symbols = Symbols String deriving (Eq,Ord,Show,Read)
 data AbsPPDATE =
-   AbsPPDATE Imports Global CInvariants Contracts Methods
+   AbsPPDATE Imports Global CInvariants HTriples Methods
   deriving (Eq,Ord,Show,Read)
 
 data Imports =
@@ -136,19 +136,19 @@ data Starting =
   deriving (Eq,Ord,Show,Read)
 
 data State =
-   State NameState InitialCode ContractNames
+   State NameState InitialCode HTNames
   deriving (Eq,Ord,Show,Read)
 
 data NameState =
    NameState Id
   deriving (Eq,Ord,Show,Read)
 
-data ContractNames =
-   CNS [ContractName]
+data HTNames =
+   CNS [HTName]
  | CNSNil
   deriving (Eq,Ord,Show,Read)
 
-data ContractName =
+data HTName =
    CN Id
   deriving (Eq,Ord,Show,Read)
 
@@ -197,13 +197,13 @@ data CInvariant =
    CI Id JML
   deriving (Eq,Ord,Show,Read)
 
-data Contracts =
-   Contracts [Contract]
- | Constempty
+data HTriples =
+   HTriples [HT]
+ | HTempty
   deriving (Eq,Ord,Show,Read)
 
-data Contract =
-   Contract Id Pre Method Post Assignable
+data HT =
+   HT Id Pre Method Post Assignable
   deriving (Eq,Ord,Show,Read)
 
 data Pre =
@@ -345,8 +345,8 @@ data JML =
  | JMLBackS JML
  | JMLOld JML JML
  | JMLRes JML
- | JMLForallRT Id Id BodyF JML
- | JMLExistsRT Id Id BodyF JML
+ | JMLForallRT Type Id BodyF JML
+ | JMLExistsRT Type Id BodyF JML
  | JMLNil
   deriving (Eq,Ord,Show,Read)
 

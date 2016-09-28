@@ -1,4 +1,4 @@
-module PartialInfoFilesGeneration (contractsJavaFileGen, idFileGen, oldExprFileGen,messagesFileGen,cloningFileGen) where
+module PartialInfoFilesGeneration (htsJavaFileGen, idFileGen, oldExprFileGen,messagesFileGen,cloningFileGen) where
 
 import Types
 import System.Directory
@@ -15,12 +15,12 @@ import Data.Maybe
 -- HoareTriples.java --
 -----------------------
 
-contractsJavaFileGen :: UpgradePPD PPDATE -> FilePath -> IO ()
-contractsJavaFileGen ppd output_add = 
+htsJavaFileGen :: UpgradePPD PPDATE -> FilePath -> IO ()
+htsJavaFileGen ppd output_add = 
  let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
      imp           = importsGet ppdate
      global        = globalGet ppdate
-     consts        = contractsGet ppdate
+     consts        = htsGet ppdate
      oldExpM       = oldExpTypes env
      forallop      = map (\c -> genMethodsForConstForall c env oldExpM) consts
      new_methods   = map snd forallop
@@ -56,8 +56,8 @@ getImports' (Import s:xs) = "import " ++ s ++ ";\n" ++ getImports' xs
 genImports' :: Imports -> String
 genImports' xss = getImports' xss
 
--- Contracts methods
-genMethodsForConstForall :: Contract -> Env -> OldExprM -> (Contract, String)
+-- Hoare triples methods
+genMethodsForConstForall :: HT -> Env -> OldExprM -> (HT, String)
 genMethodsForConstForall c env oldExpM =
  let (body_pre, body_post) = operationalizeForall c env oldExpM
      newpre  = flattenBody body_pre
@@ -69,7 +69,7 @@ genMethodsForConstForall c env oldExpM =
  in (c'', pre_opmethods ++ post_opmethods)
 
 
-genMethodsForConstExists :: Contract -> Env -> OldExprM -> (Contract, String)
+genMethodsForConstExists :: HT -> Env -> OldExprM -> (HT, String)
 genMethodsForConstExists c env oldExpM =
  let (body_pre, body_post) = operationalizeExists c env oldExpM
      newpre  = flattenBody body_pre
@@ -86,7 +86,7 @@ auxNewVars []                          = []
 auxNewVars (Var _ t [VarDecl id _]:xs) = (t ++ " " ++ id):auxNewVars xs
 
 
-methodForPost :: Contract -> Env -> OldExprM -> String
+methodForPost :: HT -> Env -> OldExprM -> String
 methodForPost c env oldExpM =
  let (argsPost, argsPostwt) = lookForAllExitTriggerArgs env (fst $ methodCN c) (snd $ methodCN c)
      tnvs      = getConstTnv c oldExpM
@@ -95,23 +95,23 @@ methodForPost c env oldExpM =
      nargs     = if (null tnvs) then "" else "," ++ newargs
      args      = addComma $ map unwords $ map (\s -> if isInfixOf "ret_ppd" (head $ tail s) then (head s):["ret"] else s) $ map words $ splitOnIdentifier "," (argsPost ++ nargs)
  in 
-  "  // " ++ (contractName c) ++ "\n"
-  ++ "  public static boolean " ++ (contractName c) ++ "_post(" ++ args ++ ") {\n"
+  "  // " ++ (htName c) ++ "\n"
+  ++ "  public static boolean " ++ (htName c) ++ "_post(" ++ args ++ ") {\n"
   ++ "    return " ++ (post c) ++ ";\n" 
   ++ "  }\n\n"
 
 --check opt for new predicates for the precondition due to partial proof
-methodForPre :: Contract -> Env -> String
+methodForPre :: HT -> Env -> String
 methodForPre c env =
  let (argsPre, _) = lookForAllEntryTriggerArgs env (fst $ methodCN c) (snd $ methodCN c)     
  in 
-  "  // " ++ (contractName c) ++ "\n"
-  ++ "  public static boolean " ++ (contractName c) ++ "_pre(" ++ argsPre ++ ") {\n" 
+  "  // " ++ (htName c) ++ "\n"
+  ++ "  public static boolean " ++ (htName c) ++ "_pre(" ++ argsPre ++ ") {\n" 
   ++ "    return " ++ pre c ++ addNewPre c ++ ";\n"
   ++ "  }\n\n"
 
 
-addNewPre :: Contract -> String
+addNewPre :: HT -> String
 addNewPre c = if (null (optimized c))
               then ""
               else " && " ++ (head.optimized) c
@@ -162,17 +162,17 @@ idGen =
 oldExprFileGen :: FilePath -> UpgradePPD PPDATE -> IO [()]
 oldExprFileGen output_add ppd = 
  let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
-     consts        = contractsGet ppdate      
+     consts        = htsGet ppdate      
      oldExpM       = oldExpTypes env 
-     consts'       = [c | c <- consts, noOldExprInHT $ Map.lookup (contractName c) oldExpM]    
+     consts'       = [c | c <- consts, noOldExprInHT $ Map.lookup (htName c) oldExpM]    
  in if Map.null oldExpM
     then return [()]
     else sequence [writeFile (output_add ++ (snd $ oldExpGen c oldExpM)) (fst $ oldExpGen c oldExpM) | c <- consts']
                      where noOldExprInHT v = v /= Nothing && (not.null.fromJust) v 
 
-oldExpGen :: Contract -> OldExprM -> (String,String)
+oldExpGen :: HT -> OldExprM -> (String,String)
 oldExpGen c oldExpM = 
- let cn = contractName c
+ let cn = htName c
      nameClass = "Old_" ++ cn
      xs        = map (\(x,y,z) -> (y,z)) $ fromJust $ Map.lookup cn oldExpM
  in ("package ppArtifacts;\n\n"

@@ -109,7 +109,7 @@ instance Print Symbols where
 
 instance Print AbsPPDATE where
   prt i e = case e of
-   AbsPPDATE imports global cinvariants contracts methods -> prPrec i 0 (concatD [prt 0 imports , prt 0 global , prt 0 cinvariants , prt 0 contracts , prt 0 methods])
+   AbsPPDATE imports global cinvariants htriples methods -> prPrec i 0 (concatD [prt 0 imports , prt 0 global , prt 0 cinvariants , prt 0 htriples , prt 0 methods])
 
 
 instance Print Imports where
@@ -292,7 +292,7 @@ instance Print Starting where
 
 instance Print State where
   prt i e = case e of
-   State namestate initialcode contractnames -> prPrec i 0 (concatD [prt 0 namestate , prt 0 initialcode , prt 0 contractnames])
+   State namestate initialcode htnames -> prPrec i 0 (concatD [prt 0 namestate , prt 0 initialcode , prt 0 htnames])
 
   prtList es = case es of
    [] -> (concatD [])
@@ -303,13 +303,13 @@ instance Print NameState where
    NameState id -> prPrec i 0 (concatD [prt 0 id])
 
 
-instance Print ContractNames where
+instance Print HTNames where
   prt i e = case e of
-   CNS contractnames -> prPrec i 0 (concatD [doc (showString "(") , prt 0 contractnames , doc (showString ")")])
+   CNS htnames -> prPrec i 0 (concatD [doc (showString "(") , prt 0 htnames , doc (showString ")")])
    CNSNil  -> prPrec i 0 (concatD [])
 
 
-instance Print ContractName where
+instance Print HTName where
   prt i e = case e of
    CN id -> prPrec i 0 (concatD [prt 0 id])
 
@@ -378,15 +378,15 @@ instance Print CInvariant where
    [x] -> (concatD [prt 0 x])
    x:xs -> (concatD [prt 0 x , prt 0 xs])
 
-instance Print Contracts where
+instance Print HTriples where
   prt i e = case e of
-   Contracts contracts -> prPrec i 0 (concatD [doc (showString "HTRIPLES") , doc (showString "{") , prt 0 contracts , doc (showString "}")])
-   Constempty  -> prPrec i 0 (concatD [])
+   HTriples hts -> prPrec i 0 (concatD [doc (showString "HTRIPLES") , doc (showString "{") , prt 0 hts , doc (showString "}")])
+   HTempty  -> prPrec i 0 (concatD [])
 
 
-instance Print Contract where
+instance Print HT where
   prt i e = case e of
-   Contract id pre method post assignable -> prPrec i 0 (concatD [doc (showString "HT") , prt 0 id , doc (showString "{") , prt 0 pre , prt 0 method , prt 0 post , prt 0 assignable , doc (showString "}")])
+   HT id pre method post assignable -> prPrec i 0 (concatD [doc (showString "HT") , prt 0 id , doc (showString "{") , prt 0 pre , prt 0 method , prt 0 post , prt 0 assignable , doc (showString "}")])
 
   prtList es = case es of
    [x] -> (concatD [prt 0 x])
@@ -564,8 +564,8 @@ instance Print JML where
    JMLBackS jml -> prPrec i 0 (concatD [doc (showString "\\") , prt 0 jml])
    JMLOld jml0 jml -> prPrec i 0 (concatD [doc (showString "\\old(") , prt 0 jml0 , doc (showString ")") , prt 0 jml])
    JMLRes jml -> prPrec i 0 (concatD [doc (showString "\\result") , prt 0 jml])
-   JMLForallRT id0 id bodyf jml -> prPrec i 0 (concatD [doc (showString "(\\forall") , prt 0 id0 , prt 0 id , prt 0 bodyf , doc (showString ")") , prt 0 jml])
-   JMLExistsRT id0 id bodyf jml -> prPrec i 0 (concatD [doc (showString "(\\exists") , prt 0 id0 , prt 0 id , prt 0 bodyf , doc (showString ")") , prt 0 jml])
+   JMLForallRT type' id bodyf jml -> prPrec i 0 (concatD [doc (showString "(\\forall") , prt 0 type' , prt 0 id , prt 0 bodyf , doc (showString ")") , prt 0 jml])
+   JMLExistsRT type' id bodyf jml -> prPrec i 0 (concatD [doc (showString "(\\exists") , prt 0 type' , prt 0 id , prt 0 bodyf , doc (showString ")") , prt 0 jml])
    JMLNil  -> prPrec i 0 (concatD [])
 
 

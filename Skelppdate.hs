@@ -21,7 +21,7 @@ transSymbols x = case x of
 
 transAbsPPDATE :: AbsPPDATE -> Result
 transAbsPPDATE x = case x of
-  AbsPPDATE imports global cinvariants contracts methods  -> failure x
+  AbsPPDATE imports global cinvariants htriples methods  -> failure x
 
 
 transImports :: Imports -> Result
@@ -174,7 +174,7 @@ transStarting x = case x of
 
 transState :: State -> Result
 transState x = case x of
-  State namestate initialcode contractnames  -> failure x
+  State namestate initialcode htnames  -> failure x
 
 
 transNameState :: NameState -> Result
@@ -182,14 +182,14 @@ transNameState x = case x of
   NameState id  -> failure x
 
 
-transContractNames :: ContractNames -> Result
-transContractNames x = case x of
-  CNS contractnames  -> failure x
+transHTNames :: HTNames -> Result
+transHTNames x = case x of
+  CNS htnames  -> failure x
   CNSNil  -> failure x
 
 
-transContractName :: ContractName -> Result
-transContractName x = case x of
+transHTName :: HTName -> Result
+transHTName x = case x of
   CN id  -> failure x
 
 
@@ -248,15 +248,15 @@ transCInvariant x = case x of
   CI id jml  -> failure x
 
 
-transContracts :: Contracts -> Result
-transContracts x = case x of
-  Contracts contracts  -> failure x
-  Constempty  -> failure x
+transHTriples :: HTriples -> Result
+transHTriples x = case x of
+  HTriples hts  -> failure x
+  HTempty  -> failure x
 
 
-transContract :: Contract -> Result
-transContract x = case x of
-  Contract id pre method post assignable  -> failure x
+transHT :: HT -> Result
+transHT x = case x of
+  HT id pre method post assignable  -> failure x
 
 
 transPre :: Pre -> Result
@@ -418,8 +418,8 @@ transJML x = case x of
   JMLBackS jml  -> failure x
   JMLOld jml1 jml2  -> failure x
   JMLRes jml  -> failure x
-  JMLForallRT id1 id2 bodyf3 jml4  -> failure x
-  JMLExistsRT id1 id2 bodyf3 jml4  -> failure x
+  JMLForallRT type' id bodyf jml  -> failure x
+  JMLExistsRT type' id bodyf jml  -> failure x
   JMLNil  -> failure x
 
 

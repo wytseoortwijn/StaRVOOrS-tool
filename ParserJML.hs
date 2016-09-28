@@ -24,37 +24,37 @@ fromCInvariant2JML (CI _ body) =
 
 -- For analysis of all the Hoare triples at once version
 
-getContracts' :: UpgradePPD PPDATE -> [(MethodName, ClassInfo, String)]
-getContracts' = genJMLConstsAll'
+getHTs' :: UpgradePPD PPDATE -> [(MethodName, ClassInfo, String)]
+getHTs' = genJMLConstsAll'
 
 genJMLConstsAll' :: UpgradePPD PPDATE -> [(MethodName, ClassInfo, String)]
 genJMLConstsAll' ppd = 
  let (ppdate, _) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
-     cs          = contractsGet ppdate
+     cs          = htsGet ppdate
  in map (\(x,z,y) -> (x, z,"  /*@ public normal_behaviour\n" ++ y ++ "    @*/\n")) $ genJMLConsts' cs []
 
-genJMLConsts' :: Contracts -> [(MethodName, ClassInfo, String)] -> [(MethodName, ClassInfo, String)]
+genJMLConsts' :: HTriples -> [(MethodName, ClassInfo, String)] -> [(MethodName, ClassInfo, String)]
 genJMLConsts' [] xs     = xs
 genJMLConsts' (c:cs) xs = let mn = snd $ methodCN c
                               cl = fst $ methodCN c  
                           in genJMLConsts' cs (updateJMLForM' c mn cl xs)
 
-updateJMLForM' :: Contract -> MethodName -> ClassInfo -> [(MethodName, ClassInfo, String)] -> [(MethodName, ClassInfo, String)]
-updateJMLForM' c mn cl []                   = [(mn, cl, fromContract2JML' c)]
+updateJMLForM' :: HT -> MethodName -> ClassInfo -> [(MethodName, ClassInfo, String)] -> [(MethodName, ClassInfo, String)]
+updateJMLForM' c mn cl []                   = [(mn, cl, fromHT2JML' c)]
 updateJMLForM' c mn cl ((mn', cl', jml):xs) = if (mn == mn' && cl == cl')
-                                              then (mn', cl', jml ++ "    @\n    @ also\n    @\n" ++ fromContract2JML' c):xs
+                                              then (mn', cl', jml ++ "    @\n    @ also\n    @\n" ++ fromHT2JML' c):xs
                                               else (mn', cl', jml):updateJMLForM' c mn cl xs
 
-fromContract2JML' :: Contract -> String
-fromContract2JML' (Contract cn _ precon postcon assig _ _ _) =  
+fromHT2JML' :: HT -> String
+fromHT2JML' (HT cn _ precon postcon assig _ _ _) =  
   "    @ " ++ requires' precon cn
   ++ "    @ " ++ ensures postcon
   ++ "    @ " ++ assign assig
   ++ "    @ diverges true;\n" -- partial correctness
 
--- bool variable added to be able to identify the contract
+-- bool variable added to be able to identify the Hoare triple
 -- associated to the jml specification when analysing the .xml file
-requires' :: Pre -> ContractName -> String
+requires' :: Pre -> HTName -> String
 requires' p cn = "requires " ++ cn ++ " && " ++ p ++ ";\n"
 
 
@@ -62,8 +62,8 @@ requires' p cn = "requires " ++ cn ++ " && " ++ p ++ ";\n"
 -- For one by one analysis of the Hoare triples version --
 ----------------------------------------------------------
 
-getContract :: Contract -> String
-getContract (Contract _ _ precon postcon assig _ _ _) =
+getHT :: HT -> String
+getHT (HT _ _ precon postcon assig _ _ _) =
   "  /*@ public normal_behaviour\n"
   ++ "    @ " ++ requires precon 
   ++ "    @ " ++ ensures postcon
@@ -71,26 +71,26 @@ getContract (Contract _ _ precon postcon assig _ _ _) =
   ++ "    @ diverges true;\n" -- partial correctness  
   ++ "    @*/\n"
 
-getContracts :: Contracts -> [(MethodName, String)]
-getContracts = genJMLConstsAll
+getHTs :: HTriples -> [(MethodName, String)]
+getHTs = genJMLConstsAll
 
-genJMLConstsAll :: Contracts -> [(MethodName, String)]
+genJMLConstsAll :: HTriples -> [(MethodName, String)]
 genJMLConstsAll cs = map (\(x,y) -> (x, "  /*@ public normal_behaviour\n" ++ y ++ "    @*/\n")) $ genJMLConsts cs []
 
 
-genJMLConsts :: Contracts -> [(MethodName, String)] -> [(MethodName, String)]
+genJMLConsts :: HTriples -> [(MethodName, String)] -> [(MethodName, String)]
 genJMLConsts [] xs     = xs
 genJMLConsts (c:cs) xs = let mn = snd $ methodCN c                         
                          in genJMLConsts cs (updateJMLForM c mn xs)
 
-updateJMLForM :: Contract -> MethodName -> [(MethodName, String)] -> [(MethodName, String)]
-updateJMLForM c mn []              = [(mn, fromContract2JML c)]
+updateJMLForM :: HT -> MethodName -> [(MethodName, String)] -> [(MethodName, String)]
+updateJMLForM c mn []              = [(mn, fromHT2JML c)]
 updateJMLForM c mn ((mn', jml):xs) = if (mn == mn')
-                                     then (mn', jml ++ "    @\n  @ also\n" ++ fromContract2JML c):xs
+                                     then (mn', jml ++ "    @\n  @ also\n" ++ fromHT2JML c):xs
                                      else (mn', jml):updateJMLForM c mn xs
 
-fromContract2JML :: Contract -> String
-fromContract2JML (Contract _ _ precon postcon assig _ _ _) =  
+fromHT2JML :: HT -> String
+fromHT2JML (HT _ _ precon postcon assig _ _ _) =  
   "    @ " ++ requires precon 
   ++ "    @ " ++ ensures postcon
   ++ "    @ " ++ assign assig

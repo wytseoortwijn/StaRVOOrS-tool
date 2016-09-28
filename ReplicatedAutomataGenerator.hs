@@ -7,12 +7,12 @@ import UpgradePPDATE
 import qualified Data.Map as Map
 
 
-generateRA :: [(Trigger, [String])] -> Triggers -> Contract -> Int -> Env -> Property
+generateRA :: [(Trigger, [String])] -> Triggers -> HT -> Int -> Env -> Property
 generateRA = makeReplicateAutomaton
 
-makeReplicateAutomaton :: [(Trigger, [String])] -> Triggers -> Contract -> Int -> Env -> Property
+makeReplicateAutomaton :: [(Trigger, [String])] -> Triggers -> HT -> Int -> Env -> Property
 makeReplicateAutomaton esinf es c n env = 
- Property (contractName c)
+ Property (htName c)
           (States [State "postOK" InitNil []] 
                   [State "bad" InitNil []] 
                   [State "idle" InitNil []] 
@@ -27,10 +27,10 @@ lookfor (x:xs) e = if (fst x==e)
                    then snd x
                    else lookfor xs e
 
-makeTransitions :: Contract -> Int -> [(Trigger, [String])] -> Triggers -> Env -> Transitions
+makeTransitions :: HT -> Int -> [(Trigger, [String])] -> Triggers -> Env -> Transitions
 makeTransitions c n esinf es env =
    let trig     = lookForExitTrigger es (snd $ methodCN c)
-       cn       = contractName c
+       cn       = htName c
        oldExpM  = oldExpTypes env
        arg      = foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf trig
        checkId  = "id.equals(idAux) && "

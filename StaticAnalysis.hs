@@ -29,7 +29,7 @@ import TypeInferenceXml
 staticAnalysis :: FilePath -> UpgradePPD PPDATE -> FilePath -> IO (UpgradePPD PPDATE)
 staticAnalysis jpath ppd output_add =
  let ppdate      = getValue ppd
-     consts      = contractsGet ppdate
+     consts      = htsGet ppdate
  in if (null consts)
     then do putStrLn "\nThere are no Hoare triples to analyse."
             return ppd
@@ -45,7 +45,7 @@ staticAnalysis' jpath ppd output_add =
      cinv_add    = output_addr ++ "workspace/filescinv"
      nulla_add   = output_addr ++ "workspace/filesnullable"
      ppdate      = getValue ppd
-     consts      = contractsGet ppdate
+     consts      = htsGet ppdate
  in do
        createDirectoryIfMissing False tmp_add
        createDirectoryIfMissing False output_add'
@@ -55,7 +55,7 @@ staticAnalysis' jpath ppd output_add =
        generateDummyBoolVars ppd tmp_add jpath
        generateTmpFilesCInvs ppd cinv_add tmp_add
        updateTmpFilesCInvs ppd nulla_add cinv_add
-       let consts_jml = ParserJML.getContracts' ppd
+       let consts_jml = ParserJML.getHTs' ppd
        copyFiles jpath output_add'
        generateTmpFilesAllConsts ppd consts_jml output_add' (nulla_add ++ "/")
        rawSystem "java" ["-jar","key.starvoors.jar",output_add', output_addr]
@@ -64,8 +64,8 @@ staticAnalysis' jpath ppd output_add =
        if b
        then do xml_to_parse <- readFile xml_add
                let xml     = ParserXMLKeYOut.parse xml_to_parse
-               let cns     = getContractNamesEnv ppd
-               let xml'    = removeNoneContracts xml cns
+               let cns     = getHTNamesEnv ppd
+               let xml'    = removeNoneHTs xml cns
                let ppdate' = refinePPDATE ppd xml'
                generateReport xml' output_addr
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
@@ -75,7 +75,7 @@ staticAnalysis' jpath ppd output_add =
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
                createDirectoryIfMissing True (output_addr ++ annotated_add)
-               contractsJavaFileGen ppdate'' add
+               htsJavaFileGen ppdate'' add
                idFileGen add
                cloningFileGen add
                oldExprFileGen add ppdate''
@@ -84,7 +84,7 @@ staticAnalysis' jpath ppd output_add =
                methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
                return ppdate''
        else do generateReportFailure output_addr
-               let ppd' = generateNewTriggers ppd (contractsGet $ getValue ppd)
+               let ppd' = generateNewTriggers ppd (htsGet $ getValue ppd)
                putStrLn "Generating Java files to control the Hoare triple(s) at runtime."
                oldExpTypes <- inferTypesOldExprs ppd' jpath (output_addr ++ "workspace/")
                let ppdate'' = operationalizeOldResultBind ppd' oldExpTypes
@@ -92,7 +92,7 @@ staticAnalysis' jpath ppd output_add =
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
                createDirectoryIfMissing True (output_addr ++ annotated_add)
-               contractsJavaFileGen ppdate'' add
+               htsJavaFileGen ppdate'' add
                idFileGen add
                cloningFileGen add
                oldExprFileGen add ppdate''

@@ -14,16 +14,16 @@ translate :: UpgradePPD PPDATE -> FilePath -> IO ()
 translate ppd fpath =
  do let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
     putStrLn "Translating ppDATE to DATE."
-    writeFile fpath (writeImports (importsGet ppdate) (contractsGet ppdate))
-    let consts = assocChannel2Contracts 1 $ (contractsGet ppdate)
-    let ppdate' = updateContractsPP ppdate consts
+    writeFile fpath (writeImports (importsGet ppdate) (htsGet ppdate))
+    let consts = assocChannel2HTs 1 $ (htsGet ppdate)
+    let ppdate' = updateHTsPP ppdate consts
     appendFile fpath (writeGlobal ppdate' env)
     putStrLn $ "Translation complete."
 
 
-assocChannel2Contracts :: Int -> Contracts -> Contracts
-assocChannel2Contracts _ []     = []
-assocChannel2Contracts n (c:cs) = updateCH c n:assocChannel2Contracts (n+1) cs
+assocChannel2HTs :: Int -> HTriples -> HTriples
+assocChannel2HTs _ []     = []
+assocChannel2HTs n (c:cs) = updateCH c n:assocChannel2HTs (n+1) cs
 
 ---------------------
 -- IMPORTS section --
@@ -33,7 +33,7 @@ getImports :: Imports -> String
 getImports []            = ""
 getImports (Import s:xs) = "import " ++ s ++ ";\n" ++ getImports xs
 
-writeImports :: Imports -> Contracts -> String
+writeImports :: Imports -> HTriples -> String
 writeImports xss const = let newImp = "import ppArtifacts.*;\n"
                          in if null const 
                             then "IMPORTS {\n" ++ getImports xss ++ "}\n\n"
@@ -45,7 +45,7 @@ writeImports xss const = let newImp = "import ppArtifacts.*;\n"
 
 writeGlobal :: PPDATE -> Env -> String
 writeGlobal ppdate env = let global = ctxtGet $ globalGet ppdate
-                             consts = contractsGet ppdate
+                             consts = htsGet ppdate
                              vars   = variables global
                              es     = triggers global
                              prop   = property global
@@ -97,7 +97,7 @@ generateChannels n = generateChannels (n-1) ++ " Channel h" ++ show n ++ " = new
 -- Triggers --
 --------------
 
-writeTriggers :: Triggers -> Contracts -> String
+writeTriggers :: Triggers -> HTriples -> String
 writeTriggers [] _      = ""
 writeTriggers es consts = "EVENTS {\n"
                         ++ writeAllTriggers (instrumentTriggers es consts)
@@ -165,28 +165,28 @@ auxGetTriggerVariation' [BindId ret] = ret
 
 
 -- Checks if the trigger to control has to be the auxiliary one (in case of optimization by key)
-instrumentTriggers :: Triggers -> Contracts -> Triggers
+instrumentTriggers :: Triggers -> HTriples -> Triggers
 instrumentTriggers [] cs     = []
-instrumentTriggers (e:es) cs = let (b,mn,bs) = lookupContractForTrigger e cs in
+instrumentTriggers (e:es) cs = let (b,mn,bs) = lookupHTForTrigger e cs in
                              if b
                              then let e'  = updateMethodCallName e (mn++"Aux")
                                       e'' = updateTriggerArgs e' ((args e') ++ [BindType "Integer" "id"])
                                   in updateMethodCallBody e'' (bs++[BindId "id"]):instrumentTriggers es cs
                              else e:instrumentTriggers es cs
 
-lookupContractForTrigger :: TriggerDef -> Contracts -> (Bool, MethodName, [Bind])
-lookupContractForTrigger e []     = (False,"", [])
-lookupContractForTrigger e (c:cs) = case compTrigger e of
+lookupHTForTrigger :: TriggerDef -> HTriples -> (Bool, MethodName, [Bind])
+lookupHTForTrigger e []     = (False,"", [])
+lookupHTForTrigger e (c:cs) = case compTrigger e of
                                        NormalEvent _ id bs _ -> if (id == snd (methodCN c))
                                                                 then (True, id, bs)
-                                                                else lookupContractForTrigger e cs
-                                       otherwise             -> lookupContractForTrigger e cs
+                                                                else lookupHTForTrigger e cs
+                                       otherwise             -> lookupHTForTrigger e cs
 
 ----------------
 -- Properties --
 ----------------
 
-writeProperties :: Property -> Contracts -> Triggers -> Env -> String
+writeProperties :: Property -> HTriples -> Triggers -> Env -> String
 writeProperties PNIL _ _ _         = ""
 writeProperties prop consts es env =
  let fors   = forsVars env --list of foreach variables
@@ -197,10 +197,10 @@ writeProperties prop consts es env =
     else xs ++ ra ++ "\n}\n}\n"
 
 
-getProperties :: Property -> Contracts -> Triggers -> Env -> String
+getProperties :: Property -> HTriples -> Triggers -> Env -> String
 getProperties = writeProperty
 
-writeProperty :: Property -> Contracts -> Triggers -> Env -> String
+writeProperty :: Property -> HTriples -> Triggers -> Env -> String
 writeProperty PNIL _ _ _                                   = ""
 writeProperty (Property name states trans props) cs es env =
   "PROPERTY " ++ name ++ " \n{\n\n"
@@ -235,9 +235,9 @@ getInitCode' :: InitialCode -> String
 getInitCode' InitNil         = ""
 getInitCode' (InitProg java) = "{" ++ init java ++ "}"
 
---Contracts [] -> Replicated Automata
---Contracts non-empty -> Property transitions instrumentation
-writeTransitions :: Transitions -> Contracts -> States -> Triggers -> Env -> String
+--HTriples [] -> Replicated Automata
+--HTriples non-empty -> Property transitions instrumentation
+writeTransitions :: Transitions -> HTriples -> States -> Triggers -> Env -> String
 writeTransitions ts [] _ _ _ =
  "TRANSITIONS \n{ \n"
  ++ concat (map getTransition ts)
@@ -251,7 +251,7 @@ getTransition :: Transition -> String
 getTransition (Transition q (Arrow e c act) q') =
      q ++ " -> " ++ q' ++ " [" ++ e ++ " \\ "  ++ c ++ " \\ " ++ act ++ "]\n"
 
-getTransitionsGeneral :: Contracts -> States -> Transitions -> Triggers -> Env -> Transitions
+getTransitionsGeneral :: HTriples -> States -> Transitions -> Triggers -> Env -> Transitions
 getTransitionsGeneral cs (States acc bad nor star) ts es env =
  let ts1 = generateTransitions acc cs ts es env
      ts2 = generateTransitions bad cs ts1 es env
@@ -259,20 +259,20 @@ getTransitionsGeneral cs (States acc bad nor star) ts es env =
      ts4 = generateTransitions star cs ts3 es env
  in ts4
 
-generateTransitions :: [State] -> Contracts -> Transitions -> Triggers -> Env -> Transitions
+generateTransitions :: [State] -> HTriples -> Transitions -> Triggers -> Env -> Transitions
 generateTransitions [] _ ts _ _                              = ts
 generateTransitions ((State ns ic []):xs) cs ts es env       = generateTransitions xs cs ts es env
 generateTransitions ((State ns ic l@(_:_)):xs) cs ts es env  = let ts' = accumTransitions l ns cs ts es env
                                                                in generateTransitions xs cs ts' es env
 
-accumTransitions :: [ContractName] -> NameState -> Contracts -> Transitions -> Triggers -> Env -> Transitions
+accumTransitions :: [HTName] -> NameState -> HTriples -> Transitions -> Triggers -> Env -> Transitions
 accumTransitions [] _ _ ts _ _                = ts
 accumTransitions (cn:cns) ns consts ts es env =
  let ts' = generateTransition cn ns consts ts es env
  in accumTransitions cns ns consts ts' es env
 
-generateTransition :: ContractName -> NameState -> Contracts -> Transitions -> Triggers -> Env -> Transitions
-generateTransition p ns cs ts es env = let c             = lookForContract p cs
+generateTransition :: HTName -> NameState -> HTriples -> Transitions -> Triggers -> Env -> Transitions
+generateTransition p ns cs ts es env = let c             = lookForHT p cs
                                            mn            = snd $ methodCN c
                                            e             = lookForEntryTrigger es mn
                                            (lts, nonlts) = lookForLeavingTransitions e ns ts
@@ -283,9 +283,9 @@ generateTransition p ns cs ts es env = let c             = lookForContract p cs
                                                in nonlts ++ xs ++ [ext]
 
 
-makeTransitionAlg1Cond :: NameState -> Trigger -> Triggers -> Contract -> Env -> Transition
+makeTransitionAlg1Cond :: NameState -> Trigger -> Triggers -> HT -> Env -> Transition
 makeTransitionAlg1Cond ns e triggers c env =
- let cn      = contractName c
+ let cn      = htName c
      oldExpM = oldExpTypes env
      esinf   = map getInfoTrigger triggers
      arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
@@ -297,7 +297,7 @@ makeTransitionAlg1Cond ns e triggers c env =
      msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
  in Transition ns (Arrow e c' act) ns
 
-getExpForOld :: OldExprM -> ContractName -> String
+getExpForOld :: OldExprM -> HTName -> String
 getExpForOld oldExpM cn = 
  case Map.lookup cn oldExpM of
       Nothing -> ""
@@ -305,7 +305,7 @@ getExpForOld oldExpM cn =
                  then ""
                  else cn ++ " = " ++ initOldExpr xs cn ++ ";"
 
-initOldExpr :: OldExprL -> ContractName -> String
+initOldExpr :: OldExprL -> HTName -> String
 initOldExpr oel cn = 
  "new Old_" ++ cn ++ "(" ++ addComma (map (\(x,_,_) -> x) oel) ++ ")"
 
@@ -319,13 +319,13 @@ makeExtraTransitionAlg2Cond (t:ts) =
  in
  "!("++ cond'' ++ ") && " ++ makeExtraTransitionAlg2Cond ts
 
-makeExtraTransitionAlg2 :: Transitions -> Contract -> Trigger -> Triggers -> NameState -> Env -> Transition
+makeExtraTransitionAlg2 :: Transitions -> HT -> Trigger -> Triggers -> NameState -> Env -> Transition
 makeExtraTransitionAlg2 ts c e es ns env = let esinf   = map getInfoTrigger es
                                                oldExpM = oldExpTypes env
-                                               cn      = contractName c
+                                               cn      = htName c
                                                zs      = getExpForOld oldExpM cn
                                                arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
-                                               pre'    = "HoareTriples." ++ (contractName c) ++ "_pre(" ++ arg ++ ")"
+                                               pre'    = "HoareTriples." ++ (htName c) ++ "_pre(" ++ arg ++ ")"
                                                type_   = if null zs then "PPD" else "Old_" ++ cn
                                                old     = if null zs then "" else "," ++ cn
                                                msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
@@ -333,9 +333,9 @@ makeExtraTransitionAlg2 ts c e es ns env = let esinf   = map getInfoTrigger es
                                            in Transition ns (Arrow e c' (zs ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");")) ns
 
 
-instrumentTransitionAlg2 :: Contract -> Transition -> Trigger -> Triggers -> Env -> Transition
+instrumentTransitionAlg2 :: HT -> Transition -> Trigger -> Triggers -> Env -> Transition
 instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e triggers env =
- let cn      = contractName c
+ let cn      = htName c
      oldExpM = oldExpTypes env
      esinf   = map getInfoTrigger triggers
      arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
@@ -347,11 +347,11 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e triggers env 
      act'    = " if (HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")) {" ++ zs ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "}"
  in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
 
-lookForContract :: PropertyName -> Contracts -> Contract
-lookForContract p []     = error $ "Wow! The impossible happened when checking the property "++ p ++ " on a state.\n"
-lookForContract p (c:cs) = if (contractName c == p)
-                             then c
-                             else lookForContract p cs
+lookForHT :: PropertyName -> HTriples -> HT
+lookForHT p []     = error $ "Wow! The impossible happened when checking the property "++ p ++ " on a state.\n"
+lookForHT p (c:cs) = if (htName c == p)
+                     then c
+                     else lookForHT p cs
 
 lookForLeavingTransitions :: Trigger -> NameState -> Transitions -> (Transitions, Transitions)
 lookForLeavingTransitions e ns []                                        = ([],[])
@@ -366,19 +366,19 @@ lookForLeavingTransitions e ns (t@(Transition q (Arrow e' c act) q'):ts) = if (e
 -- Replicated Automata --
 -------------------------
 
-generateReplicatedAutomata :: Contracts -> [Id] -> Triggers -> Env -> String
+generateReplicatedAutomata :: HTriples -> [Id] -> Triggers -> Env -> String
 generateReplicatedAutomata cs fs es env = 
  let n      = length cs
      ys     = zip cs [1..n]
      esinf  = map getInfoTrigger es
      props  = map (uncurry (generateRAString esinf es env)) ys
      fors   = generateWhereInfo fs
-     triggers = generateTriggersRA fors (map (\(x,y) -> (contractName x,y)) ys) env
+     triggers = generateTriggersRA fors (map (\(x,y) -> (htName x,y)) ys) env
      eps    = zip triggers props
  in generateProp eps env
 
 
-generateProp :: [(String,(String,ContractName))] -> Env -> String
+generateProp :: [(String,(String,HTName))] -> Env -> String
 generateProp [] _               = ""
 generateProp ((es,ps):eps)  env = 
  let cn       = snd ps
@@ -406,10 +406,10 @@ generateWhereInfo :: [Id] -> String
 generateWhereInfo []     = ""
 generateWhereInfo (f:fs) = f ++ "=null;" ++ generateWhereInfo fs
 
-generateTriggersRA :: String -> [(ContractName,Int)] -> Env -> [String]
+generateTriggersRA :: String -> [(HTName,Int)] -> Env -> [String]
 generateTriggersRA fs ns env = map (uncurry (generateTriggerRA fs env)) ns
 
-generateTriggerRA :: String -> Env -> ContractName -> Int -> String
+generateTriggerRA :: String -> Env -> HTName -> Int -> String
 generateTriggerRA fs env cn n =
  let oldExpM  = oldExpTypes env
      zs       = getOldExpr oldExpM cn
@@ -417,7 +417,7 @@ generateTriggerRA fs env cn n =
  in "rh" ++ show n ++ "(Messages" ++ nvar ++ " msg) = {h"++ show n ++ ".receive(msg)} where {id=msg.id;"
     ++ fs ++  "}\n"
 
-generateRAString :: [(Trigger, [String])] -> Triggers -> Env -> Contract -> Int -> (String,ContractName)
+generateRAString :: [(Trigger, [String])] -> Triggers -> Env -> HT -> Int -> (String,HTName)
 generateRAString esinf es env c n =
   let ra = generateRA esinf es c n env
       cn = pName ra
@@ -431,7 +431,7 @@ generateRAString esinf es env c n =
 -- Foreach --
 -------------
 
-writeForeach :: Foreaches -> Contracts -> Env -> String
+writeForeach :: Foreaches -> HTriples -> Env -> String
 writeForeach [] _ _                         = ""
 writeForeach [Foreach args ctxt] consts env =
  let vars   = variables ctxt
