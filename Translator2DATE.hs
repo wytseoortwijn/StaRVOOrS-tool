@@ -289,7 +289,7 @@ makeTransitionAlg1Cond ns e triggers c env =
      oldExpM = oldExpTypes env
      esinf   = map getInfoTrigger triggers
      arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
-     c'      = "HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")"
+     c'      = "HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")"
      act     = getExpForOld oldExpM cn ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
      zs      = getExpForOld oldExpM cn
      type_   = if null zs then "PPD" else "Old_" ++ cn
@@ -325,7 +325,7 @@ makeExtraTransitionAlg2 ts c e es ns env = let esinf   = map getInfoTrigger es
                                                cn      = htName c
                                                zs      = getExpForOld oldExpM cn
                                                arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
-                                               pre'    = "HoareTriples." ++ (htName c) ++ "_pre(" ++ arg ++ ")"
+                                               pre'    = "HoareTriplesPPD." ++ (htName c) ++ "_pre(" ++ arg ++ ")"
                                                type_   = if null zs then "PPD" else "Old_" ++ cn
                                                old     = if null zs then "" else "," ++ cn
                                                msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
@@ -344,7 +344,7 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e triggers env 
      type_   = if null zs then "PPD" else "Old_" ++ cn
      old     = if null zs then "" else "," ++ cn
      msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
-     act'    = " if (HoareTriples." ++ cn ++ "_pre(" ++ arg ++ ")) {" ++ zs ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "}"
+     act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) {" ++ zs ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "}"
  in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
 
 lookForHT :: PropertyName -> HTriples -> HT

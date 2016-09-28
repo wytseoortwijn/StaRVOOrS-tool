@@ -31,9 +31,9 @@ htsJavaFileGen ppd output_add =
      methods       = map (\ c -> (methodForPre c env, methodForPost c env oldExpM)) consts''
      body          = concat $ map joinInfo $ zip3 methods new_methods new_methods'
  in do 
-       let address = output_add ++ "HoareTriples.java"
+       let address = output_add ++ "HoareTriplesPPD.java"
        writeFile address (genPackageInfo ++ genImports' imp ++ "\n\n")
-       appendFile address "public class HoareTriples {\n\n  HoareTriples () {}\n\n"
+       appendFile address "public class HoareTriplesPPD {\n\n  HoareTriplesPPD () {}\n\n"
        if (null consts) then return () else appendFile address body       
        appendFile address "\n}"
 
@@ -134,18 +134,18 @@ lookforArgs (x:xs) e = if (fst x==e)
 
 
 -------------
--- Id.java --
+-- IdPPD.java --
 -------------
 
 idFileGen :: FilePath -> IO ()
-idFileGen output_add = writeFile (output_add ++ "Id.java") idGen
+idFileGen output_add = writeFile (output_add ++ "IdPPD.java") idGen
     
 idGen :: String
 idGen =
  "package ppArtifacts;\n\n"
-  ++ "public class Id {\n\n"
+  ++ "public class IdPPD {\n\n"
   ++ "  private static int count = 0; \n\n"
-  ++ "  public Id () { }\n\n"
+  ++ "  public IdPPD () { }\n\n"
   ++ "public Integer getNewId() {\n"
   ++ "  Integer r = new Integer(count);\n"
   ++ "  count++;\n\n"

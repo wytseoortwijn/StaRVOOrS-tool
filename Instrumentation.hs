@@ -58,7 +58,7 @@ addNewImportInfo s (_:_) cl = let xs = splitOnIdentifier "package" (clean s)
                                       in unlines $ addFidDec s' cl
                                  else let s'    = lines ((head.tail) xs)
                                           begin = (head xs) ++ "package" ++ (head s') ++ "\n"
-                                      in begin ++ "\nimport ppArtifacts.Id;\n" ++ unlines (addFidDec (tail s') cl)
+                                      in begin ++ "\nimport ppArtifacts.IdPPD;\n" ++ unlines (addFidDec (tail s') cl)
 
 addFidDec :: [String] -> T.ClassInfo -> [String]
 addFidDec [] _         = []
@@ -72,7 +72,7 @@ addFidDec (xs:xss) cl  = if (clean xs == "")
 addFidDec' :: [String] -> [String]
 addFidDec' []       = []
 addFidDec' (xs:xss) = if (clean xs == "")
-                      then (xs ++ "\n  public Id fid = new Id();\n"):xss 
+                      then (xs ++ "\n  public IdPPD fid = new IdPPD();\n"):xss 
                       else xs:addFidDec' xss
 
 -- Added due to bug in the java library

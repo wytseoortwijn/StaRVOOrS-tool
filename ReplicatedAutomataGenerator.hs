@@ -36,8 +36,8 @@ makeTransitions c n esinf es env =
        checkId  = "id.equals(idAux) && "
        zs       = getOldExpr oldExpM cn  
        nvar     = if null zs then "" else "CopyUtilsPPD.copy(MessagesOld_" ++ cn ++ ".getOldExpr(msg),oldExpAux); "
-       idle_to_postok = Arrow trig (checkId ++ "HoareTriples." ++ cn ++ "_post(" ++ init arg ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_postOK \\n \");")
-       idle_to_bad    = Arrow trig (checkId ++ "!HoareTriples." ++ cn ++ "_post(" ++ init arg ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_bad \\n \");")
+       idle_to_postok = Arrow trig (checkId ++ "HoareTriplesPPD." ++ cn ++ "_post(" ++ init arg ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_postOK \\n \");")
+       idle_to_bad    = Arrow trig (checkId ++ "!HoareTriplesPPD." ++ cn ++ "_post(" ++ init arg ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_bad \\n \");")
        start_to_idle  = Arrow ("rh" ++ show n) "" ("CopyUtilsPPD.copy(MessagesPPD.getId(msg),idAux) ; " ++ nvar ++ "System.out.println(\"    " ++ cn ++ "_preOK \\n\");")
    in [Transition "start" start_to_idle "idle",
       Transition "idle" idle_to_postok "postOK",
