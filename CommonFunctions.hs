@@ -10,7 +10,7 @@ import qualified Data.Map as Map
 
 readIdentifier :: String -> Err (String, String)
 readIdentifier text 
-  | identifier == "" = fail "Error Parsing: Expecting identifier but not found.\n"
+  | identifier == "" = fail "Error Parsing: Expecting identifier, but none was found.\n"
   | otherwise        = return (identifier, text')
   where
     (identifier, text') = break (\c -> c == '}' || c == '{') text
@@ -51,29 +51,23 @@ checkIfParseErrors es = let (ls, rs) = partitionEithers es
                            else Right rs
 
 
-lookForExitTrigger :: Triggers -> MethodName -> Trigger
-lookForExitTrigger [] mn     = error $ "Missing exit event for method " ++ mn ++ ".\n"
-lookForExitTrigger (e:es) mn = 
- case (compTrigger e) of 
-      NormalEvent _ id _ evar -> 
-              case evar of
-                   EVExit _ -> if (mn == id)
-                               then tName e
-                               else lookForExitTrigger es mn
-                   _        -> lookForExitTrigger es mn
-      otherwise -> lookForExitTrigger es mn
+lookForExitTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> Trigger
+lookForExitTrigger [] mn                = error $ "Missing exit trigger for method " ++ mn ++ ".\n"
+lookForExitTrigger ((tr,mn',e,_):es) mn = 
+    case e of
+        EVExit _ -> if (mn == mn')
+                    then tr
+                    else lookForExitTrigger es mn
+        _        -> lookForExitTrigger es mn        
 
-lookForEntryTrigger :: Triggers -> MethodName -> Trigger
-lookForEntryTrigger [] mn     = error $ "Missing entry event for method " ++ mn ++ ".\n"
-lookForEntryTrigger (e:es) mn = 
- case (compTrigger e) of 
-      NormalEvent _ id _ evar -> 
-              case evar of
-                   EVEntry -> if (mn == id)
-                               then tName e
-                               else lookForEntryTrigger es mn
-                   _       -> lookForEntryTrigger es mn
-      otherwise -> lookForEntryTrigger es mn
+lookForEntryTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> Trigger
+lookForEntryTrigger [] mn                = error $ "Missing exit trigger for method " ++ mn ++ ".\n"
+lookForEntryTrigger ((tr,mn',e,_):es) mn = 
+    case e of
+        EVEntry -> if (mn == mn')
+                   then tr
+                   else lookForEntryTrigger es mn
+        _       -> lookForEntryTrigger es mn  
 
 openingBracket :: String -> Bool
 openingBracket "" = False
@@ -83,7 +77,7 @@ args2Str :: [Bind] -> String
 args2Str []       = ""
 args2Str (bn:bns) = case bn of
                          BindType t id -> t ++ " " ++ id ++ "," ++ args2Str bns
-                         _ -> error "argst2Str: An event has a wrongly defined argument.\n"
+                         _ -> error "argst2Str: A trigger has a wrongly defined argument.\n"
 
 removeDuplicates :: Eq a => [a] -> [a]
 removeDuplicates []     = []
@@ -144,6 +138,19 @@ getOldExpr oldExpM cn =
       Just xs -> if null xs 
                  then ""
                  else "," ++ cn
+
+getBindArgs' :: [Bind] -> String
+getBindArgs' []                     = ""
+getBindArgs' [BindType t id]        = t ++ " " ++ id
+getBindArgs' ((BindType t id):y:ys) = t ++ " " ++ id ++ "," ++ getBindArgs' (y:ys)
+getBindArgs' _                      = ""
+
+getInfoTrigger :: (Id,MethodName,TriggerVariation,[Bind]) -> Maybe (Trigger, [String])
+getInfoTrigger (tr,mn',e,bs) = 
+ case e of
+     EVExit _ -> Just (tr,splitOnIdentifier "," $ getBindArgs' bs)
+     EVEntry  -> Just (tr,splitOnIdentifier "," $ getBindArgs' bs)
+     _        -> Nothing
 
 ---------------------------------------
 -- Manipulating the parsed .xml file --

@@ -113,13 +113,6 @@ getTrigger (TriggerDef e arg cpe wc) =
  in e ++ "(" ++ getBindArgs' arg ++ ") = " ++ getCpe cpe ++ wc' ++ "\n"
 
 
-getBindArgs' :: [Bind] -> String
-getBindArgs' []                     = ""
-getBindArgs' [BindType t id]        = t ++ " " ++ id
-getBindArgs' ((BindType t id):y:ys) = t ++ " " ++ id ++ "," ++ getBindArgs' (y:ys)
-getBindArgs' _                      = ""
-
-
 getCpe :: CompoundTrigger -> String
 getCpe (Collection (CECollection xs)) = "{" ++ getCollectionCpeCompoundTrigger xs ++ "}"
 getCpe ce@(OnlyIdPar _)               = getCpeCompoundTrigger ce
@@ -274,20 +267,20 @@ accumTransitions (cn:cns) ns consts ts es env =
 generateTransition :: HTName -> NameState -> HTriples -> Transitions -> Triggers -> Env -> Transitions
 generateTransition p ns cs ts es env = let c             = lookForHT p cs
                                            mn            = snd $ methodCN c
-                                           e             = lookForEntryTrigger es mn
+                                           e             = lookForEntryTrigger (allTriggers env) mn
                                            (lts, nonlts) = lookForLeavingTransitions e ns ts
                                        in if (null lts)
-                                          then ts ++ [(makeTransitionAlg1Cond ns e es c env)]
-                                          else let ext = makeExtraTransitionAlg2 lts c e es ns env
-                                                   xs  = map (\x -> instrumentTransitionAlg2 c x e es env) lts
+                                          then ts ++ [(makeTransitionAlg1Cond ns e c env)]
+                                          else let ext = makeExtraTransitionAlg2 lts c e ns env
+                                                   xs  = map (\x -> instrumentTransitionAlg2 c x e env) lts
                                                in nonlts ++ xs ++ [ext]
 
 
-makeTransitionAlg1Cond :: NameState -> Trigger -> Triggers -> HT -> Env -> Transition
-makeTransitionAlg1Cond ns e triggers c env =
+makeTransitionAlg1Cond :: NameState -> Trigger -> HT -> Env -> Transition
+makeTransitionAlg1Cond ns e c env =
  let cn      = htName c
      oldExpM = oldExpTypes env
-     esinf   = map getInfoTrigger triggers
+     esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
      arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
      c'      = "HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")"
      act     = getExpForOld oldExpM cn ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
@@ -319,25 +312,25 @@ makeExtraTransitionAlg2Cond (t:ts) =
  in
  "!("++ cond'' ++ ") && " ++ makeExtraTransitionAlg2Cond ts
 
-makeExtraTransitionAlg2 :: Transitions -> HT -> Trigger -> Triggers -> NameState -> Env -> Transition
-makeExtraTransitionAlg2 ts c e es ns env = let esinf   = map getInfoTrigger es
-                                               oldExpM = oldExpTypes env
-                                               cn      = htName c
-                                               zs      = getExpForOld oldExpM cn
-                                               arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
-                                               pre'    = "HoareTriplesPPD." ++ (htName c) ++ "_pre(" ++ arg ++ ")"
-                                               type_   = if null zs then "PPD" else "Old_" ++ cn
-                                               old     = if null zs then "" else "," ++ cn
-                                               msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
-                                               c'      = makeExtraTransitionAlg2Cond ts ++ pre'
-                                           in Transition ns (Arrow e c' (zs ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");")) ns
+makeExtraTransitionAlg2 :: Transitions -> HT -> Trigger -> NameState -> Env -> Transition
+makeExtraTransitionAlg2 ts c e ns env = let esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
+                                            oldExpM = oldExpTypes env
+                                            cn      = htName c
+                                            zs      = getExpForOld oldExpM cn
+                                            arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
+                                            pre'    = "HoareTriplesPPD." ++ (htName c) ++ "_pre(" ++ arg ++ ")"
+                                            type_   = if null zs then "PPD" else "Old_" ++ cn
+                                            old     = if null zs then "" else "," ++ cn
+                                            msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
+                                            c'      = makeExtraTransitionAlg2Cond ts ++ pre'
+                                        in Transition ns (Arrow e c' (zs ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");")) ns
 
 
-instrumentTransitionAlg2 :: HT -> Transition -> Trigger -> Triggers -> Env -> Transition
-instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e triggers env =
+instrumentTransitionAlg2 :: HT -> Transition -> Trigger -> Env -> Transition
+instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env =
  let cn      = htName c
      oldExpM = oldExpTypes env
-     esinf   = map getInfoTrigger triggers
+     esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
      arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
      semicol = if (act == "") then "" else ";"     
      zs      = getExpForOld oldExpM cn
@@ -370,11 +363,11 @@ generateReplicatedAutomata :: HTriples -> [Id] -> Triggers -> Env -> String
 generateReplicatedAutomata cs fs es env = 
  let n      = length cs
      ys     = zip cs [1..n]
-     esinf  = map getInfoTrigger es
+     esinf  = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
      props  = map (uncurry (generateRAString esinf es env)) ys
      fors   = generateWhereInfo fs
      triggers = generateTriggersRA fors (map (\(x,y) -> (htName x,y)) ys) env
-     eps    = zip triggers props
+     eps      = zip triggers props
  in generateProp eps env
 
 
@@ -385,22 +378,12 @@ generateProp ((es,ps):eps)  env =
      oldExpM  = oldExpTypes env
      zs       = getOldExpr oldExpM cn
      nvar     = if null zs then "" else "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n" 
- in "FOREACH (Integer id) {\n\n"
+ in "FOREACH (Integer idPPD) {\n\n"
     ++ "VARIABLES {\n" ++ " Integer idAux = new Integer(0);\n " ++ nvar ++ "}\n\n"
     ++ "EVENTS {\n" ++ es ++ "}\n\n"
     ++ fst ps
     ++ "}\n\n"
     ++ generateProp eps env
-
-getInfoTrigger :: TriggerDef -> (Trigger, [String])
-getInfoTrigger (TriggerDef en args ce w) = case ce of
-                                            NormalEvent (BindingVar bind) _ _ _ ->
-                                                case bind of
-                                                     BindType t id -> (en, splitOnIdentifier "," $ getBindArgs' ((BindType t id):args))
-                                                     otherwise     -> (en, splitOnIdentifier "," $ getBindArgs' args)
-                                            otherwise -> error $ "Error: Problem when generating a replicated automaton associated to the trigger " ++ en ++  " .\n"
-
-
 
 generateWhereInfo :: [Id] -> String
 generateWhereInfo []     = ""
@@ -414,12 +397,12 @@ generateTriggerRA fs env cn n =
  let oldExpM  = oldExpTypes env
      zs       = getOldExpr oldExpM cn
      nvar     = if null zs then "PPD" else "Old_" ++ cn
- in "rh" ++ show n ++ "(Messages" ++ nvar ++ " msg) = {h"++ show n ++ ".receive(msg)} where {id=msg.id;"
+ in "rh" ++ show n ++ "(Messages" ++ nvar ++ " msg) = {h"++ show n ++ ".receive(msg)} where {idPPD=msg.id;"
     ++ fs ++  "}\n"
 
 generateRAString :: [(Trigger, [String])] -> Triggers -> Env -> HT -> Int -> (String,HTName)
 generateRAString esinf es env c n =
-  let ra = generateRA esinf es c n env
+  let ra = generateRA c n env
       cn = pName ra
   in ("PROPERTY " ++ cn ++ "\n{\n\n"
      ++ writeStates (pStates ra)
@@ -446,7 +429,7 @@ writeForeach [Foreach args ctxt] consts env =
     ++ writeTriggers es consts
     ++ writeProperties prop consts es env
     ++ writeForeach fors consts env
-    -- ++ "}\n"
+    ++ "}\n"
 
 getForeachArgs :: [Args] -> String
 getForeachArgs []               = ""

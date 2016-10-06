@@ -262,11 +262,15 @@ data CompoundTrigger =
  | Collection TriggerList
   deriving (Eq,Show,Read)
 
+getCTVariation :: CompoundTrigger -> TriggerVariation
+getCTVariation (NormalEvent _ _ _ tv) = tv
+
 data TriggerVariation =
    EVEntry
  | EVExit [Bind]
  | EVThrow [Bind]
  | EVHadle [Bind]
+ | EVNil--Added to simplify search of triggers during the translation
   deriving (Eq,Show,Read)
 
 data TriggerList =

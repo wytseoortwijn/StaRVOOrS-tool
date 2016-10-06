@@ -146,7 +146,7 @@ getTrigger' :: Abs.Trigger -> UpgradePPD TriggerDef
 getTrigger' (Abs.Trigger id binds ce wc)      =
  do env  <- get
     let id'' = getIdAbs id
-    let err  = if (elem id'' (allTriggersId env)) then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") else ""
+    let err  = if (elem id'' (map (\(x,y,z,t) -> x) (allTriggers env))) then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") else ""
     do case runWriter (getBindsArgs binds) of
          (bs, s) ->
            let err0 = if (not.null) s then (err ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s ++ "].\n") else err
@@ -171,7 +171,7 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
                                                             if b
                                                              then if (not.null) err1 then fail err1 else
                                                                  do let env' = updateEntryTriggersInfo env (id'', getTriggerClass bind, (map bindToArgs bs)) bs mn bind
-                                                                    put env' { allTriggersId = id'' : allTriggersId env }
+                                                                    put env' { allTriggers = (id'',mn,EVEntry,(properBind bind) ++bs) : allTriggers env }
                                                                     return TriggerDef { tName = id''
                                                                                       , args  = bs
                                                                                       , compTrigger = ce'
@@ -190,7 +190,7 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
                                                             if (b && (checkRetVar rs argss))
                                                             then if (not.null) err1 then fail err1 else
                                                                  do let env' = updateExitTriggersInfo env (id'', getTriggerClass bind, (map bindToArgs bs)) bs mn bind
-                                                                    put env' { allTriggersId = id'' : allTriggersId env }
+                                                                    put env' { allTriggers = (id'',mn,EVExit rs,(properBind bind) ++ bs) : allTriggers env }
                                                                     return TriggerDef { tName = id''
                                                                                       , args  = bs
                                                                                       , compTrigger = ce'
@@ -203,12 +203,16 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
                                                                      , whereClause = getWhereClause wc
                                                                      }
                           _  -> if (not.null) err1 then fail err1 else
-                                do put env { allTriggersId = id'' : allTriggersId env }
+                                do put env { allTriggers = (id'',"",EVNil,bs) : allTriggers env }
                                    return TriggerDef { tName = id''
                                                      , args  = bs
                                                      , compTrigger = ce'
                                                      , whereClause = getWhereClause wc
                                                      }
+
+properBind :: Bind -> [Bind]
+properBind (BindType t id) = [BindType t id]
+properBind _               = []
 
 checkAllArgs :: [Id] -> [Id] -> Bind -> Writer [String] Bool
 checkAllArgs argss allArgs bind =
@@ -591,10 +595,10 @@ type MapTrigger = Map.Map MethodName (Id, String, [Args]) --(trigger_name,type c
 --Triggers associated to methods in Hoare triples should include: type class_variable
 data Env = Env
  { forsVars            :: [Id]
- , entryTriggersInfo     :: Map.Map ClassInfo MapTrigger
- , exitTriggersInfo      :: Map.Map ClassInfo MapTrigger
- , allTriggersId         :: [Id]
- , htsNames      :: [HTName]
+ , entryTriggersInfo   :: Map.Map ClassInfo MapTrigger
+ , exitTriggersInfo    :: Map.Map ClassInfo MapTrigger
+ , allTriggers         :: [(Id,MethodName,TriggerVariation,[Bind])]
+ , htsNames            :: [HTName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
  , methodsInFiles      :: [(String, ClassInfo, [(Type,Id,[String])])] --[(path_to_class,class_name,[(returned_type,method_name,arguments)])]
  , oldExpTypes         :: OldExprM
@@ -607,8 +611,8 @@ emptyEnv :: Env
 emptyEnv = Env { forsVars            = []
                , entryTriggersInfo   = Map.empty
                , exitTriggersInfo    = Map.empty
-               , allTriggersId       = []
-               , htsNames      = []
+               , allTriggers         = []
+               , htsNames            = []
                , varsInFiles         = []
                , methodsInFiles      = []
                , oldExpTypes         = Map.empty

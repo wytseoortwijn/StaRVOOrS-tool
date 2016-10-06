@@ -191,11 +191,13 @@ addNewTriggerEntry env ppdate n (x:xs) =
   in case Map.lookup cn (entryTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn v Map.empty
                      ppdate'   = addTrigger2ppDATE tr ppdate 
-                 in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) }) ppdate' (n+1) xs
+                 in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
+                                            , allTriggers = (tName tr,mn,EVEntry,args tr):allTriggers env}) ppdate' (n+1) xs
       Just mapeinfo -> 
            let mapeinfo' = Map.insert mn v mapeinfo
                ppdate'   = addTrigger2ppDATE tr ppdate 
-           in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) }) ppdate' (n+1) xs
+           in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
+                                      , allTriggers = (tName tr,mn,EVEntry, args tr):allTriggers env}) ppdate' (n+1) xs
 
 --Creates the info to be added in the environment and the ppDATE about the new exit trigger
 createTriggerExit:: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> ((ClassInfo,MethodName,(Id, String, [Args])), TriggerDef)
@@ -224,11 +226,13 @@ addNewTriggerExit env ppdate n (x:xs) =
  in case Map.lookup cn (exitTriggersInfo env) of
       Nothing -> let mapeinfo' = Map.insert mn v Map.empty
                      ppdate'   = addTrigger2ppDATE tr ppdate 
-                 in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env) }) ppdate' (n+1) xs
+                 in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
+                                           , allTriggers = (tName tr,mn, getCTVariation (compTrigger tr),args tr):allTriggers env }) ppdate' (n+1) xs
       Just mapeinfo -> 
            let mapeinfo' = Map.insert mn v mapeinfo
                ppdate'   = addTrigger2ppDATE tr ppdate 
-           in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env) }) ppdate' (n+1) xs
+           in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
+                                     , allTriggers = (tName tr,mn, getCTVariation (compTrigger tr),args tr):allTriggers env }) ppdate' (n+1) xs
 
 addTrigger2ppDATE :: TriggerDef -> PPDATE -> PPDATE
 addTrigger2ppDATE tr (PPDATE imp (Global (Ctxt vars ies trs p for)) ci consts ms) =

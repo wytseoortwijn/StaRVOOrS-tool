@@ -22,6 +22,7 @@ import System.FilePath
 import qualified Data.Map as Map
 import TypeInferenceXml
 
+
 -------------------------------
 -- Static Analysis using KeY --
 -------------------------------
@@ -84,7 +85,7 @@ staticAnalysis' jpath ppd output_add =
                methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
                return ppdate''
        else do generateReportFailure output_addr
-               let ppd' = generateNewTriggers ppd (htsGet $ getValue ppd)
+               let ppd' = generateNewTriggers ppd (htsGet $ getValue ppd)               
                putStrLn "Generating Java files to control the Hoare triple(s) at runtime."
                oldExpTypes <- inferTypesOldExprs ppd' jpath (output_addr ++ "workspace/")
                let ppdate'' = operationalizeOldResultBind ppd' oldExpTypes
