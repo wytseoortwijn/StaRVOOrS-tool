@@ -8,28 +8,27 @@ import CommonFunctions
 import Data.List 
 
 
-parse :: XML -> IO [Proof]
+parse :: XML -> [Proof]
 parse xml_fn = 
-  do r <- readFile xml_fn
-     let xml = xmlParse "(No Document)" r
-     let (Document _ _ root _) = xml
-     let rootElem = CElem root noPos
-     let xs = (tag "result" /> tag "proof" $ rootElem)
-     let ys = map (tag "proof" /> tag "executionPath") xs
-     let proof_info       = map getProofInfo xs
-     let epath_conds      = map (map getPathCondition) ys
-     let epath_verif      = map (map getVerified) ys
-     let epath_newconds   = map (map getNewPrecondition) ys
-     let epath_tkind      = map (map getTerminationKind) ys
-     let epath_notfpres   = map (map getNotFulfilledPres) ys
-     let epath_notchecks  = map (map getNotFulfilledNullChecks) ys
-     let epath_initLoop   = map (map getNotInitValidLoopInvs) ys
-     let epath_preserLoop = map (map getNotPreservedLoopInvs) ys
-     let components       = zip8 epath_conds epath_verif epath_newconds epath_tkind epath_notfpres epath_notchecks epath_initLoop epath_preserLoop
-     let epath  = map (foldr (\p xs -> (makeEPath p):xs) [] . (\(x, y, z, t, u, i, o, p) -> zip8 x y z t u i o p)) components
-     let epath' = map (map translateEPATH) epath
-     let proof  = foldr foo [] $ zip proof_info epath'
-     return proof
+  let xml = xmlParse "(No Document)" xml_fn
+      (Document _ _ root _) = xml
+      rootElem = CElem root noPos
+      xs = (tag "result" /> tag "proof" $ rootElem)
+      ys = map (tag "proof" /> tag "executionPath") xs
+      proof_info       = map getProofInfo xs
+      epath_conds      = map (map getPathCondition) ys
+      epath_verif      = map (map getVerified) ys
+      epath_newconds   = map (map getNewPrecondition) ys
+      epath_tkind      = map (map getTerminationKind) ys
+      epath_notfpres   = map (map getNotFulfilledPres) ys
+      epath_notchecks  = map (map getNotFulfilledNullChecks) ys
+      epath_initLoop   = map (map getNotInitValidLoopInvs) ys
+      epath_preserLoop = map (map getNotPreservedLoopInvs) ys
+      components       = zip8 epath_conds epath_verif epath_newconds epath_tkind epath_notfpres epath_notchecks epath_initLoop epath_preserLoop
+      epath  = map (foldr (\p xs -> (makeEPath p):xs) [] . (\(x, y, z, t, u, i, o, p) -> zip8 x y z t u i o p)) components
+      epath' = map (map translateEPATH) epath
+      proof  = foldr foo [] $ zip proof_info epath'
+  in proof
           where foo (x,ep) xs  = (Proof { contractId    = fst' x
                                         , contractText  = snd' x
                                         , typee         = trd' x
@@ -45,7 +44,7 @@ translateEPATH :: EPath -> EPath
 translateEPATH epath = epath { pathCondition = translate $ pathCondition epath }
 
 symbolsXML :: [(String,String)]
-symbolsXML = [("&amp;","&&"), ("&gt;=",">="), ("&gt;", ">"), (" =","=="), ("&quot;","\""),("&apos;","\\"),("&lt;","<"),("&lt;=","<=")]
+symbolsXML = [("&amp;","&&"), ("&gt;=",">="), ("&gt;", ">"), (" =","=="), ("&quot;","\""),("&apos;","\\"),("&lt;","<"),("&lt;=","<="),("TRUE","true"),("FALSE","false")]
 
 translate :: String -> String
 translate s = (\ x -> replaceSymbols x symbolsXML) s

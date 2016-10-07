@@ -10,7 +10,7 @@ module Absppdate where
 newtype Id = Id String deriving (Eq,Ord,Show,Read)
 newtype Symbols = Symbols String deriving (Eq,Ord,Show,Read)
 data AbsPPDATE =
-   AbsPPDATE Imports Global CInvariants Contracts Methods
+   AbsPPDATE Imports Global CInvariants HTriples Methods
   deriving (Eq,Ord,Show,Read)
 
 data Imports =
@@ -30,7 +30,7 @@ data Global =
   deriving (Eq,Ord,Show,Read)
 
 data Context =
-   Ctxt Variables Events Properties Foreaches
+   Ctxt Variables IEvents Triggers Properties Foreaches
   deriving (Eq,Ord,Show,Read)
 
 data Variables =
@@ -47,28 +47,37 @@ data VarModifier =
  | VarModifierNil
   deriving (Eq,Ord,Show,Read)
 
-data Events =
-   EventsNil
- | EventsDef [Event]
+data IEvents =
+   IEventsNil
+ | IEventsDef [IEvent]
   deriving (Eq,Ord,Show,Read)
 
-data Event =
-   Event Id [Bind] CompoundEvent WhereClause
+data IEvent =
+   IEvent Id
   deriving (Eq,Ord,Show,Read)
 
-data CompoundEvent =
-   Collection EventList
- | NormalEvent Binding Id [Vars] EventVariation
+data Triggers =
+   TriggersNil
+ | TriggersDef [Trigger]
+  deriving (Eq,Ord,Show,Read)
+
+data Trigger =
+   Trigger Id [Bind] CompoundTrigger WhereClause
+  deriving (Eq,Ord,Show,Read)
+
+data CompoundTrigger =
+   Collection TriggerList
+ | NormalEvent Binding Id [Vars] TriggerVariation
  | ClockEvent Id Integer
  | OnlyId Id
  | OnlyIdPar Id
   deriving (Eq,Ord,Show,Read)
 
-data EventList =
-   CECollection [CompoundEvent]
+data TriggerList =
+   CECollection [CompoundTrigger]
   deriving (Eq,Ord,Show,Read)
 
-data EventVariation =
+data TriggerVariation =
    EVEntry
  | EVExit [Vars]
  | EVThrow [Vars]
@@ -127,19 +136,19 @@ data Starting =
   deriving (Eq,Ord,Show,Read)
 
 data State =
-   State NameState InitialCode ContractNames
+   State NameState InitialCode HTNames
   deriving (Eq,Ord,Show,Read)
 
 data NameState =
    NameState Id
   deriving (Eq,Ord,Show,Read)
 
-data ContractNames =
-   CNS [ContractName]
+data HTNames =
+   CNS [HTName]
  | CNSNil
   deriving (Eq,Ord,Show,Read)
 
-data ContractName =
+data HTName =
    CN Id
   deriving (Eq,Ord,Show,Read)
 
@@ -188,13 +197,13 @@ data CInvariant =
    CI Id JML
   deriving (Eq,Ord,Show,Read)
 
-data Contracts =
-   Contracts [Contract]
- | Constempty
+data HTriples =
+   HTriples [HT]
+ | HTempty
   deriving (Eq,Ord,Show,Read)
 
-data Contract =
-   Contract Id Pre Method Post Assignable
+data HT =
+   HT Id Pre Method Post Assignable
   deriving (Eq,Ord,Show,Read)
 
 data Pre =
@@ -214,7 +223,9 @@ data Assignable =
   deriving (Eq,Ord,Show,Read)
 
 data Assig =
-   Assig JML
+   AssigJML JML
+ | AssigE
+ | AssigN
   deriving (Eq,Ord,Show,Read)
 
 data Methods =
@@ -327,11 +338,24 @@ data JML =
  | JMLParent JML JML
  | JMLCorchete JML JML
  | JMLSemiColon JML
- | JMLBSlash JML
  | JMLEq JML
  | JMLComma JML
  | JMLSlash JML
  | JMLBar JML
+ | JMLBackS JML
+ | JMLOld JML JML
+ | JMLRes JML
+ | JMLForallRT Type Id BodyF JML
+ | JMLExistsRT Type Id BodyF JML
  | JMLNil
+  deriving (Eq,Ord,Show,Read)
+
+data BodyF =
+   BodyF RangeTerm
+  deriving (Eq,Ord,Show,Read)
+
+data RangeTerm =
+   RangeTerm JML JML
+ | OnlyRange JML
   deriving (Eq,Ord,Show,Read)
 

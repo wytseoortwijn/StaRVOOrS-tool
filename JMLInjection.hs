@@ -1,4 +1,4 @@
-module JMLInjection(generateTmpFilesAllConsts,generateTmpFilesCInvs,updateTmpFilesCInvs,generateDummyBoolVars,makeAddFile) where
+module JMLInjection(generateTmpFilesAllConsts,generateTmpFilesCInvs,updateTmpFilesCInvs,generateDummyBoolVars) where
 
 import Types
 import ParserJML as PJML
@@ -7,16 +7,18 @@ import System.Directory
 import Data.Char
 import UpgradePPDATE
 import ErrM
+import JavaLanguage
 
------------------------------------------------
--- Injecting JML annotations for Contracts --
------------------------------------------------
+-------------------------------------------------
+-- Injecting JML annotations for Hoare triples --
+-------------------------------------------------
 
-generateTmpFilesAllConsts :: UpgradePPD PPDATE -> [(MethodName, ClassInfo, JML)] -> FilePath -> FilePath -> IO ()
+generateTmpFilesAllConsts :: UpgradePPD PPDATE -> [(MethodName, ClassInfo, String)] -> FilePath -> FilePath -> IO ()
 generateTmpFilesAllConsts ppd consts_jml output_add jpath =
  do let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
     let imports       = importsGet ppdate
-    let ys = map makeAddFile imports
+    let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
+    let ys = map makeAddFile imports'
     sequence [ do 
                   (main, cl) <- y
                   createDirectoryIfMissing True (output_add ++ "/" ++ main) 
@@ -26,7 +28,7 @@ generateTmpFilesAllConsts ppd consts_jml output_add jpath =
              ]
     return ()
 
-genTmpFilesConst :: (String, ClassInfo) -> FilePath -> [(MethodName, ClassInfo, JML)] -> String -> IO ()
+genTmpFilesConst :: (String, ClassInfo) -> FilePath -> [(MethodName, ClassInfo, String)] -> String -> IO ()
 genTmpFilesConst (main, cl) output_add [] r                   = writeFile (output_add ++ "/" ++ main ++ "/" ++ (cl ++ ".java")) r
 genTmpFilesConst (main, cl) output_add ((mn, cl', jml):xs)  r = 
  do 
@@ -42,8 +44,6 @@ genTmpFilesConst (main, cl) output_add ((mn, cl', jml):xs)  r =
             genTmpFilesConst (main, cl') output_add xs r'
     else genTmpFilesConst (main, cl) output_add xs  r
 
-
-javaModifiers = ["public", "private", "protected"]
 
 lookForMethodDef :: MethodName -> [String] -> ([String], [String])
 lookForMethodDef mn []       = error $ "Something went wrong when checking the method " ++ mn ++ ".\n"
@@ -83,15 +83,12 @@ lookForConstructorDef mn (xs:xss) =
 -- Add nullable to class variables --
 -------------------------------------
 
-primitiveJavaTypes :: [String]
-primitiveJavaTypes = ["byte", "short", "int", "long", "float", "double", "char", "boolean"]
-
-
 updateTmpFilesCInvs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 updateTmpFilesCInvs ppd output_add jpath = 
  do let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
     let imports       = importsGet ppdate
-    sequence $ map (\ i -> updateTmpFileCInv i output_add jpath (varsInFiles env)) imports
+    let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
+    sequence $ map (\ i -> updateTmpFileCInv i output_add jpath (varsInFiles env)) imports'
 
 updateTmpFileCInv :: Import -> FilePath -> FilePath -> [(String, String, [(String,String)])] -> IO ()
 updateTmpFileCInv i output_add jpath vars =
@@ -136,7 +133,8 @@ generateTmpFilesCInvs ppd output_add jpath =
      imports       = importsGet ppdate
      cinvs         = cinvariantsGet ppdate
      xs            = splitCInvariants cinvs []
- in sequence $ map (\ i -> generateTmpFileCInv i output_add jpath xs) imports
+     imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
+ in sequence $ map (\ i -> generateTmpFileCInv i output_add jpath xs) imports'
 
 splitCInvariants :: CInvariants -> [(Class, CInvariants)] -> [(Class, CInvariants)]
 splitCInvariants [] acum           = acum
@@ -188,14 +186,6 @@ getCInvs' ((cl', cinvs):xs) cl = if (cl' == cl)
                                 then cinvs
                                 else getCInvs' xs cl
 
-makeAddFile :: Import -> IO (String, ClassInfo)
-makeAddFile (Import s) = let xs = splitOnIdentifier "." s
-                         in if (length xs == 1)
-                            then return ("", head xs)
-                            else let val = last xs
-                                     ys = (init $ foldr (\ xs xss -> xs ++ "/" ++ xss) "" (init xs))
-                                 in return (ys, val)
-
 ---------------------------------------
 -- Injecting dummy boolean variables --
 ---------------------------------------
@@ -204,13 +194,14 @@ generateDummyBoolVars :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 generateDummyBoolVars ppd output_add jpath = 
  let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
      imports       = importsGet ppdate
-     consts        = contractsGet ppdate
-     xs            = splitClassContract consts
-     join_xs       = joinClassContract xs []
-  in sequence $ map (\ i -> generateDBMFile i output_add jpath join_xs) imports
+     consts        = htsGet ppdate
+     xs            = splitClassHT consts
+     join_xs       = joinClassHT xs []
+     imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
+  in sequence $ map (\ i -> generateDBMFile i output_add jpath join_xs) imports'
 
 
-generateDBMFile :: Import -> FilePath -> FilePath -> [(ClassInfo, [ContractName])] -> IO ()
+generateDBMFile :: Import -> FilePath -> FilePath -> [(ClassInfo, [HTName])] -> IO ()
 generateDBMFile i output_add jpath xs =
   do (main, cl) <- makeAddFile i
      createDirectoryIfMissing True output_add
@@ -223,24 +214,24 @@ generateDBMFile i output_add jpath xs =
      let (ys, zs) = lookForClassBeginning cl (lines r)
      writeFile tmp ((unlines ys) ++ concat dummy_vars ++ (unlines zs)) 
 
-genDummyVarJava :: ContractName -> String
+genDummyVarJava :: HTName -> String
 genDummyVarJava cn = "  public static final boolean " ++ cn ++ " = true;\n"
 
-lookForConstsNames :: ClassInfo -> [(ClassInfo, [ContractName])] -> [ContractName]
+lookForConstsNames :: ClassInfo -> [(ClassInfo, [HTName])] -> [HTName]
 lookForConstsNames cn []             = []
 lookForConstsNames cn ((cn', cs):xs) = if (cn == cn')
                                        then cs
                                        else lookForConstsNames cn xs 
 
-splitClassContract :: Contracts -> [(ClassInfo, ContractName)]
-splitClassContract []     = []
-splitClassContract (c:cs) = (fst $ methodCN c, contractName c) : splitClassContract cs
+splitClassHT :: HTriples -> [(ClassInfo, HTName)]
+splitClassHT []     = []
+splitClassHT (c:cs) = (fst $ methodCN c, htName c) : splitClassHT cs
 
-joinClassContract :: [(ClassInfo, ContractName)] -> [(ClassInfo, [ContractName])] -> [(ClassInfo, [ContractName])]
-joinClassContract [] jcc     = jcc
-joinClassContract (x:xs) jcc = joinClassContract xs (updateJCC x jcc) 
+joinClassHT :: [(ClassInfo, HTName)] -> [(ClassInfo, [HTName])] -> [(ClassInfo, [HTName])]
+joinClassHT [] jcc     = jcc
+joinClassHT (x:xs) jcc = joinClassHT xs (updateJCC x jcc) 
 
-updateJCC :: (ClassInfo, ContractName) -> [(ClassInfo, [ContractName])] -> [(ClassInfo, [ContractName])]
+updateJCC :: (ClassInfo, HTName) -> [(ClassInfo, [HTName])] -> [(ClassInfo, [HTName])]
 updateJCC (cn, c) []            = [(cn, [c])]
 updateJCC (cn, c) ((cn',cs):xs) = if (cn == cn')
                                   then (cn', c:cs) : xs

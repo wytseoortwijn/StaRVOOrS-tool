@@ -7,33 +7,41 @@ import RefinementPPDATE
 import Data.Char
 import UpgradePPDATE
 import ErrM
+import Data.List
+import qualified Data.Map as Map
+import Data.Maybe
 
 
 --TODO: Possible problem when operationalising nested properties
-operationalizeOldResultBind :: UpgradePPD PPDATE -> [(String, ClassInfo, [String])] -> (UpgradePPD PPDATE, [(Contract, Variables)])
-operationalizeOldResultBind ppd methods =
+operationalizeOldResultBind :: UpgradePPD PPDATE -> Map.Map HTName [(String,Type)] -> UpgradePPD PPDATE
+operationalizeOldResultBind ppd oldExprTypesM =
  let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
      global   = globalGet ppdate
-     consts   = contractsGet ppdate
-     es       = getAllEvents global
-     xs       = map (\ c -> operationalizePrePostORB c (varsInFiles env) es methods) consts
-     consts'  = map fst xs
-     newvars  = genNewVarsOld global (concat (map snd xs))
-     global'  = updateGlobal global (Ctxt newvars (events $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
-     ppdate'  = ppd >>= (\x -> return $ PPDATE (importsGet ppdate) global' (cinvariantsGet ppdate) consts' (methodsGet ppdate))
- in (ppdate', xs)
+     consts   = htsGet ppdate
+     mfiles   = methodsInFiles env
+     methods  = map (\(x,y,z) -> (x,y,map (\(x,y,z) -> y) z)) mfiles
+     es       = getAllTriggers global
+     xs       = map (\ c -> operationalizePrePostORB c (varsInFiles env) es methods oldExprTypesM) consts
+     oldExpT  = Map.unions $ map (\(x,y,z) -> z) xs
+     consts'  = map (\(x,y,z) -> x) xs
+     newvars  = genNewVarsOld global (concat (map (\(x,y,z) -> y) xs))
+     global'  = updateGlobal global (Ctxt newvars (ievents $ ctxtGet global) (triggers $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
+     ppdate'  = ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ PPDATE (importsGet ppdate) global' (cinvariantsGet ppdate) consts' (methodsGet ppdate))
+ in ppdate'
 
 
-operationalizePrePostORB :: Contract -> [(String, ClassInfo, [(Type, Id)])] -> Events -> [(String, ClassInfo, [String])] -> (Contract, Variables)
-operationalizePrePostORB c vars events methods = 
- let cn = contractName c
-     p  = pre c
-     p' = post c
-     (xsPost, vars') = operationalizeOld p' cn
-     ysPost = operationalizeResult xsPost
-     tvars  = addType2NewVars cn (getListOfTypesAndVars (fst $ methodCN c) vars) vars'   
-     const' = updatePost c ysPost
- in (bindCV const' vars events methods, tvars)
+operationalizePrePostORB :: HT -> [(String, ClassInfo, [(Type, Id)])] -> Triggers -> [(String, ClassInfo, [String])] -> Map.Map HTName [(String,Type)] -> (HT, Variables,OldExprM)
+operationalizePrePostORB c vars trigs methods oldExprTypesM = 
+ let cn                  = htName c
+     p                   = pre c
+     p'                  = post c
+     (xsPost, oldExprl)  = operationalizeOld p' cn
+     ysPost              = operationalizeResult xsPost
+     oldExprl'           = addType2NewVars cn oldExprTypesM oldExprl
+     tvars               = getConstTnv c (Map.singleton cn oldExprl'')
+     const'              = updatePost c ysPost
+     oldExprl''          = bindOldExp c vars trigs methods oldExprl'
+ in (bindCV const' vars trigs methods, tvars,Map.singleton cn oldExprl'')
 
 
 --------------------------
@@ -41,18 +49,27 @@ operationalizePrePostORB c vars events methods =
 --------------------------
 
 -- TODO: if classes with the same name in different folders, then fix this method
-bindCV :: Contract -> [(String, ClassInfo, [(String, String)])] -> Events -> [(String, ClassInfo, [String])] -> Contract
+bindCV :: HT -> [(String, ClassInfo, [(String, String)])] -> Triggers -> [(String, ClassInfo, [String])] -> HT
 bindCV c vars es methods =
- let bindn = getClassVar c es     
- in if (bindn == "")
-    then c
-    else let varsc  = getVarsToControl (fst $ methodCN c) vars
-             mnames = getMethodsToControl (fst $ methodCN c) methods
-             pre'   = concat $ bindVars bindn varsc (pre c)
-             post'  = concat $ bindVars bindn varsc (post c)
-             pre''  = concat $ bindMethods bindn mnames pre'
-             post'' = concat $ bindMethods bindn mnames post'
-         in updatePre (updatePost c post'') pre''
+ let bindEntry = getClassVar c es EVEntry
+     bindExit  = getClassVar c es (EVExit [])
+     varsc  = getVarsToControl (fst $ methodCN c) vars
+     mnames = getMethodsToControl (fst $ methodCN c) methods
+     pre'   = concat $ bindVars bindEntry varsc (pre c)
+     post'  = concat $ bindVars bindExit varsc (post c)
+     pre''  = concat $ bindMethods bindEntry mnames pre'
+     post'' = concat $ bindMethods bindExit mnames post'
+ in updatePre (updatePost c post'') pre''
+
+bindOldExp :: HT -> [(String, ClassInfo, [(String, String)])] -> Triggers -> [(String, ClassInfo, [String])] -> OldExprL -> OldExprL
+bindOldExp c vars es _ []             = []
+bindOldExp c vars es ms ((x,y,z):xss) = 
+ let bindEntry = getClassVar c es (EVEntry)
+     varsc     = getVarsToControl (fst $ methodCN c) vars
+     x'        = concat $ bindVars bindEntry varsc x
+     ms'       = getMethodsToControl (fst $ methodCN c) ms
+     x''       = concat $ bindMethods bindEntry ms' x'
+ in (x'',y,z):bindOldExp c vars es ms xss
 
 
 bindMethods :: String -> [String] -> String -> [String]
@@ -118,34 +135,36 @@ getVarsToControl cl ((main, cl', vars):xs) = if (cl == cl')
 -- \old --
 ----------
 
--- returns the operationalized string and the list of variables in old operators
-operationalizeOld :: String -> ContractName -> (String, [String])
-operationalizeOld s cn = 
- let xs = splitOnIdentifier "\\old" s
+-- returns the operationalized post and a map storing the expressions in old operators
+operationalizeOld :: String -> HTName -> (String, OldExprL)
+operationalizeOld post cn = 
+ let xs = splitOnIdentifier "\\old(" post
  in if (length xs == 1)
-    then (s, [])
+    then (post, [])
     else let begin = head xs
-             ys = tail xs
-             zs = map ((\(x,y) -> (trim (tail x), clean $ tail y)) . (splitAtIdentifier ')')) ys
-             s' = begin ++ flattenOld zs cn            
-         in (s' , removeDuplicates (map fst zs))
+             ys    = tail xs
+             zs    = map ((\(x,y) -> (trim (tail x), clean $ tail y)) . (splitAtClosingParen 0)) ys
+             fszs  = foldr (\(x,y) xs -> (x,"","e" ++ show y):xs) [] $ zip (removeDuplicates (map fst zs)) [1..length zs]
+             s'    = begin ++ flattenOld zs cn fszs
+         in (s',fszs)
 
-flattenOld :: [(String, String)] -> ContractName -> String
-flattenOld [] cn            = ""
-flattenOld ((xs,ys):xss) cn = cn ++ "_" ++ xs ++ "_nyckelord" ++ ys ++ flattenOld xss cn
+flattenOld :: [(String, String)] -> HTName -> OldExprL -> String
+flattenOld [] cn _             = ""
+flattenOld ((xs,ys):xss) cn zs = 
+ let xs' = getExpName zs xs cn
+ in xs' ++ " " ++ ys ++ flattenOld xss cn zs
 
+getExpName :: OldExprL -> String -> HTName -> String
+getExpName [] exp _             = error "Error: Cannot get type to operationalise \\old expresion"
+getExpName ((a,_,c):xss) exp cn = if exp == a
+                                  then cn ++ "."  ++ c
+                                  else getExpName xss exp cn
 
-addType2NewVars :: ContractName -> [(Type, Id)] -> [Id] -> Variables
-addType2NewVars cn vars []     = []
-addType2NewVars cn vars (v:vs) = let vdec = VarDecl (cn ++ "_" ++ v ++ "_nyckelord") VarInitNil
-                                     tvar = Var VarModifierNil (getType v vars) [vdec]
-                                 in tvar : addType2NewVars cn vars vs
-
-getType :: Id -> [(Type, Id)] -> Type
-getType _ []               = ""
-getType var ((type',v):vs) = if (var == v)
-                             then type'
-                             else getType var vs
+addType2NewVars :: HTName -> Map.Map HTName [(String,Type)] -> OldExprL -> OldExprL
+addType2NewVars cn _ []                      = []
+addType2NewVars cn mtypes oexpr@((v,t,e):vs) = 
+ let typE  = getType v cn mtypes     
+ in (v,typE,e):addType2NewVars cn mtypes vs
 
 genNewVarsOld :: Global -> Variables -> Variables
 genNewVarsOld global ss = 
@@ -153,6 +172,15 @@ genNewVarsOld global ss =
   in if (null vars)
      then ss
      else ss ++ vars
+
+getType :: Id -> HTName -> Map.Map HTName [(String,Type)] -> Type
+getType var cn oldExprTypesM = 
+ let xs = fromJust $ Map.lookup cn oldExprTypesM 
+     ys = [t | (y,t) <- xs, y==var]
+ in if (null ys)
+    then ""
+    else head ys
+
 
 -------------
 -- \result --
@@ -171,27 +199,23 @@ operationalizeResult s =
 -- \forall --
 -------------
 
-operationalizeForall :: Contract -> Env -> [(Contract, Variables)] -> ([Either (String, String) String], [Either (String, String) String])
-operationalizeForall c env ctnv = 
+operationalizeForall :: HT -> Env -> OldExprM -> ([Either (String, String) String], [Either (String, String) String])
+operationalizeForall c env oldExpM = 
  let mn                 = snd $ methodCN c
+     cinfo              = fst $ methodCN c
      p                  = pre c
-     (enargs, enargswt) = lookForAllEntryEventArgs env mn
+     (enargs, enargswt) = lookForAllEntryTriggerArgs env cinfo mn
      p'                 = post c 
-     (exargs, exargswt) = lookForAllExitEventArgs env mn
+     (exargs, exargswt) = lookForAllExitTriggerArgs env cinfo mn
      xs                 = splitInQuantifiedExpression p "\\forall"
      ys                 = splitInQuantifiedExpression p' "\\forall"
-     tnewvars           = lookForNewVarsConst c ctnv 
-     xs_pre             = applyGenMethodForall xs (contractName c) 1 enargs enargswt "_pre" []
-     ys_post            = applyGenMethodForall ys (contractName c) 1 exargs exargswt "_post" tnewvars
+     tnewvars           = getConstTnv c oldExpM 
+     xs_pre             = applyGenMethodForall xs (htName c) 1 enargs enargswt "_pre" []
+     ys_post            = applyGenMethodForall ys (htName c) 1 exargs exargswt "_post" tnewvars
  in (xs_pre, ys_post)
 
-lookForNewVarsConst :: Contract -> [(Contract, Variables)] -> Variables
-lookForNewVarsConst c' []            = []
-lookForNewVarsConst c' ((c, tnv):cs) = if (c == c') 
-                                       then tnv
-                                       else lookForNewVarsConst c' cs
 
-applyGenMethodForall :: [Either String String] -> ContractName -> Int -> String -> String -> String -> Variables -> [Either (String, String) String]
+applyGenMethodForall :: [Either String String] -> HTName -> Int -> String -> String -> String -> Variables -> [Either (String, String) String]
 applyGenMethodForall [] _ _ _ _ _ _                        = []
 applyGenMethodForall ((Right x):xs) cn n args argswt s tnv = Right x:applyGenMethodForall xs cn n args argswt s tnv
 applyGenMethodForall ((Left x):xs) cn n args argswt s  tnv = 
@@ -199,29 +223,31 @@ applyGenMethodForall ((Left x):xs) cn n args argswt s  tnv =
      z  = generateMethodForall cn n y args argswt s tnv
  in Left z:applyGenMethodForall xs cn (n+1) args argswt s tnv
 
-generateMethodForall :: ContractName -> Int -> (String, String, String) -> String -> String -> String -> Variables -> (String, String)
+generateMethodForall :: HTName -> Int -> (String, String, String) -> String -> String -> String -> Variables -> (String, String)
 generateMethodForall cn n (var, range, body) args argswt s [] = 
  let mn = cn ++ s ++ "_opF_" ++ show n
- in (mn ++ "(" ++ argswt ++ ")", methodForall mn (var, range, body) args "")
+ in (mn ++ "(" ++ argswt ++ ")", methodForall mn (var, range, body) args)
 generateMethodForall cn n (var, range, body) args argswt s tnv = 
  let mn   = cn ++ s ++ "_opF_" ++ show n
      tnv' = auxNewVars tnv
-     tnewvars = init $ foldr (\ x xs -> x ++ "," ++ xs) "" tnv'
-     newargs  =  init $ foldr (\ x xs -> x ++ "," ++ xs) "" $ map (last.words) tnv'
- in (mn ++ "(" ++ argswt ++ newargs ++ ")", methodForall mn (var, range, body) args tnewvars)
+     tnewvars = addComma tnv'
+     newargs  = addComma $ map (last.words) tnv'
+     argswt'  = if null newargs then argswt else argswt ++ "," ++ newargs
+     args'    = if null tnewvars then args else args ++ "," ++ tnewvars
+ in (mn ++ "(" ++ argswt' ++ ")", methodForall mn (var, range, body) args')
 
 
 auxNewVars :: Variables -> [String]
 auxNewVars []                          = []
 auxNewVars (Var _ t [VarDecl id _]:xs) = (t ++ " " ++ id):auxNewVars xs
 
-methodForall :: String -> (String, String, String) -> String -> String -> String
-methodForall mn (tvar, range, body) args tnv = 
- let var = last $ words tvar 
-     low = getLowBoundary range var
-     top = getTopBoundary range var
+methodForall :: String -> (String, String, String) -> String -> String
+methodForall mn (tvar, range, body) args = 
+ let var   = last $ words tvar 
+     low   = getLowBoundary range var
+     top   = getTopBoundary range var
  in
-    "public static boolean " ++ mn ++ "(" ++ args ++ tnv ++ ") {\n" 
+    "public static boolean " ++ mn ++ "(" ++ args ++ ") {\n" 
  ++ "      boolean r = true;\n\n"
  ++ "      for (" ++ tvar ++ " = " ++ low ++ " ; " ++ var ++ " <= " ++ top ++ " ; " ++ var ++ "++) {\n"
  ++ "          if (true) {\n"
@@ -299,22 +325,23 @@ lookforEnd n acum (x:xs) = if (x == ')')
 -- \exist --
 ------------
 
-operationalizeExists :: Contract -> Env -> [(Contract, Variables)] -> ([Either (String, String) String], [Either (String, String) String])
-operationalizeExists c es ctnv = 
+operationalizeExists :: HT -> Env -> OldExprM -> ([Either (String, String) String], [Either (String, String) String])
+operationalizeExists c es oldExpM = 
  let mn                 = snd $ methodCN c
+     cinfo              = fst $ methodCN c
      p                  = pre c
-     (enargs, enargswt) = lookForAllEntryEventArgs es mn
+     (enargs, enargswt) = lookForAllEntryTriggerArgs es cinfo mn
      p'                 = post c 
-     (exargs, exargswt) = lookForAllExitEventArgs es mn
+     (exargs, exargswt) = lookForAllExitTriggerArgs es cinfo mn
      xs                 = splitInQuantifiedExpression p "\\exists"
      ys                 = splitInQuantifiedExpression p' "\\exists"
-     tnewvars           = lookForNewVarsConst c ctnv
-     xs_pre             = applyGenMethodExists xs (contractName c) 1 enargs enargswt "_pre" []
-     ys_post            = applyGenMethodExists ys (contractName c) 1 exargs exargswt "_post" tnewvars
+     tnewvars           = getConstTnv c oldExpM
+     xs_pre             = applyGenMethodExists xs (htName c) 1 enargs enargswt "_pre" []
+     ys_post            = applyGenMethodExists ys (htName c) 1 exargs exargswt "_post" tnewvars
  in (xs_pre, ys_post)
 
 
-applyGenMethodExists :: [Either String String] -> ContractName -> Int -> String -> String -> String -> Variables -> [Either (String, String) String]
+applyGenMethodExists :: [Either String String] -> HTName -> Int -> String -> String -> String -> Variables -> [Either (String, String) String]
 applyGenMethodExists [] _ _ _ _ _ _                        = []
 applyGenMethodExists ((Right x):xs) cn n args argswt s tnv = Right x:applyGenMethodExists xs cn n args argswt s tnv
 applyGenMethodExists ((Left x):xs) cn n args argswt s tnv  = 
@@ -322,16 +349,17 @@ applyGenMethodExists ((Left x):xs) cn n args argswt s tnv  =
      z  = generateMethodExists cn n y args argswt s tnv
  in Left z:applyGenMethodExists xs cn (n+1) args argswt s tnv
 
-generateMethodExists :: ContractName -> Int -> (String, String, String) -> String -> String -> String -> Variables -> (String, String)
+generateMethodExists :: HTName -> Int -> (String, String, String) -> String -> String -> String -> Variables -> (String, String)
 generateMethodExists cn n (var, range, body) args argswt s []  = 
  let mn = cn ++ s ++ "_opE_" ++ show n
  in (mn ++ "(" ++ argswt ++ ")", methodExists mn (var, range, body) args "")
 generateMethodExists cn n (var, range, body) args argswt s tnv = 
  let mn = cn ++ s ++ "_opE_" ++ show n
      tnv' = auxNewVars tnv
-     tnewvars = init $ foldr (\ x xs -> x ++ "," ++ xs) "" tnv'
-     newargs  =  init $ foldr (\ x xs -> x ++ "," ++ xs) "" $ map (last.words) tnv'
- in (mn ++ "(" ++ argswt ++ newargs ++ ")", methodExists mn (var, range, body) args tnewvars)
+     tnewvars = addComma tnv'
+     newargs  = addComma $ map (last.words) tnv'
+     args'    = if null newargs then argswt else argswt ++ "," ++ newargs
+ in (mn ++ "(" ++ args' ++ ")", methodExists mn (var, range, body) args tnewvars)
 
 
 methodExists :: String -> (String, String, String) -> String -> String -> String
@@ -339,8 +367,9 @@ methodExists mn (tvar, range, body) args tnv =
  let var = last $ words tvar 
      low = getLowBoundary range var
      top = getTopBoundary range var
+     args' = if null tnv then args else args ++ "," ++ tnv
  in
-    "public static boolean " ++ mn ++ "(" ++ args ++ tnv ++ ") {\n" 
+    "public static boolean " ++ mn ++ "(" ++ args' ++ ") {\n" 
  ++ "      boolean r = false;\n\n"
  ++ "      for (" ++ tvar ++ " = " ++ low ++ " ; " ++ var ++ " <= " ++ top ++ " ; " ++ var ++ "++) {\n"
  ++ "          if (true) {\n"

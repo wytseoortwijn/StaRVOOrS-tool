@@ -21,7 +21,7 @@ transSymbols x = case x of
 
 transAbsPPDATE :: AbsPPDATE -> Result
 transAbsPPDATE x = case x of
-  AbsPPDATE imports global cinvariants contracts methods  -> failure x
+  AbsPPDATE imports global cinvariants htriples methods  -> failure x
 
 
 transImports :: Imports -> Result
@@ -46,7 +46,7 @@ transGlobal x = case x of
 
 transContext :: Context -> Result
 transContext x = case x of
-  Ctxt variables events properties foreaches  -> failure x
+  Ctxt variables ievents triggers properties foreaches  -> failure x
 
 
 transVariables :: Variables -> Result
@@ -66,33 +66,44 @@ transVarModifier x = case x of
   VarModifierNil  -> failure x
 
 
-transEvents :: Events -> Result
-transEvents x = case x of
-  EventsNil  -> failure x
-  EventsDef events  -> failure x
+transIEvents :: IEvents -> Result
+transIEvents x = case x of
+  IEventsNil  -> failure x
+  IEventsDef ievents  -> failure x
 
 
-transEvent :: Event -> Result
-transEvent x = case x of
-  Event id binds compoundevent whereclause  -> failure x
+transIEvent :: IEvent -> Result
+transIEvent x = case x of
+  IEvent id  -> failure x
 
 
-transCompoundEvent :: CompoundEvent -> Result
-transCompoundEvent x = case x of
-  Collection eventlist  -> failure x
-  NormalEvent binding id varss eventvariation  -> failure x
+transTriggers :: Triggers -> Result
+transTriggers x = case x of
+  TriggersNil  -> failure x
+  TriggersDef triggers  -> failure x
+
+
+transTrigger :: Trigger -> Result
+transTrigger x = case x of
+  Trigger id binds compoundtrigger whereclause  -> failure x
+
+
+transCompoundTrigger :: CompoundTrigger -> Result
+transCompoundTrigger x = case x of
+  Collection triggerlist  -> failure x
+  NormalEvent binding id varss triggervariation  -> failure x
   ClockEvent id n  -> failure x
   OnlyId id  -> failure x
   OnlyIdPar id  -> failure x
 
 
-transEventList :: EventList -> Result
-transEventList x = case x of
-  CECollection compoundevents  -> failure x
+transTriggerList :: TriggerList -> Result
+transTriggerList x = case x of
+  CECollection compoundtriggers  -> failure x
 
 
-transEventVariation :: EventVariation -> Result
-transEventVariation x = case x of
+transTriggerVariation :: TriggerVariation -> Result
+transTriggerVariation x = case x of
   EVEntry  -> failure x
   EVExit varss  -> failure x
   EVThrow varss  -> failure x
@@ -163,7 +174,7 @@ transStarting x = case x of
 
 transState :: State -> Result
 transState x = case x of
-  State namestate initialcode contractnames  -> failure x
+  State namestate initialcode htnames  -> failure x
 
 
 transNameState :: NameState -> Result
@@ -171,14 +182,14 @@ transNameState x = case x of
   NameState id  -> failure x
 
 
-transContractNames :: ContractNames -> Result
-transContractNames x = case x of
-  CNS contractnames  -> failure x
+transHTNames :: HTNames -> Result
+transHTNames x = case x of
+  CNS htnames  -> failure x
   CNSNil  -> failure x
 
 
-transContractName :: ContractName -> Result
-transContractName x = case x of
+transHTName :: HTName -> Result
+transHTName x = case x of
   CN id  -> failure x
 
 
@@ -237,15 +248,15 @@ transCInvariant x = case x of
   CI id jml  -> failure x
 
 
-transContracts :: Contracts -> Result
-transContracts x = case x of
-  Contracts contracts  -> failure x
-  Constempty  -> failure x
+transHTriples :: HTriples -> Result
+transHTriples x = case x of
+  HTriples hts  -> failure x
+  HTempty  -> failure x
 
 
-transContract :: Contract -> Result
-transContract x = case x of
-  Contract id pre method post assignable  -> failure x
+transHT :: HT -> Result
+transHT x = case x of
+  HT id pre method post assignable  -> failure x
 
 
 transPre :: Pre -> Result
@@ -270,7 +281,9 @@ transAssignable x = case x of
 
 transAssig :: Assig -> Result
 transAssig x = case x of
-  Assig jml  -> failure x
+  AssigJML jml  -> failure x
+  AssigE  -> failure x
+  AssigN  -> failure x
 
 
 transMethods :: Methods -> Result
@@ -398,12 +411,27 @@ transJML x = case x of
   JMLParent jml1 jml2  -> failure x
   JMLCorchete jml1 jml2  -> failure x
   JMLSemiColon jml  -> failure x
-  JMLBSlash jml  -> failure x
   JMLEq jml  -> failure x
   JMLComma jml  -> failure x
   JMLSlash jml  -> failure x
   JMLBar jml  -> failure x
+  JMLBackS jml  -> failure x
+  JMLOld jml1 jml2  -> failure x
+  JMLRes jml  -> failure x
+  JMLForallRT type' id bodyf jml  -> failure x
+  JMLExistsRT type' id bodyf jml  -> failure x
   JMLNil  -> failure x
+
+
+transBodyF :: BodyF -> Result
+transBodyF x = case x of
+  BodyF rangeterm  -> failure x
+
+
+transRangeTerm :: RangeTerm -> Result
+transRangeTerm x = case x of
+  RangeTerm jml1 jml2  -> failure x
+  OnlyRange jml  -> failure x
 
 
 

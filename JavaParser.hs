@@ -70,6 +70,7 @@ getMethodDecl (d:ds) =
                _                        -> getMethodDecl ds
       _             -> getMethodDecl ds
 
+--TODO: Update when dealing with private values
 getMethodDeclId :: [Decl] -> [String]
 getMethodDeclId []     = []
 getMethodDeclId (d:ds) = 
@@ -96,7 +97,7 @@ splitV :: String -> [String] -> [(String, String)]
 splitV _ []         = []
 splitV type' (v:vs) = (type',v):splitV type' vs
 
-getMethodsNames :: T.ClassInfo -> T.Contracts -> [T.MethodName]
+getMethodsNames :: T.ClassInfo -> T.HTriples -> [T.MethodName]
 getMethodsNames _ []      = []
 getMethodsNames cl (c:cs) = if ((fst $ T.methodCN c) == cl)  
                             then (snd $ T.methodCN c):getMethodsNames cl cs
@@ -163,4 +164,10 @@ makeNewArgsInCall []       = [MethodInv (MethodCall (Name [Ident "fid",Ident "ge
 makeNewArgsInCall ((FormalParam _ _ _ (VarId (Ident id))):fps) = 
  (ExpName (Name [Ident id])) : makeNewArgsInCall fps
 
+-------------------------
+-- Auxiliary Functions --
+-------------------------
 
+methodsDetails :: MemberDecl -> (String, String, [String])
+methodsDetails (MethodDecl _ _ Nothing (Ident mn) args _ _ )   = ("void",mn,map prettyPrint args)
+methodsDetails (MethodDecl _ _ (Just rt) (Ident mn) args _ _ ) = (prettyPrint rt,mn,map prettyPrint args)

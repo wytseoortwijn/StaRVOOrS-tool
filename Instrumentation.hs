@@ -1,14 +1,13 @@
-module Instrumentation (programVariables, methodsInstrumentation, publicMethodsNames,updateVarsEnv) where
+module Instrumentation (programMethods,programVariables, methodsInstrumentation, updateVarsEnv) where
 
 import qualified Types as T
 import CommonFunctions
 import JavaParser
-import JMLInjection
 import System.Directory
 import Data.Char
 import UpgradePPDATE
 import ErrM
-
+import JavaLanguage
 
 --------------------------
 -- Code Instrumentation --
@@ -18,7 +17,7 @@ import ErrM
 methodsInstrumentation :: UpgradePPD T.PPDATE -> FilePath -> FilePath -> IO ()
 methodsInstrumentation ppd jpath output_add =
  do let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
-    let consts        = T.contractsGet ppdate
+    let consts        = T.htsGet ppdate
     if (null consts)
     then return ()
     else methodsInstrumentation' ppd jpath output_add
@@ -26,21 +25,21 @@ methodsInstrumentation ppd jpath output_add =
 methodsInstrumentation' :: UpgradePPD T.PPDATE -> FilePath -> FilePath -> IO ()
 methodsInstrumentation' ppd jpath output_add =
   do let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
-     let consts        = T.contractsGet ppdate
+     let consts        = T.htsGet ppdate
      let imp           = T.importsGet ppdate
      sequence [ instrumentFile i consts jpath output_add
-              | i <- imp
+              | i <- imp, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
               ]
      putStrLn "Java files generation completed."
 
 -- if same class name in different files, fix this method
-instrumentFile :: T.Import -> T.Contracts -> FilePath -> FilePath -> IO ()
+instrumentFile :: T.Import -> T.HTriples -> FilePath -> FilePath -> IO ()
 instrumentFile i consts jpath output_add =
  do (main, cl) <- makeAddFile i
     let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")
     r <- readFile file_add
     let java = (\(Right x) -> x) $ parseJavaFile r
-    let mns  = getMethodsNames cl consts
+    let mns  = removeDuplicates $ getMethodsNames cl consts
     let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
     let decls  = (getDecls.getClassBody) java_aux
     let decls' = instrumentMethodMemberDecl' decls mns
@@ -59,7 +58,7 @@ addNewImportInfo s (_:_) cl = let xs = splitOnIdentifier "package" (clean s)
                                       in unlines $ addFidDec s' cl
                                  else let s'    = lines ((head.tail) xs)
                                           begin = (head xs) ++ "package" ++ (head s') ++ "\n"
-                                      in begin ++ "\nimport ppArtifacts.Id;\n" ++ unlines (addFidDec (tail s') cl)
+                                      in begin ++ "\nimport ppArtifacts.IdPPD;\n" ++ unlines (addFidDec (tail s') cl)
 
 addFidDec :: [String] -> T.ClassInfo -> [String]
 addFidDec [] _         = []
@@ -73,7 +72,7 @@ addFidDec (xs:xss) cl  = if (clean xs == "")
 addFidDec' :: [String] -> [String]
 addFidDec' []       = []
 addFidDec' (xs:xss) = if (clean xs == "")
-                      then (xs ++ "\n  public Id fid = new Id();\n"):xss 
+                      then (xs ++ "\n  public IdPPD fid = new IdPPD();\n"):xss 
                       else xs:addFidDec' xss
 
 -- Added due to bug in the java library
@@ -110,7 +109,7 @@ programVariables :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
 programVariables ppd jpath = 
  do let imports = T.importsGet (fst . (\(Ok x) -> x) $ runStateT ppd emptyEnv)
     vars <- sequence [ getVariables i jpath
-                     | i <- imports
+                     | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
                      ]
     return $ updateVarsEnv ppd vars
 
@@ -128,23 +127,25 @@ getVariables i jpath =
      return (main, cl, (splitVars vars))
 
 
---returns the name of all the public methods in the java files involved in the verification process
-publicMethodsNames :: UpgradePPD T.PPDATE -> FilePath -> IO [(String, T.ClassInfo, [String])]
-publicMethodsNames ppd jpath = 
- do let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
-    let imports       = T.importsGet ppdate
-    mnames <- sequence [ getMethodName i jpath
-                       | i <- imports
-                       ]
-    return mnames
+--Adds to the upgraded ppDATE's env the method declarations of all the java files involved in the verification process
+programMethods :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
+programMethods ppd jpath = 
+ do let imports = T.importsGet (fst . (\(Ok x) -> x) $ runStateT ppd emptyEnv)
+    ms <- sequence [ getMethods i jpath
+                   | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
+                   ]
+    return $ updateMethodsEnv ppd ms
 
-getMethodName :: T.Import -> FilePath -> IO (String, T.ClassInfo, [String])
-getMethodName i jpath =
+updateMethodsEnv :: UpgradePPD T.PPDATE -> [(String, T.ClassInfo, [(T.Id,String,[String])])] -> UpgradePPD T.PPDATE
+updateMethodsEnv ppd ms = ppd >>= (\x -> do env <- get; put (env { methodsInFiles = ms }); return x)                     
+
+getMethods :: T.Import -> FilePath -> IO (String, T.ClassInfo, [(T.Id,String,[String])])
+getMethods i jpath =
   do (main, cl) <- makeAddFile i
      let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")
      r <- readFile file_add
      let java     = (\(Right x) -> x) $ parseJavaFile r
      let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
-     let methods  = (getMethodDeclId.getMemberDecl.getDecls.getClassBody) java_aux
-     return (main, cl, methods)
+     let methods = (getMethodDecl.getDecls.getClassBody) java_aux
+     return (main, cl, (map methodsDetails methods))
 
