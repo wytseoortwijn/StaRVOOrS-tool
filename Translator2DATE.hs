@@ -281,7 +281,10 @@ makeTransitionAlg1Cond ns e c env =
  let cn      = htName c
      oldExpM = oldExpTypes env
      esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
-     arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
+     esinf'  = filter (/="") $ lookfor esinf e
+     arg     = if null esinf' 
+               then ""
+               else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
      c'      = "HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")"
      act     = getExpForOld oldExpM cn ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
      zs      = getExpForOld oldExpM cn
@@ -317,7 +320,10 @@ makeExtraTransitionAlg2 ts c e ns env = let esinf   = map fromJust $ filter (/= 
                                             oldExpM = oldExpTypes env
                                             cn      = htName c
                                             zs      = getExpForOld oldExpM cn
-                                            arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
+                                            esinf'  = filter (/="") $ lookfor esinf e
+                                            arg     = if null esinf' 
+                                                      then ""
+                                                      else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
                                             pre'    = "HoareTriplesPPD." ++ (htName c) ++ "_pre(" ++ arg ++ ")"
                                             type_   = if null zs then "PPD" else "Old_" ++ cn
                                             old     = if null zs then "" else "," ++ cn
@@ -331,7 +337,10 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env =
  let cn      = htName c
      oldExpM = oldExpTypes env
      esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
-     arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail) $ map words $ lookfor esinf e
+     esinf'  = filter (/="") $ lookfor esinf e
+     arg     = if null esinf' 
+               then ""
+               else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
      semicol = if (act == "") then "" else ";"     
      zs      = getExpForOld oldExpM cn
      type_   = if null zs then "PPD" else "Old_" ++ cn

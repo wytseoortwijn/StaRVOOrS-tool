@@ -152,6 +152,12 @@ getInfoTrigger (tr,mn',e,bs) =
      EVEntry  -> Just (tr,splitOnIdentifier "," $ getBindArgs' bs)
      _        -> Nothing
 
+lookfor :: [(Trigger, [String])] -> Trigger -> [String]
+lookfor [] _     = []
+lookfor (x:xs) e = if (fst x==e)
+                   then snd x
+                   else lookfor xs e
+
 ---------------------------------------
 -- Manipulating the parsed .xml file --
 ---------------------------------------

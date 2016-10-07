@@ -15,7 +15,7 @@ import Translator2DATE
 import System.Console.GetOpt
 import Instrumentation
 import Data.Functor
-
+import qualified RuntimeVerification as RV
 -----------
 -- Flags --
 -----------
@@ -107,6 +107,7 @@ run flags java_fn_add ppdate_fn output_add =
                                              let larva_fn  = generateLarvaFileName ppdate_fn
                                              let larva_add = output_addr ++ "out/" ++ larva_fn
                                              writeFile larva_add ""
+                                             RV.showExpr (map getInfoTrigger $ allTriggers $ getEnvVal ppdate')
                                              translate ppdate' larva_add
                                              putStrLn "Running LARVA..."
                                              rawSystem "java" ["-cp","larva.jar","compiler.Compiler",larva_add,"-o",output_add']
