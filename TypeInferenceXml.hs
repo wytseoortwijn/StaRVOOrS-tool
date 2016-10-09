@@ -14,11 +14,11 @@ import qualified Data.Map as Map
 import Data.List
 
 
-inferTypesOldExprs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO (Map.Map ContractName [(String,Type)])
+inferTypesOldExprs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO (Map.Map HTName [(String,Type)])
 inferTypesOldExprs ppd jpath output_add = 
  let ppdate  = getValue ppd
      env     = getEnvVal ppd
-     toXml   = generateOldExpr (contractsGet ppdate) jpath
+     toXml   = generateOldExpr (htsGet ppdate) jpath
  in if null toXml
     then return Map.empty
     else let vars    = varsInFiles env
@@ -27,13 +27,13 @@ inferTypesOldExprs ppd jpath output_add =
              toXml'  = map (\oexpr -> addType oexpr types mfiles) toXml
              xml_add = output_add ++ "tmp.xml"
          in if (null [y | x <- toXml', y <- oldExprs x, inferType y == ""])
-            then do let oldExpTypes = foldr (\x xs -> Map.insert (contractID x) (map toTuple $ oldExprs x) xs) Map.empty toXml'
+            then do let oldExpTypes = foldr (\x xs -> Map.insert (htID x) (map toTuple $ oldExprs x) xs) Map.empty toXml'
                     return oldExpTypes
             else do generateXmlFile toXml' jpath xml_add
                     javaExprReader xml_add output_add
                     let new_xml_add = output_add ++ "tmp2.xml"
                     oldExpsJER <- parse new_xml_add
-                    let oldExpTypes = foldr (\x xs -> Map.insert (contractID x) (map toTuple $ oldExprs x) xs) Map.empty oldExpsJER
+                    let oldExpTypes = foldr (\x xs -> Map.insert (htID x) (map toTuple $ oldExprs x) xs) Map.empty oldExpsJER
                     return oldExpTypes
                        where getTypes c vs ms = getListOfTypesAndVars c vs ++ getListOfTypesAndMethods c ms
                              toTuple (OExpr e t) = (e,t) 
@@ -122,7 +122,7 @@ generateXmlFile xs jpath output_add =
 oldExpr2Xml :: OldExpr -> String
 oldExpr2Xml oldExpr = 
  let xs = map oExpr2Xml (oldExprs oldExpr) in
- twoSpaces ++ "<contract Id=" ++ "\"" ++ contractID oldExpr ++ "\"" 
+ twoSpaces ++ "<contract Id=" ++ "\"" ++ htID oldExpr ++ "\"" 
  ++ " class=" ++ "\"" ++ classInf oldExpr ++ "\"\n" 
  ++ " path=" ++ "\"" ++ path oldExpr ++ "\"\n" 
  ++ " target=" ++ "\"" ++ targ oldExpr ++ "\""
@@ -138,10 +138,10 @@ oExpr2Xml oexpr =
  ++ fourSpaces ++ "</oldExpr>\n\n"
 
 
-generateOldExpr :: Contracts -> FilePath ->  [OldExpr]
+generateOldExpr :: HTriples -> FilePath ->  [OldExpr]
 generateOldExpr [] _         = []
 generateOldExpr (c:cs) jpath = 
- let cn     = contractName c
+ let cn     = htName c
      p      = post c
      classI = fst $ methodCN c
      path   = jpath
@@ -173,14 +173,14 @@ parse xml_fn =
      let rootElem = CElem root noPos
      let xs = (tag "result" /> tag "contract" $ rootElem)
      let ys = map (tag "contract" /> tag "oldExpr") xs
-     let oldExpr_info = map getContractInfo xs
+     let oldExpr_info = map getHTInfo xs
      let oldExpr_expr = map (map getExpr) ys
      let oldExpr_type = map (map getType) ys
      let components   = zip oldExpr_expr oldExpr_type
      let oldExpr      = map (foldr (\p xs -> (makeOldExpr p):xs) [].(\(x, y) -> zip x y)) components
      let proof        = foldr foo [] $ zip oldExpr_info oldExpr
      return proof
-          where foo (x,oexpr) xs  = (OldExpr { contractID    = fst' x
+          where foo (x,oexpr) xs  = (OldExpr { htID    = fst' x
                                              , classInf      = fth x 
                                              , path          = fifth x
                                              , methoD        = snd' x
@@ -194,8 +194,8 @@ parse xml_fn =
                 fifth (x,y,z,t,u) = u
 
 
-getContractInfo :: Content i -> (ContractId, ClassInfo, Target,Type, FilePath)
-getContractInfo (CElem (Elem name as _) _) =
+getHTInfo :: Content i -> (ContractId, ClassInfo, Target,Type, FilePath)
+getHTInfo (CElem (Elem name as _) _) =
   if (getFromQN name == "contract")
   then let cid  = lookForVal "Id" as
            cinf = lookForVal "class" as

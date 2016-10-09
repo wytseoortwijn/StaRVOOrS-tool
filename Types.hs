@@ -11,12 +11,12 @@ data PPDATE = PPDATE
   { importsGet     :: Imports
   , globalGet      :: Global
   , cinvariantsGet :: CInvariants
-  , contractsGet   :: Contracts
+  , htsGet         :: HTriples
   , methodsGet     :: Methods 
   } deriving (Show, Eq)
 
-updateContractsPP :: PPDATE -> Contracts -> PPDATE
-updateContractsPP (PPDATE imp global cinvs conts ms) conts' = PPDATE imp global cinvs conts' ms
+updateHTsPP :: PPDATE -> HTriples -> PPDATE
+updateHTsPP (PPDATE imp global cinvs conts ms) conts' = PPDATE imp global cinvs conts' ms
 
 updateGlobalPP :: PPDATE -> Global -> PPDATE
 updateGlobalPP (PPDATE imp global cinvs conts ms) global' = PPDATE imp global' cinvs conts ms
@@ -32,16 +32,16 @@ data CInvariant = CI Class BodyCInv deriving (Show, Eq)
 type CInvariants = [CInvariant]
 
 
-type ContractName   = String
+type HTName   = String
 type MethodName     = String
 type Pre            = String
 type Post           = String
 type Assignable     = String
 type MethodCN       = (ClassInfo, MethodName)
 
--- Contracts = Hoare Triples
-data Contract = Contract
-  { contractName :: ContractName
+
+data HT = HT
+  { htName :: HTName
   , methodCN :: MethodCN
   , pre :: Pre
   , post :: Post
@@ -51,31 +51,32 @@ data Contract = Contract
   , path2it :: String -- Added to associate the Hoare triple to the address of its class
   } | CNil deriving (Show, Eq)
 
-type Contracts = [Contract]
+type HTriples = [HT]
 
-updateCN :: Contract -> ContractName -> Contract
-updateCN (Contract cn m p po ass opt ch p2it) cn' = Contract cn' m p po ass opt ch p2it
+updateCN :: HT -> HTName -> HT
+updateCN (HT cn m p po ass opt ch p2it) cn' = HT cn' m p po ass opt ch p2it
 
-updatePre :: Contract -> Pre -> Contract
-updatePre (Contract cn m p po ass opt ch p2it) p' = Contract cn m p' po ass opt ch p2it
+updatePre :: HT -> Pre -> HT
+updatePre (HT cn m p po ass opt ch p2it) p' = HT cn m p' po ass opt ch p2it
 
-updatePost :: Contract -> Post -> Contract
-updatePost (Contract cn m p po ass opt ch p2it) po' = Contract cn m p po' ass opt ch p2it
+updatePost :: HT -> Post -> HT
+updatePost (HT cn m p po ass opt ch p2it) po' = HT cn m p po' ass opt ch p2it
 
-updateOpt :: Contract -> [Pre] -> Contract
-updateOpt (Contract cn m p po ass opt ch p2it) opt' = Contract cn m p po ass opt' ch p2it
+updateOpt :: HT -> [Pre] -> HT
+updateOpt (HT cn m p po ass opt ch p2it) opt' = HT cn m p po ass opt' ch p2it
 
-updateCH :: Contract -> Int -> Contract
-updateCH (Contract cn m p po ass opt ch p2it) ch' = Contract cn m p po ass opt ch' p2it
+updateCH :: HT -> Int -> HT
+updateCH (HT cn m p po ass opt ch p2it) ch' = HT cn m p po ass opt ch' p2it
 
-updatePath :: Contract -> String -> Contract
-updatePath (Contract cn m p po ass opt ch p2it) p2it' = Contract cn m p po ass opt ch p2it'
+updatePath :: HT -> String -> HT
+updatePath (HT cn m p po ass opt ch p2it) p2it' = HT cn m p po ass opt ch p2it'
 
 
 
 data Context =
    Ctxt { variables :: Variables
-        , events :: Events
+        , ievents  :: IEvents
+        , triggers :: Triggers
         , property :: Property
         , foreaches :: Foreaches
         }
@@ -179,9 +180,9 @@ data InitialCode =
 type PropertyName = String
 type NameState = String
 
-data State = State NameState InitialCode [ContractName] deriving (Show, Eq,Read)
+data State = State NameState InitialCode [HTName] deriving (Show, Eq,Read)
 
-getCNList :: State -> [ContractName]
+getCNList :: State -> [HTName]
 getCNList (State ns ic cns) = cns
 
 getNS :: State -> NameState
@@ -204,14 +205,14 @@ data States = States
 
 type Transitions = [Transition]
 
-type Event = String
-type Cond = String
-type Action = String
+type Trigger = String
+type Cond    = String
+type Action  = String
 
 data Arrow = Arrow 
-  { event  :: Event
-  , cond   ::  Cond
-  , action :: Action
+  { trigger :: Trigger
+  , cond    ::  Cond
+  , action  :: Action
   } deriving (Show, Eq,Read)
 
 
@@ -230,38 +231,50 @@ data Property = Property
   } | PNIL deriving (Show, Eq,Read)
 
 
-------------
--- EVENTS --
-------------
+-------------
+-- IEvents --
+-------------
 
--- Events = Triggers
+type IEvents = [IEvent]
+
+data IEvent =
+   IEvent Id
+  deriving (Eq,Ord,Show,Read)
+
+--------------
+-- Triggers --
+--------------
 
 type WhereClause = String
 
-data EventDef = EventDef 
-  { eName :: Event
+data TriggerDef = TriggerDef 
+  { tName :: Trigger
   , args :: [Bind]
-  , compEvent :: CompoundEvent
+  , compTrigger :: CompoundTrigger
   , whereClause :: WhereClause
   } deriving (Show, Eq,Read)
 
-data CompoundEvent =
-   NormalEvent Binding Id [Bind] EventVariation
+data CompoundTrigger =
+   NormalEvent Binding Id [Bind] TriggerVariation
  | ClockEvent Id Integer
  | OnlyId Id
  | OnlyIdPar Id
- | Collection EventList
+ | Collection TriggerList
   deriving (Eq,Show,Read)
 
-data EventVariation =
+getCTVariation :: CompoundTrigger -> TriggerVariation
+getCTVariation (NormalEvent _ _ _ tv) = tv
+
+data TriggerVariation =
    EVEntry
  | EVExit [Bind]
  | EVThrow [Bind]
  | EVHadle [Bind]
+ | EVNil--Added to simplify search of triggers during the translation
   deriving (Eq,Show,Read)
 
-data EventList =
-   CECollection [CompoundEvent]
+data TriggerList =
+   CECollection [CompoundTrigger]
   deriving (Eq,Show,Read)
 
 data Bind =
@@ -286,24 +299,24 @@ data Binding =
 getBind :: Binding -> Bind
 getBind (BindingVar bn) = bn
 
-updateEventArgs :: EventDef -> [Bind] -> EventDef
-updateEventArgs (EventDef e arg cpes wc) arg' = EventDef e arg' cpes wc
+updateTriggerArgs :: TriggerDef -> [Bind] -> TriggerDef
+updateTriggerArgs (TriggerDef e arg cpes wc) arg' = TriggerDef e arg' cpes wc
 
-updateMethodCallName :: EventDef -> MethodName -> EventDef
-updateMethodCallName (EventDef e arg cpes wc) mn = EventDef e arg (updateCpeMethodName cpes mn) wc
+updateMethodCallName :: TriggerDef -> MethodName -> TriggerDef
+updateMethodCallName (TriggerDef e arg cpes wc) mn = TriggerDef e arg (updateCpeMethodName cpes mn) wc
 
-updateCpeMethodName :: CompoundEvent -> MethodName -> CompoundEvent
+updateCpeMethodName :: CompoundTrigger -> MethodName -> CompoundTrigger
 updateCpeMethodName (NormalEvent bind id bs ev) id' = NormalEvent bind id' bs ev
 updateCpeMethodName cpe _                           = cpe
 
-updateCpeMethodCallBody :: CompoundEvent -> [Bind] -> CompoundEvent
+updateCpeMethodCallBody :: CompoundTrigger -> [Bind] -> CompoundTrigger
 updateCpeMethodCallBody (NormalEvent bind id bs ev) bs' = NormalEvent bind id bs' ev
 updateCpeMethodCallBody cpe _                           = cpe
 
-updateMethodCallBody :: EventDef -> [Bind] -> EventDef
-updateMethodCallBody (EventDef e arg cpes wc) bs = EventDef e arg (updateCpeMethodCallBody cpes bs) wc
+updateMethodCallBody :: TriggerDef -> [Bind] -> TriggerDef
+updateMethodCallBody (TriggerDef e arg cpes wc) bs = TriggerDef e arg (updateCpeMethodCallBody cpes bs) wc
 
-type Events = [EventDef]
+type Triggers = [TriggerDef]
 
 
 -------------------------------------------------------------------
@@ -311,7 +324,7 @@ type Events = [EventDef]
 -------------------------------------------------------------------
 
 type OldExprL = [(String,Type,String)] --(expr_in_old,type_expr_in_old,name_to_replace_expr_in_old)
-type OldExprM = Map ContractName OldExprL
+type OldExprM = Map HTName OldExprL
 
 -----------------------
 -- XML related types --
@@ -356,7 +369,7 @@ data MethodContractApplication = MCA
 -- Types associated to the types inference --
 
 data OldExpr = OldExpr
-  { contractID    :: ContractId
+  { htID          :: Id
   , classInf      :: ClassInfo
   , targ          :: Target
   , path          :: FilePath

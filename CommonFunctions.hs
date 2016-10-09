@@ -10,7 +10,7 @@ import qualified Data.Map as Map
 
 readIdentifier :: String -> Err (String, String)
 readIdentifier text 
-  | identifier == "" = fail "Error Parsing: Expecting identifier but not found.\n"
+  | identifier == "" = fail "Error Parsing: Expecting identifier, but none was found.\n"
   | otherwise        = return (identifier, text')
   where
     (identifier, text') = break (\c -> c == '}' || c == '{') text
@@ -51,29 +51,23 @@ checkIfParseErrors es = let (ls, rs) = partitionEithers es
                            else Right rs
 
 
-lookForExitEvent :: Events -> MethodName -> Event
-lookForExitEvent [] mn     = error $ "Missing exit event for method " ++ mn ++ ".\n"
-lookForExitEvent (e:es) mn = 
- case (compEvent e) of 
-      NormalEvent _ id _ evar -> 
-              case evar of
-                   EVExit _ -> if (mn == id)
-                               then eName e
-                               else lookForExitEvent es mn
-                   _        -> lookForExitEvent es mn
-      otherwise -> lookForExitEvent es mn
+lookForExitTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> Trigger
+lookForExitTrigger [] mn                = error $ "Missing exit trigger for method " ++ mn ++ ".\n"
+lookForExitTrigger ((tr,mn',e,_):es) mn = 
+    case e of
+        EVExit _ -> if (mn == mn')
+                    then tr
+                    else lookForExitTrigger es mn
+        _        -> lookForExitTrigger es mn        
 
-lookForEntryEvent :: Events -> MethodName -> Event
-lookForEntryEvent [] mn     = error $ "Missing entry event for method " ++ mn ++ ".\n"
-lookForEntryEvent (e:es) mn = 
- case (compEvent e) of 
-      NormalEvent _ id _ evar -> 
-              case evar of
-                   EVEntry -> if (mn == id)
-                               then eName e
-                               else lookForEntryEvent es mn
-                   _       -> lookForEntryEvent es mn
-      otherwise -> lookForEntryEvent es mn
+lookForEntryTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> Trigger
+lookForEntryTrigger [] mn                = error $ "Missing exit trigger for method " ++ mn ++ ".\n"
+lookForEntryTrigger ((tr,mn',e,_):es) mn = 
+    case e of
+        EVEntry -> if (mn == mn')
+                   then tr
+                   else lookForEntryTrigger es mn
+        _       -> lookForEntryTrigger es mn  
 
 openingBracket :: String -> Bool
 openingBracket "" = False
@@ -83,7 +77,7 @@ args2Str :: [Bind] -> String
 args2Str []       = ""
 args2Str (bn:bns) = case bn of
                          BindType t id -> t ++ " " ++ id ++ "," ++ args2Str bns
-                         _ -> error "argst2Str: An event has a wrongly defined argument.\n"
+                         _ -> error "argst2Str: A trigger has a wrongly defined argument.\n"
 
 removeDuplicates :: Eq a => [a] -> [a]
 removeDuplicates []     = []
@@ -124,20 +118,20 @@ addComma [xs]     = xs
 addComma (xs:xss) = xs ++ "," ++ addComma xss
 
 
-getConstTnv :: Contract -> OldExprM -> Variables
+getConstTnv :: HT -> OldExprM -> Variables
 getConstTnv c oldExpM = 
   if Map.null oldExpM 
   then []
-  else case Map.lookup (contractName c) oldExpM of
+  else case Map.lookup (htName c) oldExpM of
             Nothing -> []
-            Just xs -> let cn    = contractName c
+            Just xs -> let cn    = htName c
                            vdec  = VarDecl cn VarInitNil
                            typE  = "Old_" ++ cn
                        in if null xs
                           then []
                           else [Var VarModifierNil typE [vdec]]
 
-getOldExpr :: OldExprM -> ContractName -> String
+getOldExpr :: OldExprM -> HTName -> String
 getOldExpr oldExpM cn = 
  case Map.lookup cn oldExpM of
       Nothing -> ""
@@ -145,22 +139,41 @@ getOldExpr oldExpM cn =
                  then ""
                  else "," ++ cn
 
+getBindArgs' :: [Bind] -> String
+getBindArgs' []                     = ""
+getBindArgs' [BindType t id]        = t ++ " " ++ id
+getBindArgs' ((BindType t id):y:ys) = t ++ " " ++ id ++ "," ++ getBindArgs' (y:ys)
+getBindArgs' _                      = ""
+
+getInfoTrigger :: (Id,MethodName,TriggerVariation,[Bind]) -> Maybe (Trigger, [String])
+getInfoTrigger (tr,mn',e,bs) = 
+ case e of
+     EVExit _ -> Just (tr,splitOnIdentifier "," $ getBindArgs' bs)
+     EVEntry  -> Just (tr,splitOnIdentifier "," $ getBindArgs' bs)
+     _        -> Nothing
+
+lookfor :: [(Trigger, [String])] -> Trigger -> [String]
+lookfor [] _     = []
+lookfor (x:xs) e = if (fst x==e)
+                   then snd x
+                   else lookfor xs e
+
 ---------------------------------------
 -- Manipulating the parsed .xml file --
 ---------------------------------------
 
-removeNoneContracts :: [Proof] -> [ContractName] -> [Proof]
-removeNoneContracts [] _       = []
-removeNoneContracts (p:ps) cns = let cn = getContractNameErrConst (contractText p) (typee p) in
+removeNoneHTs :: [Proof] -> [HTName] -> [Proof]
+removeNoneHTs [] _       = []
+removeNoneHTs (p:ps) cns = let cn = getHTNameErrConst (contractText p) (typee p) in
                                  if ((cn /= "") && elem cn cns)
-                                 then p:removeNoneContracts ps cns
-                                 else removeNoneContracts ps cns
+                                 then p:removeNoneHTs ps cns
+                                 else removeNoneHTs ps cns
 
 
-getInfoFromProof :: Proof -> (MethodName, ContractName, [String],String)
+getInfoFromProof :: Proof -> (MethodName, HTName, [String],String)
 getInfoFromProof proof = let mn    = getMethodName' (target proof)
                              path  = typee proof
-                             cn    = getContractNameErrConst (contractText proof) (typee proof)
+                             cn    = getHTNameErrConst (contractText proof) (typee proof)
                              npres = getNewPreConds (executionPath proof)
                              aoft  = length $ filter (=="true") npres
                          in if (aoft >= 1)
@@ -176,20 +189,21 @@ getInfoFromProof proof = let mn    = getMethodName' (target proof)
 getMethodName' :: Target -> MethodName
 getMethodName' t = fst $ splitAtIdentifier '(' t                   
 
-getContractNameErrConst :: ContractText -> Type -> ContractName
-getContractNameErrConst ctext t = let (_, xs) = splitAtIdentifier ':' ctext
-                                      ys      = splitOnIdentifier t (tail xs)
-                                  in if (length ys == 1)
-                                     then ""
-                                     else trim $ fst $ splitAtIdentifier '=' $ (tail.head.tail) ys
+getHTNameErrConst :: ContractText -> Type -> HTName
+getHTNameErrConst ctext t = let (_, xs) = splitAtIdentifier ':' ctext
+                                ys      = splitOnIdentifier t (tail xs)
+                            in if (length ys == 1)
+                               then ""
+                               else trim $ fst $ splitAtIdentifier '=' $ (tail.head.tail) ys
 
-getContractNameErrVar :: ContractText -> ContractName
-getContractNameErrVar ctext = let (_, xs) = splitAtIdentifier ':' ctext
-                                  (_, ys) = splitAtIdentifier '.' $ tail xs
-                              in if (null ys)
-                                 then ""
-                                 else let (cn, _) = splitAtIdentifier '=' $ tail ys 
-                                      in trim cn
+getHTNameErrVar :: ContractText -> HTName
+getHTNameErrVar ctext = 
+ let (_, xs) = splitAtIdentifier ':' ctext
+     (_, ys) = splitAtIdentifier '.' $ tail xs
+ in if (null ys)
+    then ""
+    else let (cn, _) = splitAtIdentifier '=' $ tail ys 
+         in trim cn
 
 getNewPreConds :: [EPath] -> [String]
 getNewPreConds []       = []
@@ -202,13 +216,13 @@ introduceOr [x]    = x
 introduceOr (x:xs) = x ++ " || " ++ introduceOr xs
 
 
-getAllEvents :: Global -> Events
-getAllEvents (Global (Ctxt vars es prop [])) = es 
-getAllEvents (Global (Ctxt vars es prop [Foreach args ctxt])) = es ++ getEventsCtxt ctxt
+getAllTriggers :: Global -> Triggers
+getAllTriggers (Global (Ctxt vars ies trigs prop []))                  = trigs
+getAllTriggers (Global (Ctxt vars ies trigs prop [Foreach args ctxt])) = trigs ++ getTriggersCtxt ctxt
 
-getEventsCtxt :: Context -> Events
-getEventsCtxt (Ctxt vars es prop [])    = es
-getEventsCtxt (Ctxt vars es prop [Foreach args ctxt]) = es ++ getEventsCtxt ctxt
+getTriggersCtxt :: Context -> Triggers
+getTriggersCtxt (Ctxt vars ies trigs prop [])                  = trigs
+getTriggersCtxt (Ctxt vars ies trigs prop [Foreach args ctxt]) = trigs ++ getTriggersCtxt ctxt
 
 
 makeAddFile :: Import -> IO (String, ClassInfo)

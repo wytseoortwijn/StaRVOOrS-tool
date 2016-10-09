@@ -97,7 +97,7 @@ splitV :: String -> [String] -> [(String, String)]
 splitV _ []         = []
 splitV type' (v:vs) = (type',v):splitV type' vs
 
-getMethodsNames :: T.ClassInfo -> T.Contracts -> [T.MethodName]
+getMethodsNames :: T.ClassInfo -> T.HTriples -> [T.MethodName]
 getMethodsNames _ []      = []
 getMethodsNames cl (c:cs) = if ((fst $ T.methodCN c) == cl)  
                             then (snd $ T.methodCN c):getMethodsNames cl cs

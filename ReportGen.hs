@@ -5,7 +5,7 @@ import CommonFunctions
 import DL2JML
 
 
-type PProof = (MethodName, ContractName, [Pre])
+type PProof = (MethodName, HTName, [Pre])
 
 -- Generates the report with the info about the (partial) proofs.
 generateReport :: [Proof] -> FilePath -> IO ()
@@ -61,7 +61,7 @@ notProvedInfo nps = if (null nps)
                     else "* " ++ show (length nps) ++ " contract(s) were not proved:\n"
                          ++ genListContractsName (map (\(x,y,z) -> y) nps)
 
-genListContractsName :: [ContractName] -> String
+genListContractsName :: [HTName] -> String
 genListContractsName []     = ""
 genListContractsName (c:cs) = "  " ++ c ++ "\n" ++ genListContractsName cs
 

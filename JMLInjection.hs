@@ -194,14 +194,14 @@ generateDummyBoolVars :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 generateDummyBoolVars ppd output_add jpath = 
  let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
      imports       = importsGet ppdate
-     consts        = contractsGet ppdate
-     xs            = splitClassContract consts
-     join_xs       = joinClassContract xs []
+     consts        = htsGet ppdate
+     xs            = splitClassHT consts
+     join_xs       = joinClassHT xs []
      imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
   in sequence $ map (\ i -> generateDBMFile i output_add jpath join_xs) imports'
 
 
-generateDBMFile :: Import -> FilePath -> FilePath -> [(ClassInfo, [ContractName])] -> IO ()
+generateDBMFile :: Import -> FilePath -> FilePath -> [(ClassInfo, [HTName])] -> IO ()
 generateDBMFile i output_add jpath xs =
   do (main, cl) <- makeAddFile i
      createDirectoryIfMissing True output_add
@@ -214,24 +214,24 @@ generateDBMFile i output_add jpath xs =
      let (ys, zs) = lookForClassBeginning cl (lines r)
      writeFile tmp ((unlines ys) ++ concat dummy_vars ++ (unlines zs)) 
 
-genDummyVarJava :: ContractName -> String
+genDummyVarJava :: HTName -> String
 genDummyVarJava cn = "  public static final boolean " ++ cn ++ " = true;\n"
 
-lookForConstsNames :: ClassInfo -> [(ClassInfo, [ContractName])] -> [ContractName]
+lookForConstsNames :: ClassInfo -> [(ClassInfo, [HTName])] -> [HTName]
 lookForConstsNames cn []             = []
 lookForConstsNames cn ((cn', cs):xs) = if (cn == cn')
                                        then cs
                                        else lookForConstsNames cn xs 
 
-splitClassContract :: Contracts -> [(ClassInfo, ContractName)]
-splitClassContract []     = []
-splitClassContract (c:cs) = (fst $ methodCN c, contractName c) : splitClassContract cs
+splitClassHT :: HTriples -> [(ClassInfo, HTName)]
+splitClassHT []     = []
+splitClassHT (c:cs) = (fst $ methodCN c, htName c) : splitClassHT cs
 
-joinClassContract :: [(ClassInfo, ContractName)] -> [(ClassInfo, [ContractName])] -> [(ClassInfo, [ContractName])]
-joinClassContract [] jcc     = jcc
-joinClassContract (x:xs) jcc = joinClassContract xs (updateJCC x jcc) 
+joinClassHT :: [(ClassInfo, HTName)] -> [(ClassInfo, [HTName])] -> [(ClassInfo, [HTName])]
+joinClassHT [] jcc     = jcc
+joinClassHT (x:xs) jcc = joinClassHT xs (updateJCC x jcc) 
 
-updateJCC :: (ClassInfo, ContractName) -> [(ClassInfo, [ContractName])] -> [(ClassInfo, [ContractName])]
+updateJCC :: (ClassInfo, HTName) -> [(ClassInfo, [HTName])] -> [(ClassInfo, [HTName])]
 updateJCC (cn, c) []            = [(cn, [c])]
 updateJCC (cn, c) ((cn',cs):xs) = if (cn == cn')
                                   then (cn', c:cs) : xs
