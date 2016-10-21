@@ -1,0 +1,5 @@
+true ? j1 : j2 ;
+System.out.printf("lolo %d \n", n);
+v = 4 ;
+
+
