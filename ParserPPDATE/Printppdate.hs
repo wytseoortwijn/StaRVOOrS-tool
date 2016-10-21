@@ -26,6 +26,8 @@ render :: Doc -> String
 render d = rend 0 (map ($ "") $ d []) "" where
   rend i ss = case ss of
     "\\"     :ts -> showChar '\\' . rend i ts
+    t:"+":"+":ts -> showString t . showChar '+' . space "+" . rend i ts
+    t:"-":"-":ts -> showString t . showChar '-' . space "-" . rend i ts
     t: "%"   :ts -> space t . showChar '%' . rend i ts
     t: "."   :ts -> showString t . showChar '.' . rend i ts 
     "=" :"=" :ts -> showChar '=' . space "=" . rend i ts
