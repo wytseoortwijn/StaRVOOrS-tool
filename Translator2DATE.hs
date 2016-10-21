@@ -18,6 +18,7 @@ translate ppd fpath =
     let consts = assocChannel2HTs 1 $ (htsGet ppdate)
     let ppdate' = updateHTsPP ppdate consts
     appendFile fpath (writeGlobal ppdate' env)
+    appendFile fpath (writeMethods (methodsGet ppdate')) 
     putStrLn $ "Translation complete."
 
 
@@ -451,4 +452,4 @@ getForeachArgs (Args t id:y:ys) = t ++ " " ++ id ++ "," ++ getForeachArgs (y:ys)
 ---------------------
 
 writeMethods :: Methods -> String
-writeMethods methods = methods
+writeMethods methods = "\n" ++  methods
