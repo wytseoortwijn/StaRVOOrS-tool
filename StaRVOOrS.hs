@@ -60,8 +60,7 @@ main =
       (_,_,[]) -> do
                      name <- getProgName
                      putStrLn ("Usage: " ++ name ++ " [-OPTIONS] <java_source_files_address> <ppDATE_file> <output_address>")
-      (_,_,errs) -> do xs <- sequence $ map putStrLn errs
-                       return ()
+      (_,_,errs) -> sequence_ $ map putStrLn errs
 
 
 --Runs StaRVOOrS --

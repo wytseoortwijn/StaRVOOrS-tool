@@ -1,4 +1,4 @@
-module Translator2DATE(translate) where
+module DummyTranslation2DATE(translate) where
 
 import Types
 import CommonFunctions
@@ -185,10 +185,9 @@ writeProperties PNIL _ _ _         = ""
 writeProperties prop consts es env =
  let fors   = forsVars env --list of foreach variables
      xs     = getProperties prop consts es env
-     ra     = generateReplicatedAutomata consts fors es env
  in if (null fors)
-    then xs ++ ra ++ "\n}\n"
-    else xs ++ ra ++ "\n}\n}\n"
+    then xs ++ "\n}\n"
+    else xs ++ "\n}\n}\n"
 
 
 getProperties :: Property -> HTriples -> Triggers -> Env -> String
@@ -198,17 +197,17 @@ writeProperty :: Property -> HTriples -> Triggers -> Env -> String
 writeProperty PNIL _ _ _                                   = ""
 writeProperty (Property name states trans props) cs es env =
   "PROPERTY " ++ name ++ " \n{\n\n"
-  ++ writeStates states
+  ++ writeStates cs states
   ++ writeTransitions trans cs states es env
   ++ "}\n\n"
   ++ writeProperty props cs es env
 
-writeStates :: States -> String
-writeStates (States acc bad normal start) =
- let acc'    = getStates acc
-     bad'    = getStates bad
-     normal' = getStates normal
-     start'  = getStates start
+writeStates :: HTriples -> States -> String
+writeStates cs (States acc bad normal start) =
+ let acc'    = getStates acc cs
+     bad'    = getStates bad cs
+     normal' = getStates normal cs
+     start'  = getStates start cs
  in "STATES \n{\n"
     ++ writeState "ACCEPTING" acc'
     ++ writeState "BAD" bad'
@@ -221,9 +220,21 @@ writeState iden xs = if (clean xs == "")
                      then ""
                      else iden ++ " { " ++ xs ++ "}\n"
 
-getStates :: [State] -> String
-getStates []              = ""
-getStates (State n ic _:xs) = n ++ " " ++ getInitCode' ic ++ " " ++ getStates xs
+getStates :: [State] -> HTriples -> String
+getStates [] _                   = ""
+getStates (State n ic cns:xs) cs = n ++ " " ++ getInitCode' ic ++ "(" ++ genContractInfo cns cs ++ ") "++ getStates xs cs
+
+genContractInfo :: [HTName] -> HTriples -> String
+genContractInfo [] _        = ""
+genContractInfo [cn] cs     = getInfo cn cs
+genContractInfo (cn:cns) cs = getInfo cn cs ++ "," ++ genContractInfo cns cs
+
+getInfo :: HTName -> HTriples -> String
+getInfo cn []     = ""
+getInfo cn (c:cs) = 
+ if htName c == cn
+ then (fst.methodCN) c ++ "." ++ (snd.methodCN) c
+ else getInfo cn cs
 
 getInitCode' :: InitialCode -> String
 getInitCode' InitNil         = ""
@@ -272,9 +283,7 @@ generateTransition p ns cs ts es env = let c             = lookForHT p cs
                                            (lts, nonlts) = lookForLeavingTransitions e ns ts
                                        in if (null lts)
                                           then ts ++ [(makeTransitionAlg1Cond ns e c env)]
-                                          else let ext = makeExtraTransitionAlg2 lts c e ns env
-                                                   xs  = map (\x -> instrumentTransitionAlg2 c x e env) lts
-                                               in nonlts ++ xs ++ [ext]
+                                          else ts
 
 
 makeTransitionAlg1Cond :: NameState -> Trigger -> HT -> Env -> Transition
@@ -306,50 +315,6 @@ initOldExpr :: OldExprL -> HTName -> String
 initOldExpr oel cn = 
  "new Old_" ++ cn ++ "(" ++ addComma (map (\(x,_,_) -> x) oel) ++ ")"
 
-
-
-makeExtraTransitionAlg2Cond :: Transitions -> String
-makeExtraTransitionAlg2Cond []     = ""
-makeExtraTransitionAlg2Cond (t:ts) =
- let cond'  = cond $ arrow t
-     cond'' = if (null $ clean cond') then "true" else cond'
- in
- "!("++ cond'' ++ ") && " ++ makeExtraTransitionAlg2Cond ts
-
-makeExtraTransitionAlg2 :: Transitions -> HT -> Trigger -> NameState -> Env -> Transition
-makeExtraTransitionAlg2 ts c e ns env = let esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
-                                            oldExpM = oldExpTypes env
-                                            cn      = htName c
-                                            zs      = getExpForOld oldExpM cn
-                                            esinf'  = filter (/="") $ lookfor esinf e
-                                            arg     = if null esinf' 
-                                                      then ""
-                                                      else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
-                                            pre'    = "HoareTriplesPPD." ++ (htName c) ++ "_pre(" ++ arg ++ ")"
-                                            type_   = if null zs then "PPD" else "Old_" ++ cn
-                                            old     = if null zs then "" else "," ++ cn
-                                            msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
-                                            c'      = makeExtraTransitionAlg2Cond ts ++ pre'
-                                        in Transition ns (Arrow e c' (zs ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");")) ns
-
-
-instrumentTransitionAlg2 :: HT -> Transition -> Trigger -> Env -> Transition
-instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env =
- let cn      = htName c
-     oldExpM = oldExpTypes env
-     esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
-     esinf'  = filter (/="") $ lookfor esinf e
-     arg     = if null esinf' 
-               then ""
-               else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
-     semicol = if (act == "") then "" else ";"     
-     zs      = getExpForOld oldExpM cn
-     type_   = if null zs then "PPD" else "Old_" ++ cn
-     old     = if null zs then "" else "," ++ cn
-     msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
-     act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) {" ++ zs ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "}"
- in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
-
 lookForHT :: PropertyName -> HTriples -> HT
 lookForHT p []     = error $ "Wow! The impossible happened when checking the property "++ p ++ " on a state.\n"
 lookForHT p (c:cs) = if (htName c == p)
@@ -364,61 +329,6 @@ lookForLeavingTransitions e ns (t@(Transition q (Arrow e' c act) q'):ts) = if (e
                                                                                 else (a, t:b)
                                                                            else (a,t:b)
                                                                                 where (a, b) = lookForLeavingTransitions e ns ts
-
--------------------------
--- Replicated Automata --
--------------------------
-
-generateReplicatedAutomata :: HTriples -> [Id] -> Triggers -> Env -> String
-generateReplicatedAutomata cs fs es env = 
- let n      = length cs
-     ys     = zip cs [1..n]
-     esinf  = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
-     props  = map (uncurry (generateRAString esinf es env)) ys
-     fors   = generateWhereInfo fs
-     triggers = generateTriggersRA fors (map (\(x,y) -> (htName x,y)) ys) env
-     eps      = zip triggers props
- in generateProp eps env
-
-
-generateProp :: [(String,(String,HTName))] -> Env -> String
-generateProp [] _               = ""
-generateProp ((es,ps):eps)  env = 
- let cn       = snd ps
-     oldExpM  = oldExpTypes env
-     zs       = getOldExpr oldExpM cn
-     nvar     = if null zs then "" else "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n" 
- in "FOREACH (Integer idPPD) {\n\n"
-    ++ "VARIABLES {\n" ++ " Integer idAux = new Integer(0);\n " ++ nvar ++ "}\n\n"
-    ++ "EVENTS {\n" ++ es ++ "}\n\n"
-    ++ fst ps
-    ++ "}\n\n"
-    ++ generateProp eps env
-
-generateWhereInfo :: [Id] -> String
-generateWhereInfo []     = ""
-generateWhereInfo (f:fs) = f ++ "=null;" ++ generateWhereInfo fs
-
-generateTriggersRA :: String -> [(HTName,Int)] -> Env -> [String]
-generateTriggersRA fs ns env = map (uncurry (generateTriggerRA fs env)) ns
-
-generateTriggerRA :: String -> Env -> HTName -> Int -> String
-generateTriggerRA fs env cn n =
- let oldExpM  = oldExpTypes env
-     zs       = getOldExpr oldExpM cn
-     nvar     = if null zs then "PPD" else "Old_" ++ cn
- in "rh" ++ show n ++ "(Messages" ++ nvar ++ " msg) = {h"++ show n ++ ".receive(msg)} where {idPPD=msg.id;"
-    ++ fs ++  "}\n"
-
-generateRAString :: [(Trigger, [String])] -> Triggers -> Env -> HT -> Int -> (String,HTName)
-generateRAString esinf es env c n =
-  let ra = generateRA c n env
-      cn = pName ra
-  in ("PROPERTY " ++ cn ++ "\n{\n\n"
-     ++ writeStates (pStates ra)
-     ++ writeTransitions (pTransitions ra) [] (States [] [] [] []) [] emptyEnv
-     ++ "}\n\n",cn)
-
 
 -------------
 -- Foreach --
