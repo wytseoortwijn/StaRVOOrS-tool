@@ -2,8 +2,6 @@ module DummyTranslation2DATE(translate) where
 
 import Types
 import CommonFunctions
-import ReplicatedAutomataGenerator
-import RefinementPPDATE
 import UpgradePPDATE
 import ErrM
 import qualified Data.Map as Map
@@ -14,11 +12,9 @@ translate :: UpgradePPD PPDATE -> FilePath -> IO ()
 translate ppd fpath =
  do let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
     putStrLn "Translating ppDATE to DATE."
-    writeFile fpath (writeImports (importsGet ppdate) (htsGet ppdate))
-    let consts = assocChannel2HTs 1 $ (htsGet ppdate)
-    let ppdate' = updateHTsPP ppdate consts
-    appendFile fpath (writeGlobal ppdate' env)
-    appendFile fpath (writeMethods (methodsGet ppdate')) 
+    writeFile fpath (writeImports (importsGet ppdate))
+    appendFile fpath (writeGlobal ppdate env)
+    appendFile fpath (writeMethods (methodsGet ppdate)) 
     putStrLn $ "Translation completed."
 
 
@@ -34,11 +30,8 @@ getImports :: Imports -> String
 getImports []            = ""
 getImports (Import s:xs) = "import " ++ s ++ ";\n" ++ getImports xs
 
-writeImports :: Imports -> HTriples -> String
-writeImports xss const = let newImp = "import ppArtifacts.*;\n"
-                         in if null const 
-                            then "IMPORTS {\n" ++ getImports xss ++ "}\n\n"
-                            else "IMPORTS {\n" ++ getImports xss ++ newImp  ++ "}\n\n"
+writeImports :: Imports -> String
+writeImports xss = "IMPORTS {\n" ++ getImports xss ++ "}\n\n"
 
 --------------------
 -- GLOBAL section --
@@ -51,12 +44,10 @@ writeGlobal ppdate env = let global = ctxtGet $ globalGet ppdate
                              es     = triggers global
                              prop   = property global
                              fors   = foreaches global
-                             vars'  = if (null consts)
-                                      then if (null vars) then "" else "VARIABLES {\n" ++ writeVariables vars ++ "}\n\n"
-                                      else "VARIABLES {\n" ++ makeChannels (length consts) ++ writeVariables vars ++ "}\n\n"
+                             vars'  = if null vars then "" else "VARIABLES {\n" ++ writeVariables vars ++ "}\n\n"
                          in "GLOBAL {\n\n"
                             ++ vars'
-                            ++ writeTriggers es consts
+                            ++ writeTriggers es
                             ++ writeProperties prop consts es env
                             ++ writeForeach fors consts env
                             -- ++ "}\n"
@@ -87,22 +78,15 @@ flattenVariables []       = ""
 flattenVariables [x]      = x
 flattenVariables (x:y:xs) = x ++ "," ++ flattenVariables (y:xs)
 
-makeChannels :: Int -> String
-makeChannels n = generateChannels n ++ "\n"
-
-generateChannels :: Int -> String
-generateChannels 0 = "\n"
-generateChannels n = generateChannels (n-1) ++ " Channel h" ++ show n ++ " = new Channel();\n"
-
 --------------
 -- Triggers --
 --------------
 
-writeTriggers :: Triggers -> HTriples -> String
-writeTriggers [] _      = ""
-writeTriggers es consts = "EVENTS {\n"
-                        ++ writeAllTriggers (instrumentTriggers es consts)
-                        ++ "}\n\n"
+writeTriggers :: Triggers -> String
+writeTriggers [] = ""
+writeTriggers es = "EVENTS {\n"
+                   ++ writeAllTriggers es
+                   ++ "}\n\n"
 
 writeAllTriggers :: Triggers -> String
 writeAllTriggers []     = ""
@@ -147,7 +131,7 @@ getBinding (BindingVar (BindType t id)) = t ++ " " ++ id ++ "."
 getBinding (BindingVar (BindId id))     = id ++ "."
 
 getTriggerVariation' :: TriggerVariation -> String
-getTriggerVariation' EVEntry      = ""
+getTriggerVariation' EVEntry      = "uponEntry"
 getTriggerVariation' (EVExit xs)  = "uponReturning(" ++ auxGetTriggerVariation' xs ++ ")"
 getTriggerVariation' (EVThrow xs) = "uponThrowing(" ++ auxGetTriggerVariation' xs ++ ")"
 getTriggerVariation' (EVHadle xs) = "uponHandling(" ++ auxGetTriggerVariation' xs ++ ")"
@@ -155,26 +139,6 @@ getTriggerVariation' (EVHadle xs) = "uponHandling(" ++ auxGetTriggerVariation' x
 auxGetTriggerVariation' :: [Bind] -> String
 auxGetTriggerVariation' []           = ""
 auxGetTriggerVariation' [BindId ret] = ret
-
-
-
--- Checks if the trigger to control has to be the auxiliary one (in case of optimization by key)
-instrumentTriggers :: Triggers -> HTriples -> Triggers
-instrumentTriggers [] cs     = []
-instrumentTriggers (e:es) cs = let (b,mn,bs) = lookupHTForTrigger e cs in
-                             if b
-                             then let e'  = updateMethodCallName e (mn++"Aux")
-                                      e'' = updateTriggerArgs e' ((args e') ++ [BindType "Integer" "id"])
-                                  in updateMethodCallBody e'' (bs++[BindId "id"]):instrumentTriggers es cs
-                             else e:instrumentTriggers es cs
-
-lookupHTForTrigger :: TriggerDef -> HTriples -> (Bool, MethodName, [Bind])
-lookupHTForTrigger e []     = (False,"", [])
-lookupHTForTrigger e (c:cs) = case compTrigger e of
-                                       NormalEvent _ id bs _ -> if (id == snd (methodCN c))
-                                                                then (True, id, bs)
-                                                                else lookupHTForTrigger e cs
-                                       otherwise             -> lookupHTForTrigger e cs
 
 ----------------
 -- Properties --
@@ -186,8 +150,8 @@ writeProperties prop consts es env =
  let fors   = forsVars env --list of foreach variables
      xs     = getProperties prop consts es env
  in if (null fors)
-    then xs ++ "\n}\n"
-    else xs ++ "\n}\n}\n"
+    then xs 
+    else xs ++ "\n}\n"
 
 
 getProperties :: Property -> HTriples -> Triggers -> Env -> String
@@ -198,7 +162,7 @@ writeProperty PNIL _ _ _                                   = ""
 writeProperty (Property name states trans props) cs es env =
   "PROPERTY " ++ name ++ " \n{\n\n"
   ++ writeStates cs states
-  ++ writeTransitions trans cs states es env
+  ++ writeTransitions trans [] states es env
   ++ "}\n\n"
   ++ writeProperty props cs es env
 
@@ -222,12 +186,16 @@ writeState iden xs = if (clean xs == "")
 
 getStates :: [State] -> HTriples -> String
 getStates [] _                   = ""
-getStates (State n ic cns:xs) cs = n ++ " " ++ getInitCode' ic ++ "(" ++ genContractInfo cns cs ++ ") "++ getStates xs cs
+getStates (State n ic cns:xs) cs = n ++ " " ++ getInitCode' ic ++ (wrapper.addComma.removeDuplicates) (genContractInfo cns cs) ++ getStates xs cs
 
-genContractInfo :: [HTName] -> HTriples -> String
-genContractInfo [] _        = ""
-genContractInfo [cn] cs     = getInfo cn cs
-genContractInfo (cn:cns) cs = getInfo cn cs ++ "," ++ genContractInfo cns cs
+wrapper :: String -> String
+wrapper [] = "{}"
+wrapper xs = "{returnThis(\"" ++ xs ++ "\")} "
+
+genContractInfo :: [HTName] -> HTriples -> [String]
+genContractInfo [] _        = []
+genContractInfo [cn] cs     = [getInfo cn cs]
+genContractInfo (cn:cns) cs = getInfo cn cs : genContractInfo cns cs
 
 getInfo :: HTName -> HTriples -> String
 getInfo cn []     = ""
@@ -346,7 +314,7 @@ writeForeach [Foreach args ctxt] consts env =
               else "VARIABLES {\n" ++ writeVariables vars ++ "}\n\n"
  in "FOREACH (" ++ getForeachArgs args ++ ") {\n\n"
     ++ vars'
-    ++ writeTriggers es consts
+    ++ writeTriggers es
     ++ writeProperties prop consts es env
     ++ writeForeach fors consts env
     ++ "}\n"
