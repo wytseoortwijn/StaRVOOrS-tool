@@ -32,7 +32,7 @@ makeTransitions c n env =
                  then ""
                  else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
        checkId = "id.equals(idAux) && "
-       zs      = getOldExpr oldExpM cn  
+       zs      = if getOldExpr oldExpM cn == "" then "" else ",oldExpAux"
        nvar    = if null zs then "" else "CopyUtilsPPD.copy(MessagesOld_" ++ cn ++ ".getOldExpr(msg),oldExpAux); "
        idle_to_postok = Arrow trig (checkId ++ "HoareTriplesPPD." ++ cn ++ "_post(" ++ arg ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_postOK \\n \");")
        idle_to_bad    = Arrow trig (checkId ++ "!HoareTriplesPPD." ++ cn ++ "_post(" ++ arg ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_bad \\n \");")

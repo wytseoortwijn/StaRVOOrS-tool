@@ -300,7 +300,7 @@ getExpForOld oldExpM cn =
       Nothing -> ""
       Just xs -> if null xs 
                  then ""
-                 else cn ++ " = " ++ initOldExpr xs cn ++ ";"
+                 else "Old_" ++ cn ++ " " ++ cn ++ " = " ++ initOldExpr xs cn ++ ";"
 
 initOldExpr :: OldExprL -> HTName -> String
 initOldExpr oel cn = 
@@ -439,7 +439,7 @@ writeForeach [Foreach args ctxt] consts env =
     ++ writeTriggers es consts
     ++ writeProperties prop consts es env
     ++ writeForeach fors consts env
-    ++ "}\n"
+    -- ++ "}\n"
 
 getForeachArgs :: [Args] -> String
 getForeachArgs []               = ""
