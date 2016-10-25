@@ -17,7 +17,7 @@ upgradePPD (Abs.AbsPPDATE imports global cinvs consts methods) =
  do let imports' = genImports imports
     let cinvs'   = genClassInvariants cinvs
     let methods' = genMethods methods
-    case runStateT (genHTs consts imports') emptyEnv of
+    case runStateT (genHTs consts) emptyEnv of
          Bad s             -> fail s
          Ok (consts', env) -> let cns = htsNames env
                                   dcs = getDuplicate cns
@@ -417,19 +417,17 @@ getCInvs (Abs.CI id jml:cinvs) = CI (getIdAbs id) (getJML jml):getCInvs cinvs
 -- Hoare Triples --
 -------------------
 
-genHTs :: Abs.HTriples -> Imports -> UpgradePPD HTriples
-genHTs Abs.HTempty _          = return []
-genHTs (Abs.HTriples cs) imps = sequence (map (getHT imps) cs)
+genHTs :: Abs.HTriples -> UpgradePPD HTriples
+genHTs Abs.HTempty     = return []
+genHTs (Abs.HTriples cs) = sequence (map getHT cs)
 
-getHT :: Imports -> Abs.HT -> UpgradePPD HT
-getHT imps (Abs.HT id pre' method post' (Abs.Assignable ass)) =
- do let mCN = (getMethodClassInfo method, getMethodMethodName method)
-    
-    env <- get
+getHT :: Abs.HT -> UpgradePPD HT
+getHT (Abs.HT id pre' method post' (Abs.Assignable ass)) =
+ do env <- get
     let cns = htsNames env
     put env { htsNames = (getIdAbs id):(htsNames env) }
     return (HT { htName       = getIdAbs id
-               , methodCN     = mCN
+               , methodCN     = (getMethodClassInfo method, getMethodMethodName method)
                , pre          = filter (/='\n') $ getPre pre'
                , post         = filter (/='\n') $ getPost post'
                , assignable   = joinAssignable $ map assig ass
