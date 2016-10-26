@@ -14,13 +14,8 @@ translate ppd fpath =
     putStrLn "Translating ppDATE to DATE."
     writeFile fpath (writeImports (importsGet ppdate))
     appendFile fpath (writeGlobal ppdate env)
-    appendFile fpath (writeMethods (methodsGet ppdate)) 
+    appendFile fpath (writeMethods (methodsGet ppdate))
     putStrLn $ "Translation completed."
-
-
-assocChannel2HTs :: Int -> HTriples -> HTriples
-assocChannel2HTs _ []     = []
-assocChannel2HTs n (c:cs) = updateCH c n:assocChannel2HTs (n+1) cs
 
 ---------------------
 -- IMPORTS section --
@@ -150,7 +145,7 @@ writeProperties prop consts es env =
  let fors   = forsVars env --list of foreach variables
      xs     = getProperties prop consts es env
  in if (null fors)
-    then xs 
+    then xs
     else xs ++ "\n}\n"
 
 
@@ -199,7 +194,7 @@ genContractInfo (cn:cns) cs = getInfo cn cs : genContractInfo cns cs
 
 getInfo :: HTName -> HTriples -> String
 getInfo cn []     = ""
-getInfo cn (c:cs) = 
+getInfo cn (c:cs) =
  if htName c == cn
  then (fst.methodCN) c ++ "." ++ (snd.methodCN) c
  else getInfo cn cs
@@ -228,7 +223,7 @@ getTransitionsGeneral :: HTriples -> States -> Transitions -> Triggers -> Env ->
 getTransitionsGeneral cs (States acc bad nor star) ts es env =
  let ts1 = generateTransitions acc cs ts es env
      ts2 = generateTransitions bad cs ts1 es env
-     ts3 = generateTransitions nor cs ts2 es env 
+     ts3 = generateTransitions nor cs ts2 es env
      ts4 = generateTransitions star cs ts3 es env
  in ts4
 
@@ -260,7 +255,7 @@ makeTransitionAlg1Cond ns e c env =
      oldExpM = oldExpTypes env
      esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
      esinf'  = filter (/="") $ lookfor esinf e
-     arg     = if null esinf' 
+     arg     = if null esinf'
                then ""
                else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
      c'      = "HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")"
@@ -272,15 +267,15 @@ makeTransitionAlg1Cond ns e c env =
  in Transition ns (Arrow e c' act) ns
 
 getExpForOld :: OldExprM -> HTName -> String
-getExpForOld oldExpM cn = 
+getExpForOld oldExpM cn =
  case Map.lookup cn oldExpM of
       Nothing -> ""
-      Just xs -> if null xs 
+      Just xs -> if null xs
                  then ""
                  else cn ++ " = " ++ initOldExpr xs cn ++ ";"
 
 initOldExpr :: OldExprL -> HTName -> String
-initOldExpr oel cn = 
+initOldExpr oel cn =
  "new Old_" ++ cn ++ "(" ++ addComma (map (\(x,_,_) -> x) oel) ++ ")"
 
 lookForHT :: PropertyName -> HTriples -> HT
