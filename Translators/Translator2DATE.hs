@@ -287,10 +287,10 @@ makeTransitionAlg1Cond ns e c env =
                then ""
                else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
      c'      = "HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")"
-     act     = getExpForOld oldExpM cn ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
      zs      = getExpForOld oldExpM cn
+     act     = " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
      type_   = if null zs then "PPD" else "Old_" ++ cn
-     old     = if null zs then "" else "," ++ cn
+     old     = if null zs then "" else "," ++ zs
      msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
  in Transition ns (Arrow e c' act) ns
 
@@ -300,7 +300,7 @@ getExpForOld oldExpM cn =
       Nothing -> ""
       Just xs -> if null xs 
                  then ""
-                 else "Old_" ++ cn ++ " " ++ cn ++ " = " ++ initOldExpr xs cn ++ ";"
+                 else initOldExpr xs cn
 
 initOldExpr :: OldExprL -> HTName -> String
 initOldExpr oel cn = 
@@ -327,10 +327,11 @@ makeExtraTransitionAlg2 ts c e ns env = let esinf   = map fromJust $ filter (/= 
                                                       else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
                                             pre'    = "HoareTriplesPPD." ++ (htName c) ++ "_pre(" ++ arg ++ ")"
                                             type_   = if null zs then "PPD" else "Old_" ++ cn
-                                            old     = if null zs then "" else "," ++ cn
+                                            old     = if null zs then "" else "," ++ zs
                                             msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
+                                            act     = " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
                                             c'      = makeExtraTransitionAlg2Cond ts ++ pre'
-                                        in Transition ns (Arrow e c' (zs ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");")) ns
+                                        in Transition ns (Arrow e c' act) ns
 
 
 instrumentTransitionAlg2 :: HT -> Transition -> Trigger -> Env -> Transition
@@ -345,9 +346,9 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env =
      semicol = if (act == "") then "" else ";"     
      zs      = getExpForOld oldExpM cn
      type_   = if null zs then "PPD" else "Old_" ++ cn
-     old     = if null zs then "" else "," ++ cn
+     old     = if null zs then "" else "," ++ zs
      msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
-     act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) {" ++ zs ++ " h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "}"
+     act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "}"
  in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
 
 lookForHT :: PropertyName -> HTriples -> HT
