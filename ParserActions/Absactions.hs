@@ -20,11 +20,27 @@ data Action =
  | ActCond [IdAct] Action
  | ActSkip
  | ActLog String Params
- | ActAssig IdAct IdAct
+ | ActAssig Ass
   deriving (Eq,Ord,Show,Read)
 
 data Program =
    Prog IdAct [Args]
+  deriving (Eq,Ord,Show,Read)
+
+data Ass =
+   Ass IdAct Val
+  deriving (Eq,Ord,Show,Read)
+
+data Val =
+   ValMC Program
+ | ValV IdAct Val
+ | ValS String
+ | ValNil
+  deriving (Eq,Ord,Show,Read)
+
+data Type =
+   TypeNil
+ | Type IdAct
   deriving (Eq,Ord,Show,Read)
 
 data Template =

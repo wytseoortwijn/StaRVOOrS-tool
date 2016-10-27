@@ -25,6 +25,7 @@ doc = (:)
 render :: Doc -> String
 render d = rend 0 (map ($ "") $ d []) "" where
   rend i ss = case ss of
+    ")THEN":ts   -> space ")" . showString "THEN" . rend i ts
     "\\"     :ts -> showChar '\\' . rend i ts
     t:"+":"+":ts -> showString t . showChar '+' . space "+" . rend i ts
     t:"-":"-":ts -> showString t . showChar '-' . space "-" . rend i ts
@@ -117,12 +118,12 @@ instance Print Action where
   prt i e = case e of
    ActProg program -> prPrec i 0 (concatD [prt 0 program])
    ActBlock actions -> prPrec i 0 (concatD [doc (showString "{") , prt 0 actions , doc (showString "}")])
-   ActCreate template args -> prPrec i 0 (concatD [doc (showString "create") , doc (showString "(") , prt 0 template , doc (showString ",") , prt 0 args , doc (showString ")")])
-   ActBang idact -> prPrec i 0 (concatD [doc (showString "bang") , doc (showString "(") , prt 0 idact , doc (showString ")")])
-   ActCond idacts action -> prPrec i 0 (concatD [doc (showString "if") , doc (showString "(") , prt 0 idacts , doc (showString ")") , doc (showString "then") , prt 0 action])
+   ActCreate template args -> prPrec i 0 (concatD [doc (showString "\\create") , doc (showString "(") , prt 0 template , doc (showString ",") , prt 0 args , doc (showString ")")])
+   ActBang idact -> prPrec i 0 (concatD [doc (showString "\\gen") , doc (showString "(") , prt 0 idact , doc (showString ")")])
+   ActCond idacts action -> prPrec i 0 (concatD [doc (showString "IF") , doc (showString "(") , prt 0 idacts , doc (showString ")") , doc (showString "THEN") , prt 0 action])
    ActSkip  -> prPrec i 0 (concatD [])
-   ActLog str params -> prPrec i 0 (concatD [doc (showString "LOG") , doc (showString "(") , prt 0 str , prt 0 params , doc (showString ")")])
-   ActAssig idact0 idact -> prPrec i 0 (concatD [prt 0 idact0 , doc (showString "=") , prt 0 idact])
+   ActLog str params -> prPrec i 0 (concatD [doc (showString "\\log") , doc (showString "(") , prt 0 str , prt 0 params , doc (showString ")")])
+   ActAssig ass -> prPrec i 0 (concatD [prt 0 ass])
 
   prtList es = case es of
    [] -> (concatD [])
@@ -131,6 +132,25 @@ instance Print Action where
 instance Print Program where
   prt i e = case e of
    Prog idact argss -> prPrec i 0 (concatD [prt 0 idact , doc (showString "(") , prt 0 argss , doc (showString ")")])
+
+
+instance Print Ass where
+  prt i e = case e of
+   Ass idact val -> prPrec i 0 (concatD [prt 0 idact , doc (showString "=") , prt 0 val])
+
+
+instance Print Val where
+  prt i e = case e of
+   ValMC program -> prPrec i 0 (concatD [prt 0 program])
+   ValV idact val -> prPrec i 0 (concatD [prt 0 idact , prt 0 val])
+   ValS str -> prPrec i 0 (concatD [prt 0 str])
+   ValNil  -> prPrec i 0 (concatD [])
+
+
+instance Print Type where
+  prt i e = case e of
+   TypeNil  -> prPrec i 0 (concatD [])
+   Type idact -> prPrec i 0 (concatD [prt 0 idact])
 
 
 instance Print Template where

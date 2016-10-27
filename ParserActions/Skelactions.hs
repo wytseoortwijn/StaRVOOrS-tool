@@ -28,12 +28,31 @@ transAction x = case x of
   ActCond idacts action  -> failure x
   ActSkip  -> failure x
   ActLog str params  -> failure x
-  ActAssig idact1 idact2  -> failure x
+  ActAssig ass  -> failure x
 
 
 transProgram :: Program -> Result
 transProgram x = case x of
   Prog idact argss  -> failure x
+
+
+transAss :: Ass -> Result
+transAss x = case x of
+  Ass idact val  -> failure x
+
+
+transVal :: Val -> Result
+transVal x = case x of
+  ValMC program  -> failure x
+  ValV idact val  -> failure x
+  ValS str  -> failure x
+  ValNil  -> failure x
+
+
+transType :: Type -> Result
+transType x = case x of
+  TypeNil  -> failure x
+  Type idact  -> failure x
 
 
 transTemplate :: Template -> Result

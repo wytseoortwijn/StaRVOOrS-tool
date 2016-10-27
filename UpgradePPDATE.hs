@@ -9,6 +9,9 @@ import qualified Data.Map as Map
 import qualified Absppdate as Abs
 import ErrM
 import Printppdate
+import qualified Printactions as PrintAct
+import Parser
+import qualified ParserAct as ParAct
 import Data.List
 
 
@@ -77,9 +80,9 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
                                                       normal = checkAllHTsExist (getNormal states) cns pname
                                                       start  = checkAllHTsExist (getStarting states) cns pname
                                                       errs   = concat $ accep ++ bad ++ normal ++ start
-                                                      s'     = if (not.null) s
-                                                               then "Error: Triggers [" ++ s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" ++ errs
-                                                               else errs
+                                                      s'     = if (not.null) (fst s)
+                                                               then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" ++ snd s ++ errs
+                                                               else snd s ++ errs
                                                   in if (null s')
                                                      then return (Ctxt vars' ies' trigs' (Property pname states trans props) fors)
                                                      else fail s'
@@ -317,20 +320,21 @@ getWhereClause (Abs.WhereClauseDef wexp) = (concat.lines.printTree) wexp
 
 -- Properties --
 
-getProperty :: Abs.Properties -> [Id] -> Writer String Property
+getProperty :: Abs.Properties -> [Id] -> Writer (String,String) Property
 getProperty Abs.PropertiesNil _                           = return PNIL
 getProperty (Abs.ProperiesDef id states trans props) enms =
  let props' = getProperty props enms
-     trans' = getTransitions trans
-     ts     = map (trigger.arrow) trans' in
- case runWriter props' of
-      (p, s)    -> let xs = [x | x <- ts, not(elem x enms)]
-                   in do tell (mAppend (addComma xs) s)
-                         return (Property { pName        = getIdAbs id
-                                          , pStates      = getStates' states
-                                          , pTransitions = trans'
-                                          , pProps       = p
-                                          })
+     trans' = getTransitions (getIdAbs id) trans in
+ case runWriter trans' of
+      (t,s') -> let ts = map (trigger.arrow) t
+                in case runWriter props' of
+                        (p, s) -> do let xs = [x | x <- ts, not(elem x enms)]
+                                     tell ((mAppend (addComma xs) (fst s)), s' ++ snd s)
+                                     return (Property { pName        = getIdAbs id
+                                                      , pStates      = getStates' states
+                                                      , pTransitions = t
+                                                      , pProps       = p
+                                                      })
 
 mAppend :: String -> String -> String
 mAppend [] []     = ""
@@ -368,20 +372,33 @@ getInitCode :: Abs.InitialCode -> InitialCode
 getInitCode Abs.InitNil      = InitNil
 getInitCode (Abs.InitProg p) = InitProg (getJava p)
 
-getTransitions :: Abs.Transitions -> Transitions
-getTransitions (Abs.Transitions ts) = map getTransition' ts
+getTransitions :: PropertyName -> Abs.Transitions -> Writer String Transitions
+getTransitions id (Abs.Transitions ts) = 
+ sequence $ map (getTransition' id) ts
 
-getTransition' :: Abs.Transition -> Transition
-getTransition' (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) = Transition { fromState = getIdAbs q1
-                                                                                      , arrow = getArrow ar
-                                                                                      , toState = getIdAbs q2
-                                                                                      }
-getArrow :: Abs.Arrow -> Arrow
-getArrow (Abs.Arrow id Abs.Cond1)        = Arrow { trigger = getIdAbs id, cond = "", action = "" }
-getArrow (Abs.Arrow id (Abs.Cond2 cond)) = case cond of
-                                                Abs.CondExpDef cexp     -> Arrow { trigger = getIdAbs id, cond = printTree cexp, action = "" }
-                                                Abs.CondAction cexp act -> Arrow { trigger = getIdAbs id, cond = printTree cexp, action = (trim.printTree) act }
+getTransition' :: PropertyName -> Abs.Transition -> Writer String Transition
+getTransition' id (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) = 
+ case runWriter (getArrow ar) of
+      (xs,s) -> do let err = "Error: Parsing error in an action of a transition from state " ++ getIdAbs q1 ++ " to state " 
+                             ++ getIdAbs q2 ++ " in property " ++ id ++ ".\n"
+                   let s' = if null s then "" else err
+                   tell s'
+                   return (Transition { fromState = getIdAbs q1
+                                      , arrow = xs
+                                      , toState = getIdAbs q2
+                                      })
 
+getArrow :: Abs.Arrow -> Writer String Arrow
+getArrow (Abs.Arrow id Abs.Cond1)        = return $ Arrow { trigger = getIdAbs id, cond = "", action = "" }
+getArrow (Abs.Arrow id (Abs.Cond2 cond)) = 
+ case cond of
+      Abs.CondExpDef cexp     -> return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = "" }
+      Abs.CondAction cexp act -> 
+        let act' = (trim.printTree) act in
+        case ParAct.parse act' of 
+             Bad s -> do tell s
+                         return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = "Parse error" }
+             Ok ac -> return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = (PrintAct.printTree) ac }
 
 
 -- Foreaches --
