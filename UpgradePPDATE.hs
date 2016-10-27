@@ -10,15 +10,17 @@ import qualified Absppdate as Abs
 import ErrM
 import Printppdate
 import qualified Printactions as PrintAct
+import qualified Printjml as PrintJML
 import Parser
 import qualified ParserAct as ParAct
+import qualified ParserJML as ParJML
 import Data.List
+import Data.Either
 
 
 upgradePPD :: Abs.AbsPPDATE -> UpgradePPD PPDATE
 upgradePPD (Abs.AbsPPDATE imports global cinvs consts methods) =
  do let imports' = genImports imports
-    let cinvs'   = genClassInvariants cinvs
     let methods' = genMethods methods
     case runStateT (genHTs consts imports') emptyEnv of
          Bad s             -> fail s
@@ -30,8 +32,11 @@ upgradePPD (Abs.AbsPPDATE imports global cinvs consts methods) =
                                                             else fail s
                                       Ok (global', env') -> if (not.null) dcs
                                                             then fail $ duplicateHT dcs
-                                                            else do put env'
-                                                                    return (PPDATE imports' global' cinvs' consts' methods')
+                                                            else case runStateT (genClassInvariants cinvs) env' of
+                                                                      Bad s             -> fail s
+                                                                      Ok (cinvs',env'') -> 
+                                                                          do put env''
+                                                                             return (PPDATE imports' global' cinvs' consts' methods')
 
 
 duplicateHT :: [HTName] -> String
@@ -420,15 +425,24 @@ getArgs (Abs.Args t id) = Args (getTypeAbs t) (getIdAbs id)
 -- CInvariants --
 -----------------
 
-genClassInvariants :: Abs.CInvariants -> CInvariants
-genClassInvariants Abs.CInvempty           = []
-genClassInvariants (Abs.CInvariants cinvs) = getCInvs cinvs
+genClassInvariants :: Abs.CInvariants -> UpgradePPD CInvariants
+genClassInvariants absinvs =
+ case runWriter (genClassInvariants' absinvs) of
+      (cinvs,s) -> if null s
+                   then return cinvs
+                   else fail s
 
---TODO: Modify if ppDATE operators are added to the JML specification
-getCInvs :: [Abs.CInvariant] -> [CInvariant]
-getCInvs []                    = []
-getCInvs (Abs.CI id jml:cinvs) = CI (getIdAbs id) (getJML jml):getCInvs cinvs
+genClassInvariants' :: Abs.CInvariants -> Writer String CInvariants
+genClassInvariants' Abs.CInvempty           = return []
+genClassInvariants' (Abs.CInvariants cinvs) = sequence $ map getCInv cinvs
 
+getCInv :: Abs.CInvariant -> Writer String CInvariant
+getCInv (Abs.CI cn jml) = 
+ case runWriter (getJML jml "") of
+      (jml',s) -> if null s 
+                  then return $ CI (getIdAbs cn) jml'
+                  else do tell $ "Error: Parse on error on class invariant [" ++ printTree jml ++ "] for the class " ++ getIdAbs cn ++ ".\n"
+                          return CInvNil
 
 -------------------
 -- Hoare Triples --
@@ -447,21 +461,42 @@ getHT imps (Abs.HT id pre' method post' (Abs.Assignable ass)) =
          (x:xs) -> if (not.null) xs 
                    then fail $ "Error: Multiple imports for class " ++ fst mCN
                    else do let cns = htsNames env
+                           let ys  = map checkJML $ [getPre pre',getPost post'] ++ (map assig ass)
+                           joinErrorJML ys (getIdAbs id)
                            put env { htsNames = (getIdAbs id):(htsNames env) }
-                           return (HT { htName       = getIdAbs id
+                           return (HT { htName   = getIdAbs id
                                   , methodCN     = mCN
-                                  , pre          = filter (/='\n') $ getPre pre'
-                                  , post         = filter (/='\n') $ getPost post'
-                                  , assignable   = joinAssignable $ map assig ass
+                                  , pre          = filter (/='\n') $ getJMLExp $ getPre pre'
+                                  , post         = filter (/='\n') $ getJMLExp $ getPost post'
+                                  , assignable   = joinAssignable $ map (getJMLExp.assig) ass
                                   , optimized    = []
                                   , chGet        = 0
                                   , path2it      = ""
                                   })
 
-assig :: Abs.Assig -> String
-assig (Abs.AssigJML jml) = getJML jml
-assig Abs.AssigE         = "\\everything"
-assig Abs.AssigN         = "\\nothing"
+checkJML :: Writer String JMLExp -> Either JMLExp String
+checkJML wjml =
+ case runWriter wjml of
+      (jml', s) -> if null s
+                   then Left jml'
+                   else Right s
+
+getJMLExp :: Writer String JMLExp -> JMLExp
+getJMLExp wjml = 
+ case runWriter wjml of
+      (jml', s) -> jml'
+                   
+joinErrorJML :: [Either JMLExp String] -> String -> UpgradePPD ()
+joinErrorJML xs str = 
+ do let ys = rights xs 
+    if null ys 
+    then return ()
+    else fail $ concatMap (\s -> s ++ " of Hoare triple " ++ str ++ ".\n") ys 
+
+assig :: Abs.Assig -> Writer String JMLExp
+assig (Abs.AssigJML jml) = return $ printTree jml
+assig Abs.AssigE         = return "\\everything"
+assig Abs.AssigN         = return "\\nothing"
 
 joinAssignable [x]    = x
 joinAssignable (x:xs) = x ++ "," ++ joinAssignable xs
@@ -511,8 +546,13 @@ getVarsAbs (Abs.Vars bind) = bind
 getConstNameAbs :: Abs.HTName -> Abs.Id
 getConstNameAbs (Abs.CN id) = id
 
-getJML :: Abs.JML -> JML
-getJML jml = printTree jml
+getJML :: Abs.JML -> String -> Writer String JMLExp
+getJML jml str = 
+ let jml' = printTree jml in
+ case ParJML.parse jml' of
+      Bad s -> do tell $ "Parse error on the " ++ str
+                  return "parse error"
+      Ok _  -> return jml' 
 
 getJava :: Abs.Java -> Java
 getJava java = printTree java
@@ -526,11 +566,11 @@ getMethodMethodName (Abs.Method _ mn) = getIdAbs mn
 getAssig :: Abs.Assig -> Abs.JML
 getAssig (Abs.AssigJML jml) = jml
 
-getPre :: Abs.Pre -> Pre
-getPre (Abs.Pre pre) = getJML pre
+getPre :: Abs.Pre -> Writer String JMLExp
+getPre (Abs.Pre pre) = getJML pre "precondition"
 
-getPost :: Abs.Post -> Post
-getPost (Abs.Post post) = getJML post
+getPost :: Abs.Post -> Writer String JMLExp
+getPost (Abs.Post post) = getJML post "postcondition"
 
 -------------------------
 -- Auxiliary functions --

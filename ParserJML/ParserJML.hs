@@ -6,10 +6,10 @@ import System.IO ( stdin, hGetContents )
 import System.Environment ( getArgs, getProgName )
 
 import Lexjml
-import Paractions
-import Skelactions
-import Printactions
-import Absactions
+import Parjml
+import Skeljml
+import Printjml
+import Absjml
 import ErrM
 
 type ParseFun a = [Token] -> Err a
@@ -20,5 +20,5 @@ run p s = let ts = myLexer s
                 Bad s    -> fail s
                 Ok  tree -> return tree
 
-parse :: String -> Err Actions
-parse = run pActions
+parse :: String -> Err JML
+parse = run pJML

@@ -113,11 +113,10 @@ instance Print JML where
   prt i e = case e of
    JMLAnd jml0 jml -> prPrec i 0 (concatD [prt 0 jml0 , doc (showString "&&") , prt 0 jml])
    JMLOr jml0 jml -> prPrec i 0 (concatD [prt 0 jml0 , doc (showString "||") , prt 0 jml])
-   JMLNot jml -> prPrec i 0 (concatD [doc (showString "!") , prt 0 jml])
    JMLImp jml0 jml -> prPrec i 0 (concatD [prt 0 jml0 , doc (showString "==>") , prt 0 jml])
    JMLIff jml0 jml -> prPrec i 0 (concatD [prt 0 jml0 , doc (showString "<==>") , prt 0 jml])
-   JMLForallRT type' idjml bodyf -> prPrec i 0 (concatD [doc (showString "(\\forall") , prt 0 type' , prt 0 idjml , prt 0 bodyf , doc (showString ")")])
-   JMLExistsRT type' idjml bodyf -> prPrec i 0 (concatD [doc (showString "(\\exists") , prt 0 type' , prt 0 idjml , prt 0 bodyf , doc (showString ")")])
+   JMLForallRT type' idjml bodyf -> prPrec i 0 (concatD [doc (showString "(") , doc (showString "\\forall") , prt 0 type' , prt 0 idjml , prt 0 bodyf , doc (showString ")")])
+   JMLExistsRT type' idjml bodyf -> prPrec i 0 (concatD [doc (showString "(") , doc (showString "\\exists") , prt 0 type' , prt 0 idjml , prt 0 bodyf , doc (showString ")")])
    JMLPar jml -> prPrec i 0 (concatD [doc (showString "(") , prt 0 jml , doc (showString ")")])
    JMLExp expressions -> prPrec i 0 (concatD [prt 0 expressions])
 
@@ -143,9 +142,12 @@ instance Print Expression where
    Exp idjml -> prPrec i 0 (concatD [prt 0 idjml])
    ExpS symbols -> prPrec i 0 (concatD [prt 0 symbols])
    ExpRes  -> prPrec i 0 (concatD [doc (showString "\\result")])
-   ExpOld jml -> prPrec i 0 (concatD [doc (showString "\\old(") , prt 0 jml , doc (showString ")")])
+   ExpOld jml -> prPrec i 0 (concatD [doc (showString "\\old") , doc (showString "(") , prt 0 jml , doc (showString ")")])
+   ExpTypeOf jml -> prPrec i 0 (concatD [doc (showString "\\typeof") , doc (showString "(") , prt 0 jml , doc (showString ")")])
+   ExpType jml -> prPrec i 0 (concatD [doc (showString "\\type") , doc (showString "(") , prt 0 jml , doc (showString ")")])
    ExpDls content -> prPrec i 0 (concatD [doc (showString "\\dl_strContent") , doc (showString "(") , prt 0 content , doc (showString ")")])
    ExpMC methodcall -> prPrec i 0 (concatD [prt 0 methodcall])
+   ExpPar expressions -> prPrec i 0 (concatD [doc (showString "(") , prt 0 expressions , doc (showString ")")])
 
   prtList es = case es of
    [x] -> (concatD [prt 0 x])

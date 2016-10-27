@@ -12,7 +12,6 @@ newtype Symbols = Symbols String deriving (Eq,Ord,Show,Read)
 data JML =
    JMLAnd JML JML
  | JMLOr JML JML
- | JMLNot JML
  | JMLImp JML JML
  | JMLIff JML JML
  | JMLForallRT Type IdJml BodyF
@@ -39,8 +38,11 @@ data Expression =
  | ExpS Symbols
  | ExpRes
  | ExpOld JML
+ | ExpTypeOf JML
+ | ExpType JML
  | ExpDls Content
  | ExpMC MethodCall
+ | ExpPar [Expression]
   deriving (Eq,Ord,Show,Read)
 
 data MethodCall =

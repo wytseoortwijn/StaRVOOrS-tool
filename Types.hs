@@ -28,14 +28,14 @@ type Class = String
 type ClassInfo = String
 type BodyCInv = String
 
-data CInvariant = CI Class BodyCInv deriving (Show, Eq)
+data CInvariant = CI Class BodyCInv | CInvNil deriving (Show, Eq)
 type CInvariants = [CInvariant]
 
 
 type HTName   = String
 type MethodName     = String
-type Pre            = String
-type Post           = String
+type Pre            = JMLExp
+type Post           = JMLExp
 type Assignable     = String
 type MethodCN       = (ClassInfo, MethodName)
 
@@ -166,7 +166,7 @@ type Filename = String
 
 type ErrorMsg = String
 
-type JML = String
+type JMLExp = String
 
 --------------
 -- PROPERTY --

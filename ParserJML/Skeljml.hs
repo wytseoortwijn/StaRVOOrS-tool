@@ -23,7 +23,6 @@ transJML :: JML -> Result
 transJML x = case x of
   JMLAnd jml1 jml2  -> failure x
   JMLOr jml1 jml2  -> failure x
-  JMLNot jml  -> failure x
   JMLImp jml1 jml2  -> failure x
   JMLIff jml1 jml2  -> failure x
   JMLForallRT type' idjml bodyf  -> failure x
@@ -54,8 +53,11 @@ transExpression x = case x of
   ExpS symbols  -> failure x
   ExpRes  -> failure x
   ExpOld jml  -> failure x
+  ExpTypeOf jml  -> failure x
+  ExpType jml  -> failure x
   ExpDls content  -> failure x
   ExpMC methodcall  -> failure x
+  ExpPar expressions  -> failure x
 
 
 transMethodCall :: MethodCall -> Result

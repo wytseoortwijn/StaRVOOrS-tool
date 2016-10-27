@@ -228,7 +228,7 @@ transCond x = case x of
 
 transAction :: Action -> Result
 transAction x = case x of
-  Action java  -> failure x
+  Action expressions  -> failure x
 
 
 transForeaches :: Foreaches -> Result
@@ -346,23 +346,6 @@ transAdd x = case x of
   AddId id  -> failure x
 
 
-transCondExp :: CondExp -> Result
-transCondExp x = case x of
-  CondExpId id condexp  -> failure x
-  CondExpSymb symbols condexp  -> failure x
-  CondExpInt n condexp  -> failure x
-  CondExpDouble d condexp  -> failure x
-  CondExpTimes condexp  -> failure x
-  CondExpParent condexp1 condexp2  -> failure x
-  CondExpDot condexp  -> failure x
-  CondExpCorchete condexp1 condexp2  -> failure x
-  CondExpComma condexp  -> failure x
-  CondExpSlash condexp  -> failure x
-  CondExpEq condexp  -> failure x
-  CondExpBar condexp  -> failure x
-  CondExpNil  -> failure x
-
-
 transVarExp :: VarExp -> Result
 transVarExp x = case x of
   VarExpId id varexp  -> failure x
@@ -379,59 +362,39 @@ transVarExp x = case x of
   VarExpNil  -> failure x
 
 
+transExpressions :: Expressions -> Result
+transExpressions x = case x of
+  ExpId id expressions  -> failure x
+  ExpSymb symbols expressions  -> failure x
+  ExpInt n expressions  -> failure x
+  ExpDouble d expressions  -> failure x
+  ExpTimes expressions  -> failure x
+  ExpDot expressions  -> failure x
+  ExpBrack expressions1 expressions2  -> failure x
+  ExpParent expressions1 expressions2  -> failure x
+  ExpCorchete expressions1 expressions2  -> failure x
+  ExpEq expressions  -> failure x
+  ExpSemiColon expressions  -> failure x
+  ExpBSlash expressions  -> failure x
+  ExpComma expressions  -> failure x
+  ExpSlash expressions  -> failure x
+  ExpBar expressions  -> failure x
+  ExpNil  -> failure x
+
+
 transJava :: Java -> Result
 transJava x = case x of
-  JavaId id java  -> failure x
-  JavaSymb symbols java  -> failure x
-  JavaInt n java  -> failure x
-  JavaDouble d java  -> failure x
-  JavaTimes java  -> failure x
-  JavaDot java  -> failure x
-  JavaBrack java1 java2  -> failure x
-  JavaParent java1 java2  -> failure x
-  JavaCorchete java1 java2  -> failure x
-  JavaEq java  -> failure x
-  JavaSemiColon java  -> failure x
-  JavaBSlash java  -> failure x
-  JavaComma java  -> failure x
-  JavaSlash java  -> failure x
-  JavaBar java  -> failure x
-  JavaNil  -> failure x
+  Java expressions  -> failure x
+
+
+transCondExp :: CondExp -> Result
+transCondExp x = case x of
+  CondExp expressions  -> failure x
 
 
 transJML :: JML -> Result
 transJML x = case x of
-  JMLId id jml  -> failure x
-  JMLMath symbols jml  -> failure x
-  JMLInt n jml  -> failure x
-  JMLDouble d jml  -> failure x
-  JMLTimes jml  -> failure x
-  JMLDot jml  -> failure x
-  JMLBrack jml1 jml2  -> failure x
-  JMLParent jml1 jml2  -> failure x
-  JMLCorchete jml1 jml2  -> failure x
-  JMLSemiColon jml  -> failure x
-  JMLEq jml  -> failure x
-  JMLComma jml  -> failure x
-  JMLSlash jml  -> failure x
-  JMLBar jml  -> failure x
-  JMLBackS jml  -> failure x
-  JMLOld jml1 jml2  -> failure x
-  JMLRes jml  -> failure x
-  JMLForallRT type' id bodyf jml  -> failure x
-  JMLExistsRT type' id bodyf jml  -> failure x
-  JMLNil  -> failure x
-
-
-transBodyF :: BodyF -> Result
-transBodyF x = case x of
-  BodyF rangeterm  -> failure x
-
-
-transRangeTerm :: RangeTerm -> Result
-transRangeTerm x = case x of
-  RangeTerm jml1 jml2  -> failure x
-  OnlyRange jml  -> failure x
+  JML expressions  -> failure x
 
 
 

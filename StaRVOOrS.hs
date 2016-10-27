@@ -51,10 +51,12 @@ main =
         do s <- isPPDATEfile ppdate_fn
            if (s == "")
            then do ppdate_txt <- readFile ppdate_fn
-                   let ppdateP = parse ppdate_txt
-                   case ppdateP of
+                   case parse ppdate_txt of
                         Bad s        -> putStrLn $ "\nThe parsing has failed: " ++ s ++ "\n"
-                        Ok absppdate -> putStrLn "\nThe parsing was successful.\n"
+                        Ok absppdate -> let ppd = upgradePPD absppdate in
+                                        case runStateT ppd emptyEnv of
+                                             Bad s -> putStrLn $ "\nThe parsing has failed: " ++ s ++ "\n"
+                                             Ok _  -> putStrLn "\nThe parsing was successful.\n"
            else putStrLn s
       ([],[java_fn_add, ppdate_fn, output_add],[]) -> run [] java_fn_add ppdate_fn output_add      
       (_,_,[]) -> do

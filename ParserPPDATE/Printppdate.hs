@@ -357,7 +357,7 @@ instance Print Cond where
 
 instance Print Action where
   prt i e = case e of
-   Action java -> prPrec i 0 (concatD [prt 0 java])
+   Action expressions -> prPrec i 0 (concatD [prt 0 expressions])
 
 
 instance Print Foreaches where
@@ -494,23 +494,6 @@ instance Print Add where
    AddId id -> prPrec i 0 (concatD [prt 0 id])
 
 
-instance Print CondExp where
-  prt i e = case e of
-   CondExpId id condexp -> prPrec i 0 (concatD [prt 0 id , prt 0 condexp])
-   CondExpSymb symbols condexp -> prPrec i 0 (concatD [prt 0 symbols , prt 0 condexp])
-   CondExpInt n condexp -> prPrec i 0 (concatD [prt 0 n , prt 0 condexp])
-   CondExpDouble d condexp -> prPrec i 0 (concatD [prt 0 d , prt 0 condexp])
-   CondExpTimes condexp -> prPrec i 0 (concatD [doc (showString "*") , prt 0 condexp])
-   CondExpParent condexp0 condexp -> prPrec i 0 (concatD [doc (showString "(") , prt 0 condexp0 , doc (showString ")") , prt 0 condexp])
-   CondExpDot condexp -> prPrec i 0 (concatD [doc (showString ".") , prt 0 condexp])
-   CondExpCorchete condexp0 condexp -> prPrec i 0 (concatD [doc (showString "[") , prt 0 condexp0 , doc (showString "]") , prt 0 condexp])
-   CondExpComma condexp -> prPrec i 0 (concatD [doc (showString ",") , prt 0 condexp])
-   CondExpSlash condexp -> prPrec i 0 (concatD [doc (showString "/") , prt 0 condexp])
-   CondExpEq condexp -> prPrec i 0 (concatD [doc (showString "=") , prt 0 condexp])
-   CondExpBar condexp -> prPrec i 0 (concatD [doc (showString "|") , prt 0 condexp])
-   CondExpNil  -> prPrec i 0 (concatD [])
-
-
 instance Print VarExp where
   prt i e = case e of
    VarExpId id varexp -> prPrec i 0 (concatD [prt 0 id , prt 0 varexp])
@@ -527,59 +510,39 @@ instance Print VarExp where
    VarExpNil  -> prPrec i 0 (concatD [])
 
 
+instance Print Expressions where
+  prt i e = case e of
+   ExpId id expressions -> prPrec i 0 (concatD [prt 0 id , prt 0 expressions])
+   ExpSymb symbols expressions -> prPrec i 0 (concatD [prt 0 symbols , prt 0 expressions])
+   ExpInt n expressions -> prPrec i 0 (concatD [prt 0 n , prt 0 expressions])
+   ExpDouble d expressions -> prPrec i 0 (concatD [prt 0 d , prt 0 expressions])
+   ExpTimes expressions -> prPrec i 0 (concatD [doc (showString "*") , prt 0 expressions])
+   ExpDot expressions -> prPrec i 0 (concatD [doc (showString ".") , prt 0 expressions])
+   ExpBrack expressions0 expressions -> prPrec i 0 (concatD [doc (showString "{") , prt 0 expressions0 , doc (showString "}") , prt 0 expressions])
+   ExpParent expressions0 expressions -> prPrec i 0 (concatD [doc (showString "(") , prt 0 expressions0 , doc (showString ")") , prt 0 expressions])
+   ExpCorchete expressions0 expressions -> prPrec i 0 (concatD [doc (showString "[") , prt 0 expressions0 , doc (showString "]") , prt 0 expressions])
+   ExpEq expressions -> prPrec i 0 (concatD [doc (showString "=") , prt 0 expressions])
+   ExpSemiColon expressions -> prPrec i 0 (concatD [doc (showString ";") , prt 0 expressions])
+   ExpBSlash expressions -> prPrec i 0 (concatD [doc (showString "\\") , prt 0 expressions])
+   ExpComma expressions -> prPrec i 0 (concatD [doc (showString ",") , prt 0 expressions])
+   ExpSlash expressions -> prPrec i 0 (concatD [doc (showString "/") , prt 0 expressions])
+   ExpBar expressions -> prPrec i 0 (concatD [doc (showString "|") , prt 0 expressions])
+   ExpNil  -> prPrec i 0 (concatD [])
+
+
 instance Print Java where
   prt i e = case e of
-   JavaId id java -> prPrec i 0 (concatD [prt 0 id , prt 0 java])
-   JavaSymb symbols java -> prPrec i 0 (concatD [prt 0 symbols , prt 0 java])
-   JavaInt n java -> prPrec i 0 (concatD [prt 0 n , prt 0 java])
-   JavaDouble d java -> prPrec i 0 (concatD [prt 0 d , prt 0 java])
-   JavaTimes java -> prPrec i 0 (concatD [doc (showString "*") , prt 0 java])
-   JavaDot java -> prPrec i 0 (concatD [doc (showString ".") , prt 0 java])
-   JavaBrack java0 java -> prPrec i 0 (concatD [doc (showString "{") , prt 0 java0 , doc (showString "}") , prt 0 java])
-   JavaParent java0 java -> prPrec i 0 (concatD [doc (showString "(") , prt 0 java0 , doc (showString ")") , prt 0 java])
-   JavaCorchete java0 java -> prPrec i 0 (concatD [doc (showString "[") , prt 0 java0 , doc (showString "]") , prt 0 java])
-   JavaEq java -> prPrec i 0 (concatD [doc (showString "=") , prt 0 java])
-   JavaSemiColon java -> prPrec i 0 (concatD [doc (showString ";") , prt 0 java])
-   JavaBSlash java -> prPrec i 0 (concatD [doc (showString "\\") , prt 0 java])
-   JavaComma java -> prPrec i 0 (concatD [doc (showString ",") , prt 0 java])
-   JavaSlash java -> prPrec i 0 (concatD [doc (showString "/") , prt 0 java])
-   JavaBar java -> prPrec i 0 (concatD [doc (showString "|") , prt 0 java])
-   JavaNil  -> prPrec i 0 (concatD [])
+   Java expressions -> prPrec i 0 (concatD [prt 0 expressions])
+
+
+instance Print CondExp where
+  prt i e = case e of
+   CondExp expressions -> prPrec i 0 (concatD [prt 0 expressions])
 
 
 instance Print JML where
   prt i e = case e of
-   JMLId id jml -> prPrec i 0 (concatD [prt 0 id , prt 0 jml])
-   JMLMath symbols jml -> prPrec i 0 (concatD [prt 0 symbols , prt 0 jml])
-   JMLInt n jml -> prPrec i 0 (concatD [prt 0 n , prt 0 jml])
-   JMLDouble d jml -> prPrec i 0 (concatD [prt 0 d , prt 0 jml])
-   JMLTimes jml -> prPrec i 0 (concatD [doc (showString "*") , prt 0 jml])
-   JMLDot jml -> prPrec i 0 (concatD [doc (showString ".") , prt 0 jml])
-   JMLBrack jml0 jml -> prPrec i 0 (concatD [doc (showString "{") , prt 0 jml0 , doc (showString "}") , prt 0 jml])
-   JMLParent jml0 jml -> prPrec i 0 (concatD [doc (showString "(") , prt 0 jml0 , doc (showString ")") , prt 0 jml])
-   JMLCorchete jml0 jml -> prPrec i 0 (concatD [doc (showString "[") , prt 0 jml0 , doc (showString "]") , prt 0 jml])
-   JMLSemiColon jml -> prPrec i 0 (concatD [doc (showString ";") , prt 0 jml])
-   JMLEq jml -> prPrec i 0 (concatD [doc (showString "=") , prt 0 jml])
-   JMLComma jml -> prPrec i 0 (concatD [doc (showString ",") , prt 0 jml])
-   JMLSlash jml -> prPrec i 0 (concatD [doc (showString "/") , prt 0 jml])
-   JMLBar jml -> prPrec i 0 (concatD [doc (showString "|") , prt 0 jml])
-   JMLBackS jml -> prPrec i 0 (concatD [doc (showString "\\") , prt 0 jml])
-   JMLOld jml0 jml -> prPrec i 0 (concatD [doc (showString "\\old(") , prt 0 jml0 , doc (showString ")") , prt 0 jml])
-   JMLRes jml -> prPrec i 0 (concatD [doc (showString "\\result") , prt 0 jml])
-   JMLForallRT type' id bodyf jml -> prPrec i 0 (concatD [doc (showString "(\\forall") , prt 0 type' , prt 0 id , prt 0 bodyf , doc (showString ")") , prt 0 jml])
-   JMLExistsRT type' id bodyf jml -> prPrec i 0 (concatD [doc (showString "(\\exists") , prt 0 type' , prt 0 id , prt 0 bodyf , doc (showString ")") , prt 0 jml])
-   JMLNil  -> prPrec i 0 (concatD [])
-
-
-instance Print BodyF where
-  prt i e = case e of
-   BodyF rangeterm -> prPrec i 0 (concatD [doc (showString ";") , prt 0 rangeterm])
-
-
-instance Print RangeTerm where
-  prt i e = case e of
-   RangeTerm jml0 jml -> prPrec i 0 (concatD [prt 0 jml0 , doc (showString ";") , prt 0 jml])
-   OnlyRange jml -> prPrec i 0 (concatD [prt 0 jml])
+   JML expressions -> prPrec i 0 (concatD [prt 0 expressions])
 
 
 
