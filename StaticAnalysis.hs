@@ -1,7 +1,7 @@
 module StaticAnalysis(staticAnalysis) where
 
 import Types
-import qualified ParserJML
+import qualified JMLGenerator
 import CommonFunctions
 import System.Directory
 import System.Environment
@@ -56,7 +56,7 @@ staticAnalysis' jpath ppd output_add =
        generateDummyBoolVars ppd tmp_add jpath
        generateTmpFilesCInvs ppd cinv_add tmp_add
        updateTmpFilesCInvs ppd nulla_add cinv_add
-       let consts_jml = ParserJML.getHTs' ppd
+       let consts_jml = JMLGenerator.getHTs' ppd
        copyFiles jpath output_add'
        generateTmpFilesAllConsts ppd consts_jml output_add' (nulla_add ++ "/")
        rawSystem "java" ["-jar","key.starvoors.jar",output_add', output_addr]
