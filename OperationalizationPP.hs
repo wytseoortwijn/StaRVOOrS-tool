@@ -37,9 +37,9 @@ operationalizePrePostORB c vars trigs methods oldExprTypesM =
      (xsPost, oldExprl)  = operationalizeOld p' cn
      ysPost              = operationalizeResult xsPost
      oldExprl'           = addType2NewVars cn oldExprTypesM oldExprl
-     const'              = updatePost c ysPost
+     c'                  = updatePost c ysPost
      oldExprl''          = bindOldExp c vars trigs methods oldExprl'
- in (bindCV const' vars trigs methods, Map.singleton cn oldExprl'')
+ in (bindCV c' vars trigs methods, Map.singleton cn oldExprl'')
 
 
 --------------------------
@@ -141,7 +141,7 @@ operationalizeOld post cn =
     then (post, [])
     else let begin = head xs
              ys    = tail xs
-             zs    = map ((\(x,y) -> (trim (tail x), clean $ tail y)) . (splitAtClosingParen 0)) ys
+             zs    = map ((\(x,y) -> (trim x, clean $ tail y)) . (splitAtClosingParen 0)) ys
              fszs  = foldr (\(x,y) xs -> (x,"","e" ++ show y):xs) [] $ zip (removeDuplicates (map fst zs)) [1..length zs]
              s'    = begin ++ flattenOld zs cn fszs
          in (s',fszs)

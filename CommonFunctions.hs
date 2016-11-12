@@ -28,7 +28,7 @@ splitAtIdentifier :: Char -> String -> (String, String)
 splitAtIdentifier iden s = (takeWhile (\c -> not (c == iden)) s, dropWhile (\c -> not (c == iden)) s)
 
 splitAtClosingParen :: Int -> String -> (String, String)
-splitAtClosingParen n ""       = ("","")
+splitAtClosingParen _ ""       = ("","")
 splitAtClosingParen n ('(':xs) = 
  let (a,b) = splitAtClosingParen (n+1) xs
  in ('(':a,b)
