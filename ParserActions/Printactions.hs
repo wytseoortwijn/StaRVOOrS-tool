@@ -26,7 +26,6 @@ render :: Doc -> String
 render d = rend 0 (map ($ "") $ d []) "" where
   rend i ss = case ss of
     ")THEN":ts   -> space ")" . showString "THEN" . rend i ts
-    "\\"     :ts -> showChar '\\' . rend i ts
     t:"+":"+":ts -> showString t . showChar '+' . space "+" . rend i ts
     t:"-":"-":ts -> showString t . showChar '-' . space "-" . rend i ts
     t: "%"   :ts -> space t . showChar '%' . rend i ts
@@ -47,9 +46,6 @@ render d = rend 0 (map ($ "") $ d []) "" where
     t  : "," :ts -> showString t . space "," . rend i ts
     t  : ")" :ts -> showString t . showString ") " . rend i ts
     t  : "]" :ts -> showString t . showChar ']' . rend i ts
-    "\""     :ts -> showChar '\"' . rend i ts
-    t  :"\"" :ts -> if (t == " ") then showChar '\"' . rend i ts 
-                                  else showString t . showChar '\"' . rend i ts 
     t        :ts -> space t . rend i ts
     _            -> id
   new i   = showChar '\n' . replicateS (2*i) (showChar ' ') . dropWhile isSpace

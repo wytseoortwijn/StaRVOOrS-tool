@@ -180,7 +180,7 @@ data Cond =
   deriving (Eq,Ord,Show,Read)
 
 data Action =
-   Action Java
+   Action Expressions
   deriving (Eq,Ord,Show,Read)
 
 data Foreaches =
@@ -308,54 +308,30 @@ data VarExp =
  | VarExpNil
   deriving (Eq,Ord,Show,Read)
 
+data Expressions =
+   ExpId Id Expressions
+ | ExpSymb Symbols Expressions
+ | ExpInt Integer Expressions
+ | ExpDouble Double Expressions
+ | ExpTimes Expressions
+ | ExpDot Expressions
+ | ExpBrack Expressions Expressions
+ | ExpParent Expressions Expressions
+ | ExpCorchete Expressions Expressions
+ | ExpEq Expressions
+ | ExpSemiColon Expressions
+ | ExpBSlash Expressions
+ | ExpComma Expressions
+ | ExpSlash Expressions
+ | ExpBar Expressions
+ | ExpNil
+  deriving (Eq,Ord,Show,Read)
+
 data Java =
-   JavaId Id Java
- | JavaSymb Symbols Java
- | JavaInt Integer Java
- | JavaDouble Double Java
- | JavaTimes Java
- | JavaDot Java
- | JavaBrack Java Java
- | JavaParent Java Java
- | JavaCorchete Java Java
- | JavaEq Java
- | JavaSemiColon Java
- | JavaBSlash Java
- | JavaComma Java
- | JavaSlash Java
- | JavaBar Java
- | JavaNil
+   Java Expressions
   deriving (Eq,Ord,Show,Read)
 
 data JML =
-   JMLId Id JML
- | JMLMath Symbols JML
- | JMLInt Integer JML
- | JMLDouble Double JML
- | JMLTimes JML
- | JMLDot JML
- | JMLBrack JML JML
- | JMLParent JML JML
- | JMLCorchete JML JML
- | JMLSemiColon JML
- | JMLEq JML
- | JMLComma JML
- | JMLSlash JML
- | JMLBar JML
- | JMLBackS JML
- | JMLOld JML JML
- | JMLRes JML
- | JMLForallRT Type Id BodyF JML
- | JMLExistsRT Type Id BodyF JML
- | JMLNil
-  deriving (Eq,Ord,Show,Read)
-
-data BodyF =
-   BodyF RangeTerm
-  deriving (Eq,Ord,Show,Read)
-
-data RangeTerm =
-   RangeTerm JML JML
- | OnlyRange JML
+   JML Expressions
   deriving (Eq,Ord,Show,Read)
 
