@@ -10,7 +10,7 @@ module Absppdate where
 newtype Id = Id String deriving (Eq,Ord,Show,Read)
 newtype Symbols = Symbols String deriving (Eq,Ord,Show,Read)
 data AbsPPDATE =
-   AbsPPDATE Imports Global CInvariants HTriples Methods
+   AbsPPDATE Imports Global Templates CInvariants HTriples Methods
   deriving (Eq,Ord,Show,Read)
 
 data Imports =
@@ -109,7 +109,12 @@ data Vars =
 
 data Properties =
    PropertiesNil
- | ProperiesDef Id States Transitions Properties
+ | ProperiesDef Id PropKind Properties
+  deriving (Eq,Ord,Show,Read)
+
+data PropKind =
+   PropKindNormal States Transitions
+ | PropKindPinit Id [Id]
   deriving (Eq,Ord,Show,Read)
 
 data States =
@@ -186,6 +191,19 @@ data Action =
 data Foreaches =
    ForeachesNil
  | ForeachesDef [Args] Context
+  deriving (Eq,Ord,Show,Read)
+
+data Templates =
+   Temps [Template]
+ | TempsNil
+  deriving (Eq,Ord,Show,Read)
+
+data Template =
+   Temp Id [Args] BodyTemp
+  deriving (Eq,Ord,Show,Read)
+
+data BodyTemp =
+   Body Variables IEvents Triggers Properties
   deriving (Eq,Ord,Show,Read)
 
 data CInvariants =

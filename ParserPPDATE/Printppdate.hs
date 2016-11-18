@@ -54,6 +54,7 @@ render d = rend 0 (map ($ "") $ d []) "" where
   new i   = showChar '\n' . replicateS (2*i) (showChar ' ') . dropWhile isSpace
   space t = showString t . (\s -> if null s then "" else (' ':s))
 
+
 parenth :: Doc -> Doc
 parenth ss = doc (showChar '(') . ss . doc (showChar ')')
 
@@ -102,6 +103,9 @@ instance Print Double where
 
 instance Print Id where
   prt _ (Id i) = doc (showString ( i))
+  prtList es = case es of
+   [] -> (concatD [])
+   x:xs -> (concatD [prt 0 x , prt 0 xs])
 
 
 instance Print Symbols where
@@ -111,7 +115,7 @@ instance Print Symbols where
 
 instance Print AbsPPDATE where
   prt i e = case e of
-   AbsPPDATE imports global cinvariants htriples methods -> prPrec i 0 (concatD [prt 0 imports , prt 0 global , prt 0 cinvariants , prt 0 htriples , prt 0 methods])
+   AbsPPDATE imports global templates cinvariants htriples methods -> prPrec i 0 (concatD [prt 0 imports , prt 0 global , prt 0 templates , prt 0 cinvariants , prt 0 htriples , prt 0 methods])
 
 
 instance Print Imports where
@@ -261,7 +265,13 @@ instance Print Vars where
 instance Print Properties where
   prt i e = case e of
    PropertiesNil  -> prPrec i 0 (concatD [])
-   ProperiesDef id states transitions properties -> prPrec i 0 (concatD [doc (showString "PROPERTY") , prt 0 id , doc (showString "{") , prt 0 states , prt 0 transitions , doc (showString "}") , prt 0 properties])
+   ProperiesDef id propkind properties -> prPrec i 0 (concatD [doc (showString "PROPERTY") , prt 0 id , doc (showString "{") , prt 0 propkind , doc (showString "}") , prt 0 properties])
+
+
+instance Print PropKind where
+  prt i e = case e of
+   PropKindNormal states transitions -> prPrec i 0 (concatD [prt 0 states , prt 0 transitions])
+   PropKindPinit id ids -> prPrec i 0 (concatD [doc (showString "PINIT") , doc (showString "{") , doc (showString "(") , prt 0 id , doc (showString ",") , prt 0 ids , doc (showString ")") , doc (showString "}")])
 
 
 instance Print States where
@@ -364,6 +374,25 @@ instance Print Foreaches where
   prt i e = case e of
    ForeachesNil  -> prPrec i 0 (concatD [])
    ForeachesDef argss context -> prPrec i 0 (concatD [doc (showString "FOREACH") , doc (showString "(") , prt 0 argss , doc (showString ")") , doc (showString "{") , prt 0 context , doc (showString "}")])
+
+
+instance Print Templates where
+  prt i e = case e of
+   Temps templates -> prPrec i 0 (concatD [doc (showString "TEMPLATES") , doc (showString "{") , prt 0 templates , doc (showString "}")])
+   TempsNil  -> prPrec i 0 (concatD [])
+
+
+instance Print Template where
+  prt i e = case e of
+   Temp id argss bodytemp -> prPrec i 0 (concatD [doc (showString "TEMPLATE") , prt 0 id , doc (showString "(") , prt 0 argss , doc (showString ")") , doc (showString "{") , prt 0 bodytemp , doc (showString "}")])
+
+  prtList es = case es of
+   [] -> (concatD [])
+   x:xs -> (concatD [prt 0 x , prt 0 xs])
+
+instance Print BodyTemp where
+  prt i e = case e of
+   Body variables ievents triggers properties -> prPrec i 0 (concatD [prt 0 variables , prt 0 ievents , prt 0 triggers , prt 0 properties])
 
 
 instance Print CInvariants where

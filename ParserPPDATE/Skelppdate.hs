@@ -21,7 +21,7 @@ transSymbols x = case x of
 
 transAbsPPDATE :: AbsPPDATE -> Result
 transAbsPPDATE x = case x of
-  AbsPPDATE imports global cinvariants htriples methods  -> failure x
+  AbsPPDATE imports global templates cinvariants htriples methods  -> failure x
 
 
 transImports :: Imports -> Result
@@ -141,7 +141,13 @@ transVars x = case x of
 transProperties :: Properties -> Result
 transProperties x = case x of
   PropertiesNil  -> failure x
-  ProperiesDef id states transitions properties  -> failure x
+  ProperiesDef id propkind properties  -> failure x
+
+
+transPropKind :: PropKind -> Result
+transPropKind x = case x of
+  PropKindNormal states transitions  -> failure x
+  PropKindPinit id ids  -> failure x
 
 
 transStates :: States -> Result
@@ -235,6 +241,22 @@ transForeaches :: Foreaches -> Result
 transForeaches x = case x of
   ForeachesNil  -> failure x
   ForeachesDef argss context  -> failure x
+
+
+transTemplates :: Templates -> Result
+transTemplates x = case x of
+  Temps templates  -> failure x
+  TempsNil  -> failure x
+
+
+transTemplate :: Template -> Result
+transTemplate x = case x of
+  Temp id argss bodytemp  -> failure x
+
+
+transBodyTemp :: BodyTemp -> Result
+transBodyTemp x = case x of
+  Body variables ievents triggers properties  -> failure x
 
 
 transCInvariants :: CInvariants -> Result
