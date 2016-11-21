@@ -20,7 +20,7 @@ import TranslatorActions
 
 
 upgradePPD :: Abs.AbsPPDATE -> UpgradePPD PPDATE
-upgradePPD (Abs.AbsPPDATE imports global cinvs consts methods) =
+upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
  do let imports' = genImports imports
     let methods' = genMethods methods
     case runStateT (genHTs consts imports') emptyEnv of
@@ -37,7 +37,7 @@ upgradePPD (Abs.AbsPPDATE imports global cinvs consts methods) =
                                                                       Bad s             -> fail s
                                                                       Ok (cinvs',env'') -> 
                                                                           do put env''
-                                                                             return (PPDATE imports' global' cinvs' consts' methods')
+                                                                             return (PPDATE imports' global' temps cinvs' consts' methods')
 
 
 duplicateHT :: [HTName] -> String
@@ -327,8 +327,9 @@ getWhereClause (Abs.WhereClauseDef wexp) = (concat.lines.printTree) wexp
 -- Properties --
 
 getProperty :: Abs.Properties -> [Id] -> Writer (String,String) Property
-getProperty Abs.PropertiesNil _                           = return PNIL
-getProperty (Abs.ProperiesDef id states trans props) enms =
+getProperty Abs.PropertiesNil _                                                = return PNIL
+getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms      = undefined
+getProperty (Abs.ProperiesDef id (Abs.PropKindNormal states trans) props) enms =
  let props' = getProperty props enms
      trans' = getTransitions (getIdAbs id) trans in
  case runWriter trans' of
@@ -421,6 +422,12 @@ getForeaches (Abs.ForeachesDef args ctxt) =
 getArgs :: Abs.Args -> Args
 getArgs (Abs.Args t id) = Args (getTypeAbs t) (getIdAbs id)
 
+---------------
+-- Templates --
+---------------
+
+genTemplates :: Abs.Templates -> UpgradePPD Templates
+genTemplates = undefined
 
 -----------------
 -- CInvariants --

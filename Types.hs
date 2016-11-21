@@ -10,16 +10,28 @@ import System.FilePath
 data PPDATE = PPDATE
   { importsGet     :: Imports
   , globalGet      :: Global
+  , templatesGet   :: Templates
   , cinvariantsGet :: CInvariants
   , htsGet         :: HTriples
   , methodsGet     :: Methods 
   } deriving (Show, Eq)
 
+data Templates = TempNil | Temp [Templates] deriving (Eq,Show)
+
+data Template = Template
+  { tempId       :: Id
+  , tempBinds    :: [Args]
+  , tempVars     :: Variables
+  , tempIEvents  :: IEvents
+  , tempTriggers :: Triggers 
+  , tempProp     :: Property
+  } deriving (Show, Eq)
+
 updateHTsPP :: PPDATE -> HTriples -> PPDATE
-updateHTsPP (PPDATE imp global cinvs conts ms) conts' = PPDATE imp global cinvs conts' ms
+updateHTsPP (PPDATE imp global temps cinvs conts ms) conts' = PPDATE imp global temps cinvs conts' ms
 
 updateGlobalPP :: PPDATE -> Global -> PPDATE
-updateGlobalPP (PPDATE imp global cinvs conts ms) global' = PPDATE imp global' cinvs conts ms
+updateGlobalPP (PPDATE imp global temps cinvs conts ms) global' = PPDATE imp global' temps cinvs conts ms
 
 data Import = Import String deriving (Show, Eq)
 type Imports = [Import]
@@ -228,7 +240,9 @@ data Property = Property
   , pStates      :: States
   , pTransitions :: Transitions
   , pProps       :: Property
-  } | PNIL deriving (Show, Eq,Read)
+  } | PNIL 
+    | PINIT Id [Id]
+         deriving (Show, Eq,Read)
 
 
 -------------

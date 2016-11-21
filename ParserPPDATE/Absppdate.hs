@@ -114,7 +114,7 @@ data Properties =
 
 data PropKind =
    PropKindNormal States Transitions
- | PropKindPinit Id [Id]
+ | PropKindPinit Id [Id] -- (name_of_template,[classesToInstance_foreach_like])
   deriving (Eq,Ord,Show,Read)
 
 data States =
