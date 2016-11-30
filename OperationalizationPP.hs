@@ -25,7 +25,7 @@ operationalizeOldResultBind ppd oldExprTypesM =
      oldExpT  = Map.unions $ map snd xs
      consts'  = map fst xs
      global'  = updateGlobal global (Ctxt (variables $ ctxtGet global) (ievents $ ctxtGet global) (triggers $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
- in ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ (updateHTsPP (updateGlobalPP ppdate global') consts'))
+ in ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ updateHTsPP (updateGlobalPP ppdate global') consts')
 
 
 

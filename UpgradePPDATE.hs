@@ -86,17 +86,27 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
     let ies' = getIEvents ies
     case runWriter prop' of
          (PNIL,_)                              -> return (Ctxt vars' ies' trigs' PNIL fors)
-         (Property pname states trans props,s) -> let accep  = checkAllHTsExist (getAccepting states) cns pname
-                                                      bad    = checkAllHTsExist (getBad states) cns pname
-                                                      normal = checkAllHTsExist (getNormal states) cns pname
-                                                      start  = checkAllHTsExist (getStarting states) cns pname
-                                                      errs   = concat $ accep ++ bad ++ normal ++ start
-                                                      s'     = if (not.null) (fst s)
-                                                               then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" ++ snd s ++ errs
-                                                               else snd s ++ errs
-                                                  in if (null s')
-                                                     then return (Ctxt vars' ies' trigs' (Property pname states trans props) fors)
-                                                     else fail s'
+         (PINIT pname id xs props,s)           -> 
+                  let s'     = if (not.null) (fst s)
+                               then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
+                                     ++ snd s
+                               else snd s 
+                  in if (null s')
+                     then return (Ctxt vars' ies' trigs' (PINIT pname id xs props) fors)
+                     else fail s'
+         (Property pname states trans props,s) -> 
+                  let accep  = checkAllHTsExist (getAccepting states) cns pname
+                      bad    = checkAllHTsExist (getBad states) cns pname
+                      normal = checkAllHTsExist (getNormal states) cns pname
+                      start  = checkAllHTsExist (getStarting states) cns pname
+                      errs   = concat $ accep ++ bad ++ normal ++ start
+                      s'     = if (not.null) (fst s)
+                               then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
+                                     ++ snd s ++ errs
+                               else snd s ++ errs
+                  in if (null s')
+                     then return (Ctxt vars' ies' trigs' (Property pname states trans props) fors)
+                     else fail s'
 
 
 checkAllHTsExist :: [State] -> [HTName] -> PropertyName -> [String]
@@ -333,20 +343,31 @@ getWhereClause (Abs.WhereClauseDef wexp) = (concat.lines.printTree) wexp
 
 getProperty :: Abs.Properties -> [Id] -> Writer (String,String) Property
 getProperty Abs.PropertiesNil _                                                = return PNIL
-getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms      = undefined
+getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms      = 
+ let props' = getProperty props enms 
+ in case runWriter props' of
+      (p, s) -> do tell s
+                   return (PINIT { piName  = getIdAbs id
+                                 , tmpId   = getIdAbs id'
+                                 , fors    = map getIdAbs ids'
+                                 , piProps = p
+                                 })
 getProperty (Abs.ProperiesDef id (Abs.PropKindNormal states trans) props) enms =
  let props' = getProperty props enms
      trans' = getTransitions (getIdAbs id) trans in
  case runWriter trans' of
       (t,s') -> let ts = map (trigger.arrow) t
                 in case runWriter props' of
-                        (p, s) -> do let xs = [x | x <- ts, not(elem x enms)]
-                                     tell ((mAppend (addComma xs) (fst s)), s' ++ snd s)
-                                     return (Property { pName        = getIdAbs id
-                                                      , pStates      = getStates' states
-                                                      , pTransitions = t
-                                                      , pProps       = p
-                                                      })
+                        (p, s)  -> do let xs = [x | x <- ts, not(elem x enms)]
+                                      tell $ mkErrPair s (addComma xs) s'
+                                      return (Property { pName        = getIdAbs id
+                                                       , pStates      = getStates' states
+                                                       , pTransitions = t
+                                                       , pProps       = p
+                                                       })
+
+mkErrPair :: (String, String) -> String -> String -> (String,String)
+mkErrPair s xs s' = ((mAppend xs (fst s)), s' ++ snd s)
 
 mAppend :: String -> String -> String
 mAppend [] []     = ""
@@ -432,7 +453,51 @@ getArgs (Abs.Args t id) = Args (getTypeAbs t) (getIdAbs id)
 ---------------
 
 genTemplates :: Abs.Templates -> UpgradePPD Templates
-genTemplates = undefined
+genTemplates Abs.TempsNil   = return TempNil
+--genTemplates (Abs.Temps xs) = return $ Temp $ map genTemplate xs
+ 
+
+genTemplate :: Abs.Template -> UpgradePPD Template
+genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) = 
+ do trigs' <- getTriggers trs
+    env <- get
+    let cns = htsNames env
+    let prop' = getProperty prop (map tName trigs')
+    case runWriter prop' of
+         (PNIL,_)                              -> fail $ "Error: The template " ++ getIdAbs id ++ " does not describe a PROPERTY section.\n"
+         (PINIT pname id' xs props,s)          -> 
+                  let s'     = if (not.null) (fst s)
+                               then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
+                                     ++ snd s
+                               else snd s 
+                  in if (null s')
+                     then fail s'
+                     else return $ Template { tempId       = getIdAbs id
+                                            , tempBinds    = undefined--[Args]
+                                            , tempVars     = getVars vars
+                                            , tempIEvents  = getIEvents ies
+                                            , tempTriggers = trigs'
+                                            , tempProp     = PINIT pname id' xs props
+                                            }
+         (Property pname states trans props,s) -> 
+                  let accep  = checkAllHTsExist (getAccepting states) cns pname
+                      bad    = checkAllHTsExist (getBad states) cns pname
+                      normal = checkAllHTsExist (getNormal states) cns pname
+                      start  = checkAllHTsExist (getStarting states) cns pname
+                      errs   = concat $ accep ++ bad ++ normal ++ start
+                      s'     = if (not.null) (fst s)
+                               then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
+                                     ++ snd s ++ errs
+                               else snd s ++ errs
+                  in if ((not.null) s')
+                     then fail s'
+                     else return $ Template { tempId       = getIdAbs id
+                                            , tempBinds    = undefined--[Args]
+                                            , tempVars     = getVars vars
+                                            , tempIEvents  = getIEvents ies
+                                            , tempTriggers = trigs'
+                                            , tempProp     = Property pname states trans props
+                                            }
 
 -----------------
 -- CInvariants --

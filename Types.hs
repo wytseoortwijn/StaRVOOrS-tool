@@ -16,17 +16,6 @@ data PPDATE = PPDATE
   , methodsGet     :: Methods 
   } deriving (Show, Eq)
 
-data Templates = TempNil | Temp [Templates] deriving (Eq,Show)
-
-data Template = Template
-  { tempId       :: Id
-  , tempBinds    :: [Args]
-  , tempVars     :: Variables
-  , tempIEvents  :: IEvents
-  , tempTriggers :: Triggers 
-  , tempProp     :: Property
-  } deriving (Show, Eq)
-
 updateHTsPP :: PPDATE -> HTriples -> PPDATE
 updateHTsPP (PPDATE imp global temps cinvs conts ms) conts' = PPDATE imp global temps cinvs conts' ms
 
@@ -100,6 +89,20 @@ data Global = Global
 updateGlobal :: Global -> Context -> Global
 updateGlobal (Global ctxt) ctxt' = Global ctxt'
 
+---------------
+-- Templates --
+---------------
+
+data Templates = TempNil | Temp [Template] deriving (Eq,Show)
+
+data Template = Template
+  { tempId       :: Id
+  , tempBinds    :: [Args]
+  , tempVars     :: Variables
+  , tempIEvents  :: IEvents
+  , tempTriggers :: Triggers 
+  , tempProp     :: Property
+  } deriving (Show, Eq)
 
 --------------
 -- Methods  --
@@ -241,7 +244,11 @@ data Property = Property
   , pTransitions :: Transitions
   , pProps       :: Property
   } | PNIL 
-    | PINIT Id [Id]
+    | PINIT { piName  :: PropertyName 
+            , tmpId   :: Id 
+            , fors    :: [Id]
+            , piProps :: Property
+            }
          deriving (Show, Eq,Read)
 
 
