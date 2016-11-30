@@ -25,19 +25,24 @@ upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
     let methods' = genMethods methods
     case runStateT (genHTs consts imports') emptyEnv of
          Bad s             -> fail s
-         Ok (consts', env) -> let cns = htsNames env
-                                  dcs = getDuplicate cns
-                              in case runStateT (genGlobal global) env of
-                                      Bad s              -> if (not.null) dcs
-                                                            then fail $ s ++ duplicateHT dcs
-                                                            else fail s
-                                      Ok (global', env') -> if (not.null) dcs
-                                                            then fail $ duplicateHT dcs
-                                                            else case runStateT (genClassInvariants cinvs) env' of
-                                                                      Bad s             -> fail s
-                                                                      Ok (cinvs',env'') -> 
-                                                                          do put env''
-                                                                             return (PPDATE imports' global' temps cinvs' consts' methods')
+         Ok (consts', env) ->
+             let cns = htsNames env
+                 dcs = getDuplicate cns
+             in case runStateT (genGlobal global) env of
+                     Bad s              -> if (not.null) dcs
+                                           then fail $ s ++ duplicateHT dcs
+                                           else fail s
+                     Ok (global', env') -> 
+                           if (not.null) dcs
+                           then fail $ duplicateHT dcs
+                           else case runStateT (genTemplates temps) env' of
+                                     Bad s             -> fail s
+                                     Ok (temps',env'') -> 
+                                            case runStateT (genClassInvariants cinvs) env'' of
+                                                 Bad s             -> fail s
+                                                 Ok (cinvs',env'') -> 
+                                                          do put env''
+                                                             return (PPDATE imports' global' temps' cinvs' consts' methods')
 
 
 duplicateHT :: [HTName] -> String

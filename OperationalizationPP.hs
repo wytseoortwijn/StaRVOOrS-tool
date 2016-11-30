@@ -25,8 +25,8 @@ operationalizeOldResultBind ppd oldExprTypesM =
      oldExpT  = Map.unions $ map snd xs
      consts'  = map fst xs
      global'  = updateGlobal global (Ctxt (variables $ ctxtGet global) (ievents $ ctxtGet global) (triggers $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
-     ppdate'  = ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ PPDATE (importsGet ppdate) global' (cinvariantsGet ppdate) consts' (methodsGet ppdate))
- in ppdate'
+ in ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ (updateHTsPP (updateGlobalPP ppdate global') consts'))
+
 
 
 operationalizePrePostORB :: HT -> [(String, ClassInfo, [(Type, Id)])] -> Triggers -> [(String, ClassInfo, [String])] -> Map.Map HTName [(String,Type)] -> (HT,OldExprM)

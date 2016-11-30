@@ -27,7 +27,7 @@ refinePPDATE ppd proofs =
      global'               = globalGet ppdate'
      (consts''', global'') = optimizedProvenHTs cproved global'
  in do put env'
-       return $ PPDATE (importsGet ppdate') global'' (cinvariantsGet ppdate') (consts'''++consts'') (methodsGet ppdate')
+       return $ updateHTsPP (updateGlobalPP ppdate' global'') (consts'''++consts'')
 
 --------------------------------------------------
 -- Remove Hoare triples which were fully proved --
@@ -237,8 +237,8 @@ addNewTriggerExit env ppdate n (x:xs) =
                                      , allTriggers = (tName tr,mn, getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs
 
 addTrigger2ppDATE :: TriggerDef -> PPDATE -> PPDATE
-addTrigger2ppDATE tr (PPDATE imp (Global (Ctxt vars ies trs p for)) ci consts ms) =
- PPDATE imp (Global (Ctxt vars ies (tr:trs) p for)) ci consts ms
+addTrigger2ppDATE tr (PPDATE imp (Global (Ctxt vars ies trs p for)) temps ci consts ms) =
+ PPDATE imp (Global (Ctxt vars ies (tr:trs) p for)) temps ci consts ms
 
 makeBind :: String -> Bind
 makeBind [] = error "f"
