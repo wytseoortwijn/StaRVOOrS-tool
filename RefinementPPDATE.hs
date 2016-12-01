@@ -24,21 +24,17 @@ refinePPDATE ppd proofs =
      triggers'             = getAllTriggers global 
      consts''              = updateHTs nproved consts' triggers'
      env'                  = getEnvVal ppd'     
-     global'               = globalGet ppdate'
-     (consts''', global'') = optimizedProvenHTs cproved global'
+     global'               = optimizedProvenHTs cproved global
  in do put env'
-       return $ updateHTsPP (updateGlobalPP ppdate' global'') (consts'''++consts'')
+       return $ updateHTsPP (updateGlobalPP ppdate' global') consts''
 
 --------------------------------------------------
 -- Remove Hoare triples which were fully proved --
 --------------------------------------------------
 
-optimizedProvenHTs :: HTriples -> Global -> (HTriples, Global)
-optimizedProvenHTs [] ps     = ([], ps)
-optimizedProvenHTs (c:cs) ps = if (null $ optimized c)
-                                     then (a, refinePropertyOpt (htName c) b)
-                                     else (c:a, b)
-                                           where (a, b) = optimizedProvenHTs cs ps
+optimizedProvenHTs :: HTriples -> Global -> Global
+optimizedProvenHTs [] ps     = ps
+optimizedProvenHTs (c:cs) ps = refinePropertyOpt (htName c) $ optimizedProvenHTs cs ps
 
 refinePropertyOpt :: HTName -> Global -> Global
 refinePropertyOpt cn (Global (Ctxt vars ies trigs prop fors)) = 
