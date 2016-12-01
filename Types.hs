@@ -22,6 +22,9 @@ updateHTsPP (PPDATE imp global temps cinvs conts ms) conts' = PPDATE imp global 
 updateGlobalPP :: PPDATE -> Global -> PPDATE
 updateGlobalPP (PPDATE imp global temps cinvs conts ms) global' = PPDATE imp global' temps cinvs conts ms
 
+updateTemplatesPP :: PPDATE -> Templates -> PPDATE
+updateTemplatesPP (PPDATE imp global temps cinvs conts ms) temps' = PPDATE imp global temps' cinvs conts ms
+
 data Import = Import String deriving (Show, Eq)
 type Imports = [Import]
 
@@ -103,6 +106,9 @@ data Template = Template
   , tempTriggers :: Triggers 
   , tempProp     :: Property
   } deriving (Show, Eq)
+
+updateTemplateProp :: Template -> Property -> Template
+updateTemplateProp (Template id bs vars ies trs prop) prop' = Template id bs vars ies trs prop'
 
 --------------
 -- Methods  --

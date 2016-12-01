@@ -12,36 +12,40 @@ import UpgradePPDATE
 
 refinePPDATE :: UpgradePPD PPDATE -> [Proof] -> UpgradePPD PPDATE
 refinePPDATE ppd proofs = 
- let ppdate                = getValue ppd 
-     consts                = htsGet ppdate
-     nproved               = filter (\(x,y,z,t) -> (not.null) z) $ map getInfoFromProof proofs
-     proved                = filter (\(x,y,z,t) -> (null z)) $ map getInfoFromProof proofs
-     consts'               = [c | c <- consts, (x,y,z,t) <- nproved, htName c == y]  
-     cproved               = [c | c <- consts, (x,y,z,t) <- proved, htName c == y]  
-     ppd'                  = generateNewTriggers ppd consts'
-     ppdate'               = getValue ppd'
-     global                = globalGet ppdate'
-     triggers'             = getAllTriggers global 
-     consts''              = updateHTs nproved consts' triggers'
-     env'                  = getEnvVal ppd'     
-     global'               = optimizedProvenHTs cproved global
+ let ppdate    = getValue ppd 
+     consts    = htsGet ppdate
+     nproved   = filter (\(x,y,z,t) -> (not.null) z) $ map getInfoFromProof proofs
+     proved    = filter (\(x,y,z,t) -> (null z)) $ map getInfoFromProof proofs
+     consts'   = [c | c <- consts, (x,y,z,t) <- nproved, htName c == y]  
+     cproved   = [c | c <- consts, (x,y,z,t) <- proved, htName c == y]  
+     ppd'      = generateNewTriggers ppd consts'
+     ppdate'   = getValue ppd'
+     global    = globalGet ppdate'
+     triggers' = getAllTriggers global 
+     consts''  = updateHTs nproved consts' triggers'
+     env'      = getEnvVal ppd'     
+     global'   = optimizedProvenHTs cproved refinePropertyOptGlobal global
+     temps     = templatesGet ppdate'
+     temps'    = optimizedProvenHTs cproved refinePropertyOptTemplates temps
  in do put env'
-       return $ updateHTsPP (updateGlobalPP ppdate' global') consts''
+       return $ updateTemplatesPP (updateHTsPP (updateGlobalPP ppdate' global') consts'') temps'
 
 --------------------------------------------------
 -- Remove Hoare triples which were fully proved --
 --------------------------------------------------
 
-optimizedProvenHTs :: HTriples -> Global -> Global
-optimizedProvenHTs [] ps     = ps
-optimizedProvenHTs (c:cs) ps = refinePropertyOpt (htName c) $ optimizedProvenHTs cs ps
+optimizedProvenHTs :: HTriples -> (HTName -> a -> a) -> a -> a
+optimizedProvenHTs [] f ps     = ps
+optimizedProvenHTs (c:cs) f ps = f (htName c) $ optimizedProvenHTs cs f ps
 
-refinePropertyOpt :: HTName -> Global -> Global
-refinePropertyOpt cn (Global (Ctxt vars ies trigs prop fors)) = 
- let prop' = removeStatesProp cn prop
- in case fors of
-         []                  -> Global (Ctxt vars ies trigs prop' [])
-         [Foreach args ctxt] -> Global (Ctxt vars ies trigs prop' [Foreach args (refineContext cn ctxt)])
+refinePropertyOptTemplates :: HTName -> Templates -> Templates
+refinePropertyOptTemplates cn (Temp temps) = Temp $ map (refineTemplate cn) temps
+
+refineTemplate :: HTName -> Template -> Template
+refineTemplate cn temp = updateTemplateProp temp (removeStatesProp cn $ tempProp temp)
+
+refinePropertyOptGlobal :: HTName -> Global -> Global
+refinePropertyOptGlobal cn (Global ctxt) = Global $ refineContext cn ctxt
 
 refineContext :: HTName -> Context -> Context
 refineContext cn (Ctxt vars ies trigs prop fors) = 
@@ -51,7 +55,8 @@ refineContext cn (Ctxt vars ies trigs prop fors) =
          [Foreach args ctxt] -> Ctxt vars ies trigs prop' [Foreach args (refineContext cn ctxt)] 
 
 removeStatesProp :: HTName -> Property -> Property
-removeStatesProp _ PNIL  = PNIL
+removeStatesProp _ PNIL               = PNIL
+removeStatesProp _ p@(PINIT _ _ _ _)  = p
 removeStatesProp cn prop = let States acc bad nor star = pStates prop
                                acc'  = map (\s -> removeStateProp s cn) acc
                                bad'  = map (\s -> removeStateProp s cn) bad
@@ -130,7 +135,6 @@ compareEV _ _                     = False
 -- Generate triggers whenever a method to be runtime verified is not associated to one --
 -----------------------------------------------------------------------------------------
 
---TODO: Fix this method if classes with the same name in different paths are allowed
 --If trigger associated to *, it will be considered as defined even if the the class is wrong
 generateNewTriggers :: UpgradePPD PPDATE -> HTriples -> UpgradePPD PPDATE
 generateNewTriggers ppd consts =
