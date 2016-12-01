@@ -128,6 +128,9 @@ getArgsId (Args t id) = id
 getArgsType :: Args -> Type
 getArgsType (Args t id) = t
 
+makeArgs :: Type -> Id -> Args
+makeArgs t id = Args t id
+
 bindToArgs :: Bind -> Args
 bindToArgs (BindType t id) = Args t id
 bindToArgs _               = error "bindToArgs \n"

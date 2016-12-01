@@ -454,7 +454,9 @@ getArgs (Abs.Args t id) = Args (getTypeAbs t) (getIdAbs id)
 
 genTemplates :: Abs.Templates -> UpgradePPD Templates
 genTemplates Abs.TempsNil   = return TempNil
---genTemplates (Abs.Temps xs) = return $ Temp $ map genTemplate xs
+genTemplates (Abs.Temps xs) = 
+ do xs <- sequence $ map genTemplate xs
+    return $ Temp xs 
  
 
 genTemplate :: Abs.Template -> UpgradePPD Template
@@ -473,7 +475,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                   in if (null s')
                      then fail s'
                      else return $ Template { tempId       = getIdAbs id
-                                            , tempBinds    = undefined--[Args]
+                                            , tempBinds    = map ((uncurry makeArgs).getArgsAbs) args
                                             , tempVars     = getVars vars
                                             , tempIEvents  = getIEvents ies
                                             , tempTriggers = trigs'
@@ -492,7 +494,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                   in if ((not.null) s')
                      then fail s'
                      else return $ Template { tempId       = getIdAbs id
-                                            , tempBinds    = undefined--[Args]
+                                            , tempBinds    = map ((uncurry makeArgs).getArgsAbs) args
                                             , tempVars     = getVars vars
                                             , tempIEvents  = getIEvents ies
                                             , tempTriggers = trigs'
@@ -598,6 +600,9 @@ genMethods m = printTree m
 ------------------------
 -- Selector functions --
 ------------------------
+
+getArgsAbs :: Abs.Args -> (Type,Id)
+getArgsAbs (Abs.Args t id) = (getTypeAbs t, getIdAbs id)
 
 getSymbolsAbs :: Abs.Symbols -> String
 getSymbolsAbs (Abs.Symbols s) = s
