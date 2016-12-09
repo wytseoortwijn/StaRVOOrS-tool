@@ -139,7 +139,7 @@ makeArgs t id = Args t id
 
 bindToArgs :: Bind -> Args
 bindToArgs (BindType t id) = Args t id
-bindToArgs _               = error "bindToArgs \n"
+bindToArgs _               = error "bindToArgs.\n"
 
 ---------------
 -- Variables --
