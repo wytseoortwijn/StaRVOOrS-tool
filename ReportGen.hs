@@ -36,8 +36,8 @@ splitAccording2Proof xs ys zs (p:ps) = let pres = (\(x,y,z) -> z) p
                                                else splitAccording2Proof xs (p:ys) zs ps
 
 makeReport :: ([PProof], [PProof], [PProof]) -> String
-makeReport (ps, pps, nps) = "Results of the Static Verification of contracts\n\n"
-                            ++ show (sum (map length [ps, pps, nps])) ++ " contract(s) were analysed:\n\n"
+makeReport (ps, pps, nps) = "Results of the Static Verification of Hoare triple(s)\n\n"
+                            ++ show (sum (map length [ps, pps, nps])) ++ " Hoare triple(s) were analysed:\n\n"
                             ++ fullyProvedInfo ps ++ "\n"
                             ++ partiallyProvedInfo pps ++ "\n" 
                             ++ notProvedInfo nps
@@ -45,20 +45,20 @@ makeReport (ps, pps, nps) = "Results of the Static Verification of contracts\n\n
 
 fullyProvedInfo :: [PProof] -> String
 fullyProvedInfo ps = if (null ps)
-                     then "* No contract(s) were fully proved.\n"
-                     else "* " ++ show (length ps) ++ " contract(s) were fully proved:\n"
+                     then "* No Hoare triple(s) were fully proved.\n"
+                     else "* " ++ show (length ps) ++ " Hoare triple(s) were fully proved:\n"
                           ++ genListContractsName (map (\(x,y,z) -> y) ps)                          
 
 partiallyProvedInfo :: [PProof] -> String
 partiallyProvedInfo pps = if (null pps)
                           then ""
-                          else "* " ++ show (length pps) ++ " contract(s) were partially proved:\n"
+                          else "* " ++ show (length pps) ++ " Hoare triple(s) were partially proved:\n"
                                ++ genPartiallyInfo pps
 
 notProvedInfo :: [PProof] -> String
 notProvedInfo nps = if (null nps)
                     then ""
-                    else "* " ++ show (length nps) ++ " contract(s) were not proved:\n"
+                    else "* " ++ show (length nps) ++ " Hoare triple(s) were not proved:\n"
                          ++ genListContractsName (map (\(x,y,z) -> y) nps)
 
 genListContractsName :: [HTName] -> String
@@ -67,4 +67,4 @@ genListContractsName (c:cs) = "  " ++ c ++ "\n" ++ genListContractsName cs
 
 genPartiallyInfo :: [PProof] -> String
 genPartiallyInfo []                  = ""
-genPartiallyInfo ((mn, cn, pres):ps) = "  " ++ cn ++ " --> New condition added to its precondition is "  ++ (introduceOr $ map (addParenthesisNot.removeSelf) (removeDuplicates pres)) ++ "\n" ++ genPartiallyInfo ps
+genPartiallyInfo ((mn, cn, pres):ps) = "  " ++ cn ++ " --> New condition added to its pre-condition is "  ++ (introduceOr $ map (addParenthesisNot.removeSelf) (removeDuplicates pres)) ++ "\n" ++ genPartiallyInfo ps
