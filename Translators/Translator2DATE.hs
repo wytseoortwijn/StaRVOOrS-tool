@@ -55,8 +55,10 @@ writeGlobal ppdate env =
  in case prop of 
     PINIT pname id xs props -> 
        let templates = templatesGet ppdate 
-           template  = getTemplate templates id           
-       in ""
+           template  = getTemplate templates id
+           fors'     = undefined
+       in "GLOBAL {\n\n"
+          ++ writeForeach fors' consts env
     _                       ->
        "GLOBAL {\n\n"
        ++ writeVariables vars consts

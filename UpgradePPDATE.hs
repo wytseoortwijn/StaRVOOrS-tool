@@ -87,11 +87,15 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
     case runWriter prop' of
          (PNIL,_)                              -> return (Ctxt vars' ies' trigs' PNIL fors)
          (PINIT pname id xs props,s)           -> 
-                  let s'     = if (not.null) (fst s)
-                               then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
-                                     ++ snd s
-                               else snd s 
-                  in if (null s')
+                  let s'  = if (not.null) (fst s)
+                            then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
+                                 ++ snd s
+                            else snd s
+                      s'' = if elem id (tempsId env)
+                            then ""
+                            else "Error: In the definition of property " ++ pname
+                                 ++ ". The template " ++ id ++ " does not exist\n." 
+                  in if (null (s'++s''))
                      then return (Ctxt vars' ies' trigs' (PINIT pname id xs props) fors)
                      else fail s'
          (Property pname states trans props,s) -> 
