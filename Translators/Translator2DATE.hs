@@ -45,29 +45,52 @@ writeImports xss const = let newImp = "import ppArtifacts.*;\n"
 --------------------
 
 writeGlobal :: PPDATE -> Env -> String
-writeGlobal ppdate env = let global = ctxtGet $ globalGet ppdate
-                             consts = htsGet ppdate
-                             vars   = variables global
-                             es     = triggers global
-                             prop   = property global
-                             fors   = foreaches global
-                             vars'  = if (null consts)
-                                      then if (null vars) then "" else "VARIABLES {\n" ++ writeVariables vars ++ "}\n\n"
-                                      else "VARIABLES {\n" ++ makeChannels (length consts) ++ writeVariables vars ++ "}\n\n"
-                         in "GLOBAL {\n\n"
-                            ++ vars'
-                            ++ writeTriggers es consts
-                            ++ writeProperties prop consts es env
-                            ++ writeForeach fors consts env
-                            -- ++ "}\n"
+writeGlobal ppdate env = 
+ let global = ctxtGet $ globalGet ppdate
+     consts = htsGet ppdate
+     vars   = variables global
+     es     = triggers global
+     prop   = property global
+     fors   = foreaches global                             
+ in case prop of 
+    PINIT pname id xs props -> 
+       let templates = templatesGet ppdate 
+           template  = getTemplate templates id           
+       in ""
+    _                       ->
+       "GLOBAL {\n\n"
+       ++ writeVariables vars consts
+       ++ writeTriggers es consts
+       ++ writeProperties prop consts es env
+       ++ writeForeach fors consts env
+       -- ++ "}\n"
+
+---------------
+-- Templates --
+---------------
+
+getTemplate :: Templates -> Id -> Template  
+getTemplate (Temp tmps) id = getTemplate' tmps id
+
+getTemplate' :: [Template] -> Id -> Template
+getTemplate' [x] _     = x
+getTemplate' (x:xs) id = if tempId x == id then x else getTemplate' xs id
 
 ---------------
 -- Variables --
 ---------------
 
-writeVariables :: Variables -> String
-writeVariables []     = ""
-writeVariables (v:vs) = writeVariable v ++ ";\n" ++ writeVariables vs
+writeVariables :: Variables -> HTriples -> String
+writeVariables vars consts = 
+ if (null consts)
+ then if (null vars) 
+      then "" 
+      else "VARIABLES {\n" ++ writeVariables' vars ++ "}\n\n"
+ else "VARIABLES {\n" ++ makeChannels (length consts) ++ writeVariables' vars ++ "}\n\n"
+
+writeVariables' :: Variables -> String
+writeVariables' []     = ""
+writeVariables' (v:vs) = writeVariable v ++ ";\n" ++ writeVariables' vs
 
 writeVariable :: Variable -> String
 writeVariable (Var vm t vdec) = writeVarModifier vm ++ " "
@@ -432,11 +455,8 @@ writeForeach [Foreach args ctxt] consts env =
      es     = triggers ctxt
      prop   = property ctxt
      fors   = foreaches ctxt
-     vars'  = if (null vars)
-              then ""
-              else "VARIABLES {\n" ++ writeVariables vars ++ "}\n\n"
  in "FOREACH (" ++ getForeachArgs args ++ ") {\n\n"
-    ++ vars'
+    ++ writeVariables vars []
     ++ writeTriggers es consts
     ++ writeProperties prop consts es env
     ++ writeForeach fors consts env

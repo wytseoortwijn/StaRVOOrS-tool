@@ -16,7 +16,7 @@ import qualified ParserAct as ParAct
 import qualified ParserJML as ParJML
 import Data.List
 import Data.Either
-import TranslatorActions
+--import TranslatorActions
 
 
 upgradePPD :: Abs.AbsPPDATE -> UpgradePPD PPDATE
@@ -28,16 +28,14 @@ upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
          Ok (consts', env) ->
              let cns = htsNames env
                  dcs = getDuplicate cns
-             in case runStateT (genGlobal global) env of
-                     Bad s              -> if (not.null) dcs
-                                           then fail $ s ++ duplicateHT dcs
-                                           else fail s
-                     Ok (global', env') -> 
-                           if (not.null) dcs
-                           then fail $ duplicateHT dcs
-                           else case runStateT (genTemplates temps) env' of
-                                     Bad s             -> fail s
-                                     Ok (temps',env'') -> 
+             in case runStateT (genTemplates temps) env of
+                     Bad s             -> fail s
+                     Ok (temps',env') ->
+                        case runStateT (genGlobal global) env' of
+                                     Bad s              -> if (not.null) dcs
+                                                           then fail $ s ++ duplicateHT dcs
+                                                           else fail s
+                                     Ok (global', env'') ->  
                                             case runStateT (genClassInvariants cinvs) env'' of
                                                  Bad s             -> fail s
                                                  Ok (cinvs',env'') -> 
@@ -54,6 +52,8 @@ getDuplicate []     = []
 getDuplicate (c:cs) = if elem c cs
                       then c:getDuplicate cs
                       else getDuplicate cs
+
+
 
 -------------
 -- Imports --
@@ -431,7 +431,8 @@ getArrow (Abs.Arrow id (Abs.Cond2 cond)) =
         case ParAct.parse act' of 
              Bad s -> do tell s
                          return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = "Parse error" }
-             Ok ac -> return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = PrintAct.printTree (translateAct ac) }
+             --Ok ac -> return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = PrintAct.printTree (translateAct ac) }
+             Ok ac -> return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = PrintAct.printTree ac }
 
 
 -- Foreaches --
@@ -456,6 +457,8 @@ genTemplates :: Abs.Templates -> UpgradePPD Templates
 genTemplates Abs.TempsNil   = return TempNil
 genTemplates (Abs.Temps xs) = 
  do xs <- sequence $ map genTemplate xs
+    env <- get
+    put env { tempsId = tempsId env ++ foldr (\ x xs -> tempId x : xs) [] xs}
     return $ Temp xs 
  
 
@@ -466,8 +469,8 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
     let cns = htsNames env
     let prop' = getProperty prop (map tName trigs')
     case runWriter prop' of
-         (PNIL,_)                              -> fail $ "Error: The template " ++ getIdAbs id ++ " does not describe a PROPERTY section.\n"
-         (PINIT pname id' xs props,s)          -> 
+         (PNIL,_)                      -> fail $ "Error: The template " ++ getIdAbs id ++ " does not have a PROPERTY section.\n"
+         (PINIT pname id' xs props,s)  -> 
                   let s'     = if (not.null) (fst s)
                                then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
                                      ++ snd s
@@ -755,6 +758,7 @@ data Env = Env
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
  , methodsInFiles      :: [(String, ClassInfo, [(Type,Id,[String])])] --[(path_to_class,class_name,[(returned_type,method_name,arguments)])]
  , oldExpTypes         :: OldExprM
+ , tempsId             :: [Id]
  }
   deriving (Show)
 
@@ -769,6 +773,7 @@ emptyEnv = Env { forsVars            = []
                , varsInFiles         = []
                , methodsInFiles      = []
                , oldExpTypes         = Map.empty
+               , tempsId             = []
                }
 
 updateEntryTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
