@@ -382,12 +382,13 @@ lookForHT p (c:cs) = if (htName c == p)
 
 lookForLeavingTransitions :: Trigger -> NameState -> Transitions -> (Transitions, Transitions)
 lookForLeavingTransitions e ns []                                        = ([],[])
-lookForLeavingTransitions e ns (t@(Transition q (Arrow e' c act) q'):ts) = if (e == e')
-                                                                           then if (ns == q && ns /= q')
-                                                                                then (t:a, b)
-                                                                                else (a, t:b)
-                                                                           else (a,t:b)
-                                                                                where (a, b) = lookForLeavingTransitions e ns ts
+lookForLeavingTransitions e ns (t@(Transition q (Arrow e' c act) q'):ts) = 
+ if (e == e')
+ then if (ns == q)
+      then (t:a, b)
+      else (a, t:b)
+ else (a,t:b)
+     where (a, b) = lookForLeavingTransitions e ns ts
 
 -------------------------
 -- Replicated Automata --
