@@ -46,7 +46,7 @@ transGlobal x = case x of
 
 transContext :: Context -> Result
 transContext x = case x of
-  Ctxt variables ievents triggers properties foreaches  -> failure x
+  Ctxt variables actevents triggers properties foreaches  -> failure x
 
 
 transVariables :: Variables -> Result
@@ -66,15 +66,15 @@ transVarModifier x = case x of
   VarModifierNil  -> failure x
 
 
-transIEvents :: IEvents -> Result
-transIEvents x = case x of
-  IEventsNil  -> failure x
-  IEventsDef ievents  -> failure x
+transActEvents :: ActEvents -> Result
+transActEvents x = case x of
+  ActEventsNil  -> failure x
+  ActEventsDef actevents  -> failure x
 
 
-transIEvent :: IEvent -> Result
-transIEvent x = case x of
-  IEvent id  -> failure x
+transActEvent :: ActEvent -> Result
+transActEvent x = case x of
+  ActEvent id  -> failure x
 
 
 transTriggers :: Triggers -> Result
@@ -152,7 +152,7 @@ transPropKind x = case x of
 
 transStates :: States -> Result
 transStates x = case x of
-  States accepting bad normal starting  -> failure x
+  States starting accepting bad normal  -> failure x
 
 
 transAccepting :: Accepting -> Result
@@ -240,7 +240,7 @@ transAction x = case x of
 transForeaches :: Foreaches -> Result
 transForeaches x = case x of
   ForeachesNil  -> failure x
-  ForeachesDef argss context  -> failure x
+  ForeachesDef argss context foreaches  -> failure x
 
 
 transTemplates :: Templates -> Result
@@ -256,7 +256,7 @@ transTemplate x = case x of
 
 transBodyTemp :: BodyTemp -> Result
 transBodyTemp x = case x of
-  Body variables ievents triggers properties  -> failure x
+  Body variables actevents triggers properties  -> failure x
 
 
 transCInvariants :: CInvariants -> Result

@@ -14,10 +14,10 @@ generateRA = makeReplicateAutomaton
 makeReplicateAutomaton :: HT -> Int -> Env -> Property
 makeReplicateAutomaton c n env = 
  Property (htName c)
-          (States [State "postOK" InitNil []] 
+          (States [State "start" InitNil []] 
+                  [State "postOK" InitNil []] 
                   [State "bad" InitNil []] 
-                  [State "idle" InitNil []] 
-                  [State "start" InitNil []])
+                  [State "idle" InitNil []])
           (makeTransitions c n env)
           PNIL
 

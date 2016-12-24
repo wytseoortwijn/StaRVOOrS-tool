@@ -54,7 +54,6 @@ render d = rend 0 (map ($ "") $ d []) "" where
   new i   = showChar '\n' . replicateS (2*i) (showChar ' ') . dropWhile isSpace
   space t = showString t . (\s -> if null s then "" else (' ':s))
 
-
 parenth :: Doc -> Doc
 parenth ss = doc (showChar '(') . ss . doc (showChar ')')
 
@@ -146,7 +145,7 @@ instance Print Global where
 
 instance Print Context where
   prt i e = case e of
-   Ctxt variables ievents triggers properties foreaches -> prPrec i 0 (concatD [prt 0 variables , prt 0 ievents , prt 0 triggers , prt 0 properties , prt 0 foreaches])
+   Ctxt variables actevents triggers properties foreaches -> prPrec i 0 (concatD [prt 0 variables , prt 0 actevents , prt 0 triggers , prt 0 properties , prt 0 foreaches])
 
 
 instance Print Variables where
@@ -169,15 +168,15 @@ instance Print VarModifier where
    VarModifierNil  -> prPrec i 0 (concatD [])
 
 
-instance Print IEvents where
+instance Print ActEvents where
   prt i e = case e of
-   IEventsNil  -> prPrec i 0 (concatD [])
-   IEventsDef ievents -> prPrec i 0 (concatD [doc (showString "IEVENTS") , doc (showString "{") , prt 0 ievents , doc (showString "}")])
+   ActEventsNil  -> prPrec i 0 (concatD [])
+   ActEventsDef actevents -> prPrec i 0 (concatD [doc (showString "ACTEVENTS") , doc (showString "{") , prt 0 actevents , doc (showString "}")])
 
 
-instance Print IEvent where
+instance Print ActEvent where
   prt i e = case e of
-   IEvent id -> prPrec i 0 (concatD [prt 0 id])
+   ActEvent id -> prPrec i 0 (concatD [prt 0 id])
 
   prtList es = case es of
    [x] -> (concatD [prt 0 x])
@@ -276,7 +275,7 @@ instance Print PropKind where
 
 instance Print States where
   prt i e = case e of
-   States accepting bad normal starting -> prPrec i 0 (concatD [doc (showString "STATES") , doc (showString "{") , prt 0 accepting , prt 0 bad , prt 0 normal , prt 0 starting , doc (showString "}")])
+   States starting accepting bad normal -> prPrec i 0 (concatD [doc (showString "STATES") , doc (showString "{") , prt 0 starting , prt 0 accepting , prt 0 bad , prt 0 normal , doc (showString "}")])
 
 
 instance Print Accepting where
@@ -373,7 +372,7 @@ instance Print Action where
 instance Print Foreaches where
   prt i e = case e of
    ForeachesNil  -> prPrec i 0 (concatD [])
-   ForeachesDef argss context -> prPrec i 0 (concatD [doc (showString "FOREACH") , doc (showString "(") , prt 0 argss , doc (showString ")") , doc (showString "{") , prt 0 context , doc (showString "}")])
+   ForeachesDef argss context foreaches -> prPrec i 0 (concatD [doc (showString "FOREACH") , doc (showString "(") , prt 0 argss , doc (showString ")") , doc (showString "{") , prt 0 context , doc (showString "}") , prt 0 foreaches])
 
 
 instance Print Templates where
@@ -392,7 +391,7 @@ instance Print Template where
 
 instance Print BodyTemp where
   prt i e = case e of
-   Body variables ievents triggers properties -> prPrec i 0 (concatD [prt 0 variables , prt 0 ievents , prt 0 triggers , prt 0 properties])
+   Body variables actevents triggers properties -> prPrec i 0 (concatD [prt 0 variables , prt 0 actevents , prt 0 triggers , prt 0 properties])
 
 
 instance Print CInvariants where

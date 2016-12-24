@@ -79,9 +79,9 @@ updatePath (HT cn m p po ass opt ch p2it) p2it' = HT cn m p po ass opt ch p2it'
 
 data Context =
    Ctxt { variables :: Variables
-        , ievents  :: IEvents
-        , triggers :: Triggers
-        , property :: Property
+        , actevents :: ActEvents
+        , triggers  :: Triggers
+        , property  :: Property
         , foreaches :: Foreaches
         }
   deriving (Eq,Show,Read)
@@ -99,12 +99,12 @@ updateGlobal (Global ctxt) ctxt' = Global ctxt'
 data Templates = TempNil | Temp [Template] deriving (Eq,Show)
 
 data Template = Template
-  { tempId       :: Id
-  , tempBinds    :: [Args]
-  , tempVars     :: Variables
-  , tempIEvents  :: IEvents
-  , tempTriggers :: Triggers 
-  , tempProp     :: Property
+  { tempId        :: Id
+  , tempBinds     :: [Args]
+  , tempVars      :: Variables
+  , tempActEvents :: ActEvents
+  , tempTriggers  :: Triggers 
+  , tempProp      :: Property
   } deriving (Show, Eq)
 
 updateTemplateProp :: Template -> Property -> Template
@@ -221,10 +221,10 @@ type Normal = [State]
 type Starting = [State]
 
 data States = States 
-  { getAccepting :: Accepting
+  { getStarting  :: Starting
+  , getAccepting :: Accepting
   , getBad       :: Bad
-  , getNormal    :: Normal 
-  , getStarting  :: Starting
+  , getNormal    :: Normal   
   } deriving (Eq, Show,Read)
 
 type Transitions = [Transition]
@@ -261,14 +261,14 @@ data Property = Property
          deriving (Show, Eq,Read)
 
 
--------------
--- IEvents --
--------------
+---------------
+-- ActEvents --
+---------------
 
-type IEvents = [IEvent]
+type ActEvents = [ActEvent]
 
-data IEvent =
-   IEvent Id
+data ActEvent =
+   ActEvent Id
   deriving (Eq,Ord,Show,Read)
 
 --------------

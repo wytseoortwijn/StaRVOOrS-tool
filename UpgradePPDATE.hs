@@ -20,7 +20,11 @@ import Data.Either
 
 
 upgradePPD :: Abs.AbsPPDATE -> UpgradePPD PPDATE
-upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
+upgradePPD = replacePInit . upgradePPD'
+
+
+upgradePPD' :: Abs.AbsPPDATE -> UpgradePPD PPDATE
+upgradePPD' (Abs.AbsPPDATE imports global temps cinvs consts methods) =
  do let imports' = genImports imports
     let methods' = genMethods methods
     case runStateT (genHTs consts imports') emptyEnv of
@@ -42,18 +46,29 @@ upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
                                                           do put env''
                                                              return (PPDATE imports' global' temps' cinvs' consts' methods')
 
-
-duplicateHT :: [HTName] -> String
-duplicateHT []     = ""
-duplicateHT (c:cs) = "Error: Multiple definitions for Hoare triple " ++ c ++ ".\n" ++ duplicateHT cs
-
-getDuplicate :: [HTName] -> [HTName]
-getDuplicate []     = []
-getDuplicate (c:cs) = if elem c cs
-                      then c:getDuplicate cs
-                      else getDuplicate cs
-
-
+--TODO: Pinit has to included as a foreach
+replacePInit :: UpgradePPD PPDATE -> UpgradePPD PPDATE
+replacePInit ppd = 
+ let env    = getEnvVal ppd
+     ppdate = getValue ppd
+     global = ctxtGet $ globalGet ppdate
+     es     = triggers global
+     vars   = variables global
+     acts   = actevents global
+     prop   = property global
+     fors   = foreaches global 
+ in case prop of 
+    PINIT pname id xs props -> 
+       let templates = templatesGet ppdate 
+           temp      = getTemplate templates id
+           triggers' = es ++ tempTriggers temp
+           vars'     = vars ++ tempVars temp
+           acts'     = acts ++ tempActEvents temp
+           prop'     = (tempProp temp) { pProps = props}
+           global'   = updateGlobal (globalGet ppdate) (Ctxt vars' acts' triggers' prop' fors)
+       in do put env 
+             return $ updateGlobalPP ppdate global'
+    _                       -> ppd
 
 -------------
 -- Imports --
@@ -83,7 +98,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
     fors <- getForeaches foreaches
     let vars' = getVars vars
     let prop' = getProperty prop (map tName trigs')
-    let ies' = getIEvents ies
+    let ies' = getActEvents ies
     case runWriter prop' of
          (PNIL,_)                              -> return (Ctxt vars' ies' trigs' PNIL fors)
          (PINIT pname id xs props,s)           -> 
@@ -103,7 +118,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
                       bad    = checkAllHTsExist (getBad states) cns pname
                       normal = checkAllHTsExist (getNormal states) cns pname
                       start  = checkAllHTsExist (getStarting states) cns pname
-                      errs   = concat $ accep ++ bad ++ normal ++ start
+                      errs   = concat $ start ++ accep ++ bad ++ normal
                       s'     = if (not.null) (fst s)
                                then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
                                      ++ snd s ++ errs
@@ -148,11 +163,11 @@ getVarModif Abs.VarModifierNil   = VarModifierNil
 getVarDecl :: Abs.VarDecl -> VarDecl
 getVarDecl (Abs.VarDecl id varinit) = VarDecl (getIdAbs id) (getVarInitAbs varinit)
 
--- IEvents --
+-- ActEvents --
 
-getIEvents :: Abs.IEvents -> IEvents
-getIEvents Abs.IEventsNil       = []
-getIEvents (Abs.IEventsDef ies) = map (\(Abs.IEvent ie) -> IEvent (getIdAbs ie)) ies
+getActEvents :: Abs.ActEvents -> ActEvents
+getActEvents Abs.ActEventsNil       = []
+getActEvents (Abs.ActEventsDef ies) = map (\(Abs.ActEvent ie) -> ActEvent (getIdAbs ie)) ies
 
 -- Triggers --
 
@@ -380,10 +395,10 @@ mAppend (x:xs) [] = x:xs
 mAppend xs ys     = xs ++ "," ++ ys
 
 getStates' :: Abs.States -> States
-getStates' (Abs.States accep bad norm start) = States { getAccepting = getAccepting' accep
+getStates' (Abs.States start accep bad norm) = States { getStarting = getStarting' start
+                                                      , getAccepting = getAccepting' accep 
                                                       , getBad = getBad' bad
                                                       , getNormal = getNormal' norm
-                                                      , getStarting = getStarting' start
                                                       }
 
 getAccepting' :: Abs.Accepting -> Accepting
@@ -442,13 +457,14 @@ getArrow (Abs.Arrow id (Abs.Cond2 cond)) =
 -- Foreaches --
 
 getForeaches :: Abs.Foreaches -> UpgradePPD Foreaches
-getForeaches Abs.ForeachesNil             = return []
-getForeaches (Abs.ForeachesDef args ctxt) =
-    do ctxt' <- getCtxt ctxt
-       let args' = map getArgs args
-       env <- get
-       put env { forsVars = forsVars env ++ map getArgsId args' }
-       return [Foreach args' ctxt']
+getForeaches Abs.ForeachesNil                  = return []
+getForeaches (Abs.ForeachesDef args ctxt fors) =
+ do fors <- getForeaches fors
+    env <- get
+    let args' = map getArgs args
+    let ctxt' = getValue $ getCtxt ctxt
+    put env { forsVars = forsVars env ++ map getArgsId args' }
+    return $ (Foreach args' ctxt'):fors
 
 getArgs :: Abs.Args -> Args
 getArgs (Abs.Args t id) = Args (getTypeAbs t) (getIdAbs id)
@@ -456,6 +472,13 @@ getArgs (Abs.Args t id) = Args (getTypeAbs t) (getIdAbs id)
 ---------------
 -- Templates --
 ---------------
+
+getTemplate :: Templates -> Id -> Template  
+getTemplate (Temp tmps) id = getTemplate' tmps id
+
+getTemplate' :: [Template] -> Id -> Template
+getTemplate' [x] _     = x
+getTemplate' (x:xs) id = if tempId x == id then x else getTemplate' xs id
 
 genTemplates :: Abs.Templates -> UpgradePPD Templates
 genTemplates Abs.TempsNil   = return TempNil
@@ -484,7 +507,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                      else return $ Template { tempId       = getIdAbs id
                                             , tempBinds    = map ((uncurry makeArgs).getArgsAbs) args
                                             , tempVars     = getVars vars
-                                            , tempIEvents  = getIEvents ies
+                                            , tempActEvents  = getActEvents ies
                                             , tempTriggers = trigs'
                                             , tempProp     = PINIT pname id' xs props
                                             }
@@ -493,7 +516,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                       bad    = checkAllHTsExist (getBad states) cns pname
                       normal = checkAllHTsExist (getNormal states) cns pname
                       start  = checkAllHTsExist (getStarting states) cns pname
-                      errs   = concat $ accep ++ bad ++ normal ++ start
+                      errs   = concat $ start ++ accep ++ bad ++ normal
                       s'     = if (not.null) (fst s)
                                then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
                                      ++ snd s ++ errs
@@ -503,7 +526,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                      else return $ Template { tempId       = getIdAbs id
                                             , tempBinds    = map ((uncurry makeArgs).getArgsAbs) args
                                             , tempVars     = getVars vars
-                                            , tempIEvents  = getIEvents ies
+                                            , tempActEvents  = getActEvents ies
                                             , tempTriggers = trigs'
                                             , tempProp     = Property pname states trans props
                                             }
@@ -666,6 +689,16 @@ getPost (Abs.Post post) = getJML post "postcondition"
 -- Auxiliary functions --
 -------------------------
 
+duplicateHT :: [HTName] -> String
+duplicateHT []     = ""
+duplicateHT (c:cs) = "Error: Multiple definitions for Hoare triple " ++ c ++ ".\n" ++ duplicateHT cs
+
+getDuplicate :: [HTName] -> [HTName]
+getDuplicate []     = []
+getDuplicate (c:cs) = if elem c cs
+                      then c:getDuplicate cs
+                      else getDuplicate cs
+
 -- Imports are considered to be separated by '.'
 joinImport :: [String] -> String
 joinImport []     = ""
@@ -754,7 +787,7 @@ type MapTrigger = Map.Map MethodName (Id, String, [Args]) --(trigger_name,type c
 
 --Triggers associated to methods in Hoare triples should include: type class_variable
 data Env = Env
- { forsVars            :: [Id]
+ { forsVars            :: [Id] --foreach bounded variable names 
  , entryTriggersInfo   :: Map.Map ClassInfo MapTrigger
  , exitTriggersInfo    :: Map.Map ClassInfo MapTrigger
  , allTriggers         :: [(Id,MethodName,TriggerVariation,[Bind])]

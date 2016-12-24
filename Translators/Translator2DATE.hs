@@ -52,31 +52,12 @@ writeGlobal ppdate env =
      es     = triggers global
      prop   = property global
      fors   = foreaches global                             
- in case prop of 
-    PINIT pname id xs props -> 
-       let templates = templatesGet ppdate 
-           template  = getTemplate templates id
-           fors'     = undefined
-       in "GLOBAL {\n\n"
-          ++ writeForeach fors' consts env
-    _                       ->
-       "GLOBAL {\n\n"
-       ++ writeVariables vars consts
-       ++ writeTriggers es consts
-       ++ writeProperties prop consts es env
-       ++ writeForeach fors consts env
-       -- ++ "}\n"
-
----------------
--- Templates --
----------------
-
-getTemplate :: Templates -> Id -> Template  
-getTemplate (Temp tmps) id = getTemplate' tmps id
-
-getTemplate' :: [Template] -> Id -> Template
-getTemplate' [x] _     = x
-getTemplate' (x:xs) id = if tempId x == id then x else getTemplate' xs id
+ in "GLOBAL {\n\n"
+    ++ writeVariables vars consts
+    ++ writeTriggers es consts
+    ++ writeProperties prop consts es env
+    ++ writeForeach fors consts env
+    ++ "}\n"
 
 ---------------
 -- Variables --
@@ -211,9 +192,7 @@ writeProperties prop consts es env =
  let fors   = forsVars env --list of foreach variables
      xs     = getProperties prop consts es env
      ra     = generateReplicatedAutomata consts fors es env
- in if (null fors)
-    then xs ++ ra ++ "\n}\n"
-    else xs ++ ra ++ "\n}\n}\n"
+ in xs ++ ra
 
 
 getProperties :: Property -> HTriples -> Triggers -> Env -> String
@@ -229,7 +208,7 @@ writeProperty (Property name states trans props) cs es env =
   ++ writeProperty props cs es env
 
 writeStates :: States -> String
-writeStates (States acc bad normal start) =
+writeStates (States start acc bad normal) =
  let acc'    = getStates acc
      bad'    = getStates bad
      normal' = getStates normal
@@ -271,11 +250,11 @@ getTransition (Transition q (Arrow e c act) q') =
      q ++ " -> " ++ q' ++ " [" ++ e ++ " \\ "  ++ c ++ " \\ " ++ act ++ "]\n"
 
 getTransitionsGeneral :: HTriples -> States -> Transitions -> Triggers -> Env -> Transitions
-getTransitionsGeneral cs (States acc bad nor star) ts es env =
- let ts1 = generateTransitions acc cs ts es env
-     ts2 = generateTransitions bad cs ts1 es env
-     ts3 = generateTransitions nor cs ts2 es env 
-     ts4 = generateTransitions star cs ts3 es env
+getTransitionsGeneral cs (States star acc bad nor) ts es env =
+ let ts1 = generateTransitions star cs ts es env
+     ts2 = generateTransitions acc cs ts1 es env 
+     ts3 = generateTransitions bad cs ts2 es env
+     ts4 = generateTransitions nor cs ts3 es env
  in ts4
 
 generateTransitions :: [State] -> HTriples -> Transitions -> Triggers -> Env -> Transitions
@@ -452,8 +431,8 @@ generateRAString esinf es env c n =
 -------------
 
 writeForeach :: Foreaches -> HTriples -> Env -> String
-writeForeach [] _ _                         = ""
-writeForeach [Foreach args ctxt] consts env =
+writeForeach [] _ _                              = ""
+writeForeach (Foreach args ctxt:fors) consts env =
  let vars   = variables ctxt
      es     = triggers ctxt
      prop   = property ctxt
@@ -463,7 +442,8 @@ writeForeach [Foreach args ctxt] consts env =
     ++ writeTriggers es consts
     ++ writeProperties prop consts es env
     ++ writeForeach fors consts env
-    -- ++ "}\n"
+    ++ "}\n\n"
+    ++ writeForeach fors consts env
 
 getForeachArgs :: [Args] -> String
 getForeachArgs []               = ""

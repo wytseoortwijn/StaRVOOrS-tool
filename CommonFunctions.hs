@@ -217,12 +217,14 @@ introduceOr (x:xs) = x ++ " || " ++ introduceOr xs
 
 
 getAllTriggers :: Global -> Triggers
-getAllTriggers (Global (Ctxt vars ies trigs prop []))                  = trigs
-getAllTriggers (Global (Ctxt vars ies trigs prop [Foreach args ctxt])) = trigs ++ getTriggersCtxt ctxt
+getAllTriggers (Global (Ctxt vars ies trigs prop fors)) = trigs ++ getTriggersFors fors
+
+getTriggersFors :: Foreaches -> Triggers
+getTriggersFors []     = []
+getTriggersFors (Foreach args ctxt:fs) = getTriggersCtxt ctxt ++ getTriggersFors fs
 
 getTriggersCtxt :: Context -> Triggers
-getTriggersCtxt (Ctxt vars ies trigs prop [])                  = trigs
-getTriggersCtxt (Ctxt vars ies trigs prop [Foreach args ctxt]) = trigs ++ getTriggersCtxt ctxt
+getTriggersCtxt (Ctxt vars ies trigs prop fors) = trigs ++ getTriggersFors fors
 
 
 makeAddFile :: Import -> IO (String, ClassInfo)

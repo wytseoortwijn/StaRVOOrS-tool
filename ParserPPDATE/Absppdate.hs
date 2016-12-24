@@ -30,7 +30,7 @@ data Global =
   deriving (Eq,Ord,Show,Read)
 
 data Context =
-   Ctxt Variables IEvents Triggers Properties Foreaches
+   Ctxt Variables ActEvents Triggers Properties Foreaches
   deriving (Eq,Ord,Show,Read)
 
 data Variables =
@@ -47,13 +47,13 @@ data VarModifier =
  | VarModifierNil
   deriving (Eq,Ord,Show,Read)
 
-data IEvents =
-   IEventsNil
- | IEventsDef [IEvent]
+data ActEvents =
+   ActEventsNil
+ | ActEventsDef [ActEvent]
   deriving (Eq,Ord,Show,Read)
 
-data IEvent =
-   IEvent Id
+data ActEvent =
+   ActEvent Id
   deriving (Eq,Ord,Show,Read)
 
 data Triggers =
@@ -114,11 +114,11 @@ data Properties =
 
 data PropKind =
    PropKindNormal States Transitions
- | PropKindPinit Id [Id] -- (name_of_template,[classesToInstance_foreach_like])
+ | PropKindPinit Id [Id]
   deriving (Eq,Ord,Show,Read)
 
 data States =
-   States Accepting Bad Normal Starting
+   States Starting Accepting Bad Normal
   deriving (Eq,Ord,Show,Read)
 
 data Accepting =
@@ -190,7 +190,7 @@ data Action =
 
 data Foreaches =
    ForeachesNil
- | ForeachesDef [Args] Context
+ | ForeachesDef [Args] Context Foreaches
   deriving (Eq,Ord,Show,Read)
 
 data Templates =
@@ -203,7 +203,7 @@ data Template =
   deriving (Eq,Ord,Show,Read)
 
 data BodyTemp =
-   Body Variables IEvents Triggers Properties
+   Body Variables ActEvents Triggers Properties
   deriving (Eq,Ord,Show,Read)
 
 data CInvariants =

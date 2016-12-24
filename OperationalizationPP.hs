@@ -24,7 +24,7 @@ operationalizeOldResultBind ppd oldExprTypesM =
      xs       = map (\ c -> operationalizePrePostORB c (varsInFiles env) es methods oldExprTypesM) consts
      oldExpT  = Map.unions $ map snd xs
      consts'  = map fst xs
-     global'  = updateGlobal global (Ctxt (variables $ ctxtGet global) (ievents $ ctxtGet global) (triggers $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
+     global'  = updateGlobal global (Ctxt (variables $ ctxtGet global) (actevents $ ctxtGet global) (triggers $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
  in ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ updateHTsPP (updateGlobalPP ppdate global') consts')
 
 
@@ -94,7 +94,7 @@ bindVars bindn varsc s =
  in bindExps bindn varsc exps
 
 bindExps :: String -> [String] -> [String] -> [String]
-bindExps bindn _ []          = []
+bindExps bindn _ []            = []
 bindExps bindn vars (exp:exps) = (bindExp bindn exp vars) : bindExps bindn vars exps
 
 bindExp :: String -> String -> [String] -> String
