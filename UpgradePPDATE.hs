@@ -457,14 +457,13 @@ getArrow (Abs.Arrow id (Abs.Cond2 cond)) =
 -- Foreaches --
 
 getForeaches :: Abs.Foreaches -> UpgradePPD Foreaches
-getForeaches Abs.ForeachesNil                  = return []
-getForeaches (Abs.ForeachesDef args ctxt fors) =
- do fors <- getForeaches fors
-    env <- get
-    let args' = map getArgs args
-    let ctxt' = getValue $ getCtxt ctxt
-    put env { forsVars = forsVars env ++ map getArgsId args' }
-    return $ (Foreach args' ctxt'):fors
+getForeaches Abs.ForeachesNil             = return []
+getForeaches (Abs.ForeachesDef args ctxt _) =
+    do ctxt' <- getCtxt ctxt
+       let args' = map getArgs args
+       env <- get
+       put env { forsVars = forsVars env ++ map getArgsId args' }
+       return [Foreach args' ctxt']
 
 getArgs :: Abs.Args -> Args
 getArgs (Abs.Args t id) = Args (getTypeAbs t) (getIdAbs id)
