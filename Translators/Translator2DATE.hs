@@ -51,13 +51,24 @@ writeGlobal ppdate env =
      vars   = variables global
      es     = triggers global
      prop   = property global
-     fors   = foreaches global                             
- in "GLOBAL {\n\n"
-    ++ writeVariables vars consts
-    ++ writeTriggers es consts
-    ++ writeProperties prop consts es env
-    ++ writeForeach fors consts env
-    ++ "}\n"
+     fors   = foreaches global 
+     forsv  = forsVars env
+     ra     = generateReplicatedAutomata consts forsv es env                           
+ in case prop of
+    PNIL -> 
+       "GLOBAL {\n\n"
+       ++ writeVariables vars consts
+       ++ writeTriggers es consts
+       ++ writeProperties prop consts es env
+       ++ writeForeach fors consts env 0 ra
+       ++ "}\n"
+    _    ->
+       "GLOBAL {\n\n"
+       ++ writeVariables vars consts
+       ++ writeTriggers es consts
+       ++ writeProperties prop consts es env
+       ++ writeForeach fors consts env 1 ra
+       ++ "}\n" 
 
 ---------------
 -- Variables --
@@ -192,9 +203,9 @@ lookupHTForTrigger e (c:cs) = case compTrigger e of
 writeProperties :: Property -> HTriples -> Triggers -> Env -> String
 writeProperties PNIL _ _ _         = ""
 writeProperties prop consts es env =
- let fors   = forsVars env --list of foreach variables
-     xs     = getProperties prop consts es env
-     ra     = generateReplicatedAutomata consts fors es env
+ let fors = forsVars env
+     xs   = getProperties prop consts es env
+     ra   = generateReplicatedAutomata consts fors es env
  in xs ++ ra
 
 
@@ -378,9 +389,9 @@ lookForLeavingTransitions e ns (t@(Transition q (Arrow e' c act) q'):ts) =
 -- Foreach --
 -------------
 
-writeForeach :: Foreaches -> HTriples -> Env -> String
-writeForeach [] _ _                              = ""
-writeForeach (Foreach args ctxt:fors) consts env =
+writeForeach :: Foreaches -> HTriples -> Env -> Integer -> String -> String
+writeForeach [] _ _ _ _                               = ""
+writeForeach (Foreach args ctxt:fors) consts env n ra =
  let vars   = variables ctxt
      es     = triggers ctxt
      prop   = property ctxt
@@ -389,10 +400,12 @@ writeForeach (Foreach args ctxt:fors) consts env =
     ++ writeVariables vars []
     ++ writeTriggers es consts
     ++ writeProperties prop consts es env
-    ++ writeForeach fors' consts env
+    ++ writeForeach fors' consts env 2 ra
+    ++ if (n == 0) then ra ++ "}\n"  else ""
     ++ "}\n\n"
-    ++ writeForeach fors consts env
-
+    ++ writeForeach fors consts env 2 ra
+    ++ if (n == 1) then ra else ""
+ 
 getForeachArgs :: [Args] -> String
 getForeachArgs []               = ""
 getForeachArgs [Args t id]      = t ++ " " ++ id

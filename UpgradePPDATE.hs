@@ -20,7 +20,7 @@ import Data.Either
 
 
 upgradePPD :: Abs.AbsPPDATE -> UpgradePPD PPDATE
-upgradePPD = replacePInit . upgradePPD'
+upgradePPD = upgradePPD'
 
 
 upgradePPD' :: Abs.AbsPPDATE -> UpgradePPD PPDATE
