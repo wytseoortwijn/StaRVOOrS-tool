@@ -20,7 +20,7 @@ import Data.Either
 
 
 upgradePPD :: Abs.AbsPPDATE -> UpgradePPD PPDATE
-upgradePPD = upgradePPD'
+upgradePPD = replacePInit.upgradePPD'
 
 
 upgradePPD' :: Abs.AbsPPDATE -> UpgradePPD PPDATE
@@ -46,7 +46,7 @@ upgradePPD' (Abs.AbsPPDATE imports global temps cinvs consts methods) =
                                                           do put env''
                                                              return (PPDATE imports' global' temps' cinvs' consts' methods')
 
---TODO: Pinit has to be included as a foreach
+
 replacePInit :: UpgradePPD PPDATE -> UpgradePPD PPDATE
 replacePInit ppd = 
  let env    = getEnvVal ppd
@@ -57,19 +57,40 @@ replacePInit ppd =
      acts   = actevents global
      prop   = property global
      fors   = foreaches global 
- in case prop of 
-    PINIT pname id xs props -> 
-       let templates = templatesGet ppdate 
-           temp      = getTemplate templates id
-           triggers' = es ++ tempTriggers temp
-           vars'     = vars ++ tempVars temp
-           acts'     = acts ++ tempActEvents temp
-           prop'     = (tempProp temp) { pProps = props}
-           global'   = updateGlobal (globalGet ppdate) (Ctxt vars' acts' triggers' prop' fors)
-       in do put env 
-             return $ updateGlobalPP ppdate global'
-    _                       -> ppd
+ in if or $ map checkPInitForeach fors
+    then fail "Error: It is not possible to define a PINIT property within a FOREACH.\n"
+    else case getPInit prop of
+              (p:ps) ->  
+                  let templates = templatesGet ppdate 
+                      prop'     = removePInit prop
+                      tmpFors   = map (\pi -> pinit2foreach pi templates) (p:ps)
+                      fors'     = tmpFors ++ fors
+                      global'   = updateGlobal (globalGet ppdate) (Ctxt vars acts es prop' fors')
+                  in do put env { forsVars = forsVars env ++ map getArgsId (concatMap getArgsForeach tmpFors) }
+                        return $ updateGlobalPP ppdate global'
+              []     -> ppd
 
+getPInit :: Property -> [Property]
+getPInit PNIL                        = []
+getPInit (PINIT id temp bound props) = (PINIT id temp bound PNIL):getPInit props
+getPInit (Property _ _ _ props)      = getPInit props
+
+removePInit :: Property -> Property
+removePInit PNIL                         = PNIL
+removePInit (PINIT _ _ _ props)          = removePInit props
+removePInit (Property name st trs props) = Property name st trs (removePInit props)
+
+
+checkPInitForeach :: Foreach -> Bool
+checkPInitForeach (Foreach _ (Ctxt _ _ _ props _)) = (not.null) $ getPInit props
+
+pinit2foreach :: Property -> Templates -> Foreach
+pinit2foreach (PINIT id tempid bound PNIL) templates = 
+ let temp = getTemplate templates tempid
+     args = tempBinds temp
+     ctxt = Ctxt (tempVars temp) (tempActEvents temp) (tempTriggers temp) (tempProp temp) []
+ in Foreach args ctxt
+   
 -------------
 -- Imports --
 -------------
@@ -91,6 +112,7 @@ genGlobal (Abs.Global ctxt) =
 -- Context --
 
 getCtxt :: Abs.Context -> Integer -> UpgradePPD Context
+getCtxt (Abs.Ctxt vars acts Abs.TriggersNil prop@(Abs.ProperiesDef _ (Abs.PropKindPinit _ _) Abs.PropertiesNil) fors) 0 = getCtxt (Abs.Ctxt vars acts (Abs.TriggersDef []) prop fors) 0
 getCtxt (Abs.Ctxt _ _ Abs.TriggersNil (Abs.ProperiesDef id _ _) _) 0 = 
  fail $ "Error: Missing TRIGGERS section before property " ++ getIdAbs id ++ ".\n"
 getCtxt (Abs.Ctxt Abs.VarNil Abs.ActEventsNil Abs.TriggersNil Abs.PropertiesNil foreaches@(Abs.ForeachesDef _ _ _)) 0 = getForeaches foreaches (Ctxt [] [] [] PNIL [])
@@ -401,7 +423,7 @@ getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms      =
       (p, s) -> do tell s
                    return (PINIT { piName  = getIdAbs id
                                  , tmpId   = getIdAbs id'
-                                 , fors    = map getIdAbs ids'
+                                 , bounds  = map getIdAbs ids'
                                  , piProps = p
                                  })
 getProperty (Abs.ProperiesDef id (Abs.PropKindNormal states trans) props) enms =

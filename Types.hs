@@ -128,6 +128,9 @@ type Foreaches = [Foreach]
 
 data Foreach = Foreach [Args] Context deriving (Eq,Show, Read)
 
+getArgsForeach :: Foreach -> [Args]
+getArgsForeach (Foreach args _) = args
+
 data Args =
    Args Type Id
   deriving (Eq,Ord,Show,Read)
@@ -259,7 +262,7 @@ data Property = Property
   } | PNIL 
     | PINIT { piName  :: PropertyName 
             , tmpId   :: Id 
-            , fors    :: [Id]
+            , bounds  :: [Id]
             , piProps :: Property
             }
          deriving (Show, Eq,Read)
