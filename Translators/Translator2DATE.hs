@@ -51,24 +51,29 @@ writeGlobal ppdate env =
      vars   = variables global
      es     = triggers global
      prop   = property global
-     fors   = foreaches global 
-     forsv  = forsVars env
-     ra     = generateReplicatedAutomata consts forsv es env                           
+     fors   = foreaches global                      
  in case prop of
     PNIL -> 
        "GLOBAL {\n\n"
        ++ writeVariables vars consts
        ++ writeTriggers es consts
        ++ writeProperties prop consts es env
-       ++ writeForeach fors consts env 0 ra
+       ++ writeForeach fors consts env 0 (generateReplicatedAutomata consts (forsVars env) es env)
        ++ "}\n"
     _    ->
-       "GLOBAL {\n\n"
-       ++ writeVariables vars consts
-       ++ writeTriggers es consts
-       ++ writeProperties prop consts es env
-       ++ writeForeach fors consts env 1 ra
-       ++ "}\n" 
+       case fors of
+          [] -> "GLOBAL {\n\n"
+                ++ writeVariables vars consts
+                ++ writeTriggers es consts
+                ++ writeProperties prop consts es env
+                ++ generateReplicatedAutomata consts [] es env  
+                ++ "}\n" 
+          _  -> "GLOBAL {\n\n"
+                ++ writeVariables vars consts
+                ++ writeTriggers es consts
+                ++ writeProperties prop consts es env
+                ++ writeForeach fors consts env 1 (generateReplicatedAutomata consts [] es env)
+                ++ "}\n" 
 
 ---------------
 -- Variables --
@@ -202,12 +207,7 @@ lookupHTForTrigger e (c:cs) = case compTrigger e of
 
 writeProperties :: Property -> HTriples -> Triggers -> Env -> String
 writeProperties PNIL _ _ _         = ""
-writeProperties prop consts es env =
- let fors = forsVars env
-     xs   = getProperties prop consts es env
-     ra   = generateReplicatedAutomata consts fors es env
- in xs ++ ra
-
+writeProperties prop consts es env = getProperties prop consts es env
 
 getProperties :: Property -> HTriples -> Triggers -> Env -> String
 getProperties = writeProperty

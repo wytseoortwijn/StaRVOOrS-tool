@@ -85,16 +85,18 @@ genImports (Abs.Imports imps) =
 
 genGlobal :: Abs.Global -> UpgradePPD Global
 genGlobal (Abs.Global ctxt) =
- do ctxt' <- getCtxt ctxt
+ do ctxt' <- getCtxt ctxt 0
     return (Global ctxt')
 
 -- Context --
 
-getCtxt :: Abs.Context -> UpgradePPD Context
-getCtxt (Abs.Ctxt _ _ Abs.TriggersNil (Abs.ProperiesDef id _ _) _) = 
+getCtxt :: Abs.Context -> Integer -> UpgradePPD Context
+getCtxt (Abs.Ctxt _ _ Abs.TriggersNil (Abs.ProperiesDef id _ _) _) 0 = 
  fail $ "Error: Missing TRIGGERS section before property " ++ getIdAbs id ++ ".\n"
-getCtxt (Abs.Ctxt Abs.VarNil Abs.ActEventsNil Abs.TriggersNil Abs.PropertiesNil foreaches@(Abs.ForeachesDef _ _ _)) = getForeaches foreaches (Ctxt [] [] [] PNIL [])
-getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ _) foreaches) =
+getCtxt (Abs.Ctxt Abs.VarNil Abs.ActEventsNil Abs.TriggersNil Abs.PropertiesNil foreaches@(Abs.ForeachesDef _ _ _)) 0 = getForeaches foreaches (Ctxt [] [] [] PNIL [])
+getCtxt (Abs.Ctxt vars ies Abs.TriggersNil prop@(Abs.ProperiesDef _ _ _) foreaches) 1 =
+ getCtxt (Abs.Ctxt vars ies (Abs.TriggersDef []) prop foreaches) 1
+getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ _) foreaches) 0 =
  do env <- get
     let cns   = htsNames env
     trigs' <- getTriggers trigs
@@ -128,7 +130,35 @@ getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ 
                   in if (null s')
                      then  getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) [])
                      else fail s'
-getCtxt _ = fail "Error: Triggers, action events or variables, cannot be defined before a global FOREACH.\n"
+getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ _) foreaches) 1 =
+ do env <- get
+    let cns   = htsNames env
+    trigs' <- getTriggers trigs
+    let vars' = getVars vars
+    let prop' = getProperty prop (map tName trigs')
+    let ies'  = getActEvents ies    
+    case runWriter prop' of
+         (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
+         (PINIT pname id xs props,s)           -> 
+                  let s'  = snd s                            
+                      s'' = if elem id (tempsId env)
+                            then ""
+                            else "Error: In the definition of property " ++ pname
+                                 ++ ". The template " ++ id ++ " does not exist\n." 
+                  in if (null (s'++s''))
+                     then getForeaches foreaches (Ctxt vars' ies' trigs' (PINIT pname id xs props) [])
+                     else fail s'
+         (Property pname states trans props,s) -> 
+                  let accep  = checkAllHTsExist (getAccepting states) cns pname
+                      bad    = checkAllHTsExist (getBad states) cns pname
+                      normal = checkAllHTsExist (getNormal states) cns pname
+                      start  = checkAllHTsExist (getStarting states) cns pname
+                      errs   = concat $ start ++ accep ++ bad ++ normal
+                      s'     = snd s ++ errs
+                  in if (null s')
+                     then  getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) [])
+                     else fail s'
+getCtxt _ _ = fail "Error: Triggers, action events or variables, cannot be defined before a global FOREACH.\n"
 
 
 checkAllHTsExist :: [State] -> [HTName] -> PropertyName -> [String]
@@ -477,7 +507,7 @@ prepareForeaches (Abs.ForeachesDef args ctxt fors) =
 
 getForeach :: Abs.Foreaches -> UpgradePPD Foreach
 getForeach (Abs.ForeachesDef args ctxt Abs.ForeachesNil) = 
- do ctxt' <- getCtxt ctxt
+ do ctxt' <- getCtxt ctxt 1
     case foreaches ctxt' of
       [] -> do let args' = map getArgs args
                env <- get
