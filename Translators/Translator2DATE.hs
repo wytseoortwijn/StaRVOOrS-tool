@@ -116,7 +116,9 @@ writeAllTriggers (e:es) = (getTrigger e) ++ writeAllTriggers es
 
 getTrigger :: TriggerDef -> String
 getTrigger (TriggerDef e arg cpe wc) =
- let wc' = if (wc == "") then "" else " where {" ++ wc ++ "}"
+ let wc' = if (wc == "") 
+           then "" 
+           else " where {" ++ wc ++ "}"
  in e ++ "(" ++ getBindArgs' arg ++ ") = " ++ getCpe cpe ++ wc' ++ "\n"
 
 
@@ -129,16 +131,17 @@ getCpe ce@(NormalEvent _ _ _ _)       = getCpeCompoundTrigger ce
 
 
 getCollectionCpeCompoundTrigger :: [CompoundTrigger] -> String
-getCollectionCpeCompoundTrigger []   = ""
-getCollectionCpeCompoundTrigger [ce] = getCpeCompoundTrigger ce
+getCollectionCpeCompoundTrigger []        = ""
+getCollectionCpeCompoundTrigger [ce]      = getCpeCompoundTrigger ce
 getCollectionCpeCompoundTrigger (ce:y:ys) = getCpeCompoundTrigger ce ++ " | " ++ getCollectionCpeCompoundTrigger (y:ys)
 
 getCpeCompoundTrigger :: CompoundTrigger -> String
 getCpeCompoundTrigger (OnlyIdPar id)                 = "{" ++ id ++ "()" ++ "}"
 getCpeCompoundTrigger (OnlyId id)                    = "{" ++ id ++ "}"
 getCpeCompoundTrigger (ClockEvent id n)              = "{" ++ id ++ "@" ++ show n ++ "}"
-getCpeCompoundTrigger (NormalEvent bind id bs ev)    = "{" ++ getBinding bind ++ id ++ "(" ++ getBindArgs bs ++ ")"
-                                                     ++ getTriggerVariation' ev ++ "}"
+getCpeCompoundTrigger (NormalEvent bind id bs ev)    = "{" ++ getBinding bind ++ id 
+                                                        ++ "(" ++ getBindArgs bs ++ ")"
+                                                        ++ getTriggerVariation' ev ++ "}"
 getCpeCompoundTrigger _                              = ""
 
 getBindArgs :: [Bind] -> String
@@ -371,6 +374,38 @@ lookForLeavingTransitions e ns (t@(Transition q (Arrow e' c act) q'):ts) =
  else (a,t:b)
      where (a, b) = lookForLeavingTransitions e ns ts
 
+-------------
+-- Foreach --
+-------------
+
+writeForeach :: Foreaches -> HTriples -> Env -> String
+writeForeach [] _ _                              = ""
+writeForeach (Foreach args ctxt:fors) consts env =
+ let vars   = variables ctxt
+     es     = triggers ctxt
+     prop   = property ctxt
+     fors'  = foreaches ctxt
+ in "FOREACH (" ++ getForeachArgs args ++ ") {\n\n"
+    ++ writeVariables vars []
+    ++ writeTriggers es consts
+    ++ writeProperties prop consts es env
+    ++ writeForeach fors' consts env
+    ++ "}\n\n"
+    ++ writeForeach fors consts env
+
+getForeachArgs :: [Args] -> String
+getForeachArgs []               = ""
+getForeachArgs [Args t id]      = t ++ " " ++ id
+getForeachArgs (Args t id:y:ys) = t ++ " " ++ id ++ "," ++ getForeachArgs (y:ys)
+
+
+---------------------
+-- Methods section --
+---------------------
+
+writeMethods :: Methods -> String
+writeMethods methods = "\n" ++  methods
+
 -------------------------
 -- Replicated Automata --
 -------------------------
@@ -425,35 +460,3 @@ generateRAString esinf es env c n =
      ++ writeTransitions (pTransitions ra) [] (States [] [] [] []) [] emptyEnv
      ++ "}\n\n",cn)
 
-
--------------
--- Foreach --
--------------
-
-writeForeach :: Foreaches -> HTriples -> Env -> String
-writeForeach [] _ _                              = ""
-writeForeach (Foreach args ctxt:fors) consts env =
- let vars   = variables ctxt
-     es     = triggers ctxt
-     prop   = property ctxt
-     fors   = foreaches ctxt
- in "FOREACH (" ++ getForeachArgs args ++ ") {\n\n"
-    ++ writeVariables vars []
-    ++ writeTriggers es consts
-    ++ writeProperties prop consts es env
-    ++ writeForeach fors consts env
-    ++ "}\n\n"
-    ++ writeForeach fors consts env
-
-getForeachArgs :: [Args] -> String
-getForeachArgs []               = ""
-getForeachArgs [Args t id]      = t ++ " " ++ id
-getForeachArgs (Args t id:y:ys) = t ++ " " ++ id ++ "," ++ getForeachArgs (y:ys)
-
-
----------------------
--- Methods section --
----------------------
-
-writeMethods :: Methods -> String
-writeMethods methods = "\n" ++  methods

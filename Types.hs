@@ -86,6 +86,10 @@ data Context =
         }
   deriving (Eq,Show,Read)
 
+updateCtxtFors :: Context -> Foreaches -> Context
+updateCtxtFors (Ctxt vars acts trs props fors) fors' = Ctxt vars acts trs props fors'
+
+
 data Global = Global
   { ctxtGet  :: Context } deriving (Show, Eq)
 

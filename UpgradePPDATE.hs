@@ -46,7 +46,7 @@ upgradePPD' (Abs.AbsPPDATE imports global temps cinvs consts methods) =
                                                           do put env''
                                                              return (PPDATE imports' global' temps' cinvs' consts' methods')
 
---TODO: Pinit has to included as a foreach
+--TODO: Pinit has to be included as a foreach
 replacePInit :: UpgradePPD PPDATE -> UpgradePPD PPDATE
 replacePInit ppd = 
  let env    = getEnvVal ppd
@@ -91,16 +91,18 @@ genGlobal (Abs.Global ctxt) =
 -- Context --
 
 getCtxt :: Abs.Context -> UpgradePPD Context
-getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
+getCtxt (Abs.Ctxt _ _ Abs.TriggersNil (Abs.ProperiesDef id _ _) _) = 
+ fail $ "Error: Missing TRIGGERS section before property " ++ getIdAbs id ++ ".\n"
+getCtxt (Abs.Ctxt Abs.VarNil Abs.ActEventsNil Abs.TriggersNil Abs.PropertiesNil foreaches@(Abs.ForeachesDef _ _ _)) = getForeaches foreaches (Ctxt [] [] [] PNIL [])
+getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ _) foreaches) =
  do env <- get
-    let cns = htsNames env
+    let cns   = htsNames env
     trigs' <- getTriggers trigs
-    fors <- getForeaches foreaches
     let vars' = getVars vars
     let prop' = getProperty prop (map tName trigs')
-    let ies' = getActEvents ies
+    let ies'  = getActEvents ies    
     case runWriter prop' of
-         (PNIL,_)                              -> return (Ctxt vars' ies' trigs' PNIL fors)
+         (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
          (PINIT pname id xs props,s)           -> 
                   let s'  = if (not.null) (fst s)
                             then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
@@ -111,7 +113,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
                             else "Error: In the definition of property " ++ pname
                                  ++ ". The template " ++ id ++ " does not exist\n." 
                   in if (null (s'++s''))
-                     then return (Ctxt vars' ies' trigs' (PINIT pname id xs props) fors)
+                     then getForeaches foreaches (Ctxt vars' ies' trigs' (PINIT pname id xs props) [])
                      else fail s'
          (Property pname states trans props,s) -> 
                   let accep  = checkAllHTsExist (getAccepting states) cns pname
@@ -124,8 +126,9 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
                                      ++ snd s ++ errs
                                else snd s ++ errs
                   in if (null s')
-                     then return (Ctxt vars' ies' trigs' (Property pname states trans props) fors)
+                     then  getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) [])
                      else fail s'
+getCtxt _ = fail "Error: Triggers, action events or variables, cannot be defined before a global FOREACH.\n"
 
 
 checkAllHTsExist :: [State] -> [HTName] -> PropertyName -> [String]
@@ -454,19 +457,34 @@ getArrow (Abs.Arrow id (Abs.Cond2 cond)) =
              Ok ac -> return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = PrintAct.printTree ac }
 
 
+---------------
 -- Foreaches --
+---------------
 
-getForeaches :: Abs.Foreaches -> UpgradePPD Foreaches
-getForeaches Abs.ForeachesNil             = return []
-getForeaches (Abs.ForeachesDef args ctxt _) =
-    do ctxt' <- getCtxt ctxt
-       let args' = map getArgs args
-       env <- get
-       put env { forsVars = forsVars env ++ map getArgsId args' }
-       return [Foreach args' ctxt']
+getForeaches :: Abs.Foreaches -> Context -> UpgradePPD Context
+getForeaches Abs.ForeachesNil ctxt = return ctxt
+getForeaches (Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ (Abs.ForeachesDef args actxt fors)) afors) ctxt = 
+ fail "Error: StaRVOOrS does not support nested Foreaches.\n"
+getForeaches afors@(Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ Abs.ForeachesNil) _) ctxt = 
+ let afors' = prepareForeaches afors
+ in do fors <- sequence $ map getForeach afors'
+       return (updateCtxtFors ctxt fors)       
 
-getArgs :: Abs.Args -> Args
-getArgs (Abs.Args t id) = Args (getTypeAbs t) (getIdAbs id)
+prepareForeaches :: Abs.Foreaches -> [Abs.Foreaches]
+prepareForeaches Abs.ForeachesNil                  = []
+prepareForeaches (Abs.ForeachesDef args ctxt fors) = 
+ (Abs.ForeachesDef args ctxt Abs.ForeachesNil):prepareForeaches fors
+
+getForeach :: Abs.Foreaches -> UpgradePPD Foreach
+getForeach (Abs.ForeachesDef args ctxt Abs.ForeachesNil) = 
+ do ctxt' <- getCtxt ctxt
+    case foreaches ctxt' of
+      [] -> do let args' = map getArgs args
+               env <- get
+               put env { forsVars = forsVars env ++ map getArgsId args' }
+               return $ Foreach args' ctxt'
+      _  -> fail $ "Error: StaRVOOrS does not support nested Foreaches.\n"
+
 
 ---------------
 -- Templates --
@@ -629,6 +647,9 @@ genMethods m = printTree m
 ------------------------
 -- Selector functions --
 ------------------------
+
+getArgs :: Abs.Args -> Args
+getArgs (Abs.Args t id) = Args (getTypeAbs t) (getIdAbs id)
 
 getArgsAbs :: Abs.Args -> (Type,Id)
 getArgsAbs (Abs.Args t id) = (getTypeAbs t, getIdAbs id)
