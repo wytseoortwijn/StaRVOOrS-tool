@@ -107,15 +107,15 @@ getListOfTypesAndMethods cl ((main, cl',ts):xs) = if (cl == cl')
                                                   else getListOfTypesAndMethods cl xs
 
 getListOfArgs :: MethodName -> [(Type, Id,[String])] -> [String]
-getListOfArgs mn []                  = []
+getListOfArgs mn []              = []
 getListOfArgs mn ((t,mn',ts):xs) = if (mn == mn') 
                                    then ts
                                    else getListOfArgs mn xs
 
 addComma :: [String] -> String
-addComma []       = ""
-addComma [xs]     = xs
-addComma (xs:xss) = xs ++ "," ++ addComma xss
+addComma []          = ""
+addComma [xs]        = xs
+addComma (xs:ys:xss) = xs ++ "," ++ addComma (ys:xss)
 
 
 getConstTnv :: HT -> OldExprM -> Variables

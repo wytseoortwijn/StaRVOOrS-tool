@@ -20,8 +20,11 @@ import Data.Either
 
 
 upgradePPD :: Abs.AbsPPDATE -> UpgradePPD PPDATE
-upgradePPD = replacePInit.upgradePPD'
-
+upgradePPD appd = 
+ let ppdate = upgradePPD' appd in
+ case runStateT (upgradePPD' appd) emptyEnv of
+      Bad s        -> fail s
+      Ok (ppd,env) -> replacePInit ppdate
 
 upgradePPD' :: Abs.AbsPPDATE -> UpgradePPD PPDATE
 upgradePPD' (Abs.AbsPPDATE imports global temps cinvs consts methods) =
@@ -40,9 +43,13 @@ upgradePPD' (Abs.AbsPPDATE imports global temps cinvs consts methods) =
                                                            then fail $ s ++ duplicateHT dcs
                                                            else fail s
                                      Ok (global', env'') ->  
-                                            case runStateT (genClassInvariants cinvs) env'' of
-                                                 Bad s             -> fail s
-                                                 Ok (cinvs',env'') -> 
+                                          let trs = map (\(x,_,_,_) -> x) $ allTriggers env''
+                                              noneTrs = [x | x <- triggersInTemps env'', not $ elem x trs] in
+                                          if (not.null.trim.concat) noneTrs
+                                          then fail $ "Error: The trigger(s) [" ++ addComma noneTrs ++ "] are used in the definition of a template, but do(es) not exist(s).\n"
+                                          else case runStateT (genClassInvariants cinvs) env'' of
+                                                    Bad s             -> fail s
+                                                    Ok (cinvs',env'') -> 
                                                           do put env''
                                                              return (PPDATE imports' global' temps' cinvs' consts' methods')
 
@@ -567,38 +574,36 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
     case runWriter prop' of
          (PNIL,_)                      -> fail $ "Error: The template " ++ getIdAbs id ++ " does not have a PROPERTY section.\n"
          (PINIT pname id' xs props,s)  -> 
-                  let s'     = if (not.null) (fst s)
-                               then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
-                                     ++ snd s
-                               else snd s 
+                  let temptrs = splitOnIdentifier "," $ fst s
+                      s'      = snd s
                   in if (null s')
                      then fail s'
-                     else return $ Template { tempId       = getIdAbs id
-                                            , tempBinds    = map ((uncurry makeArgs).getArgsAbs) args
-                                            , tempVars     = getVars vars
-                                            , tempActEvents  = getActEvents ies
-                                            , tempTriggers = trigs'
-                                            , tempProp     = PINIT pname id' xs props
-                                            }
+                     else do put env { triggersInTemps = triggersInTemps env ++ temptrs }
+                             return $ Template { tempId       = getIdAbs id
+                                               , tempBinds    = map ((uncurry makeArgs).getArgsAbs) args
+                                               , tempVars     = getVars vars
+                                               , tempActEvents  = getActEvents ies
+                                               , tempTriggers = trigs'
+                                               , tempProp     = PINIT pname id' xs props
+                                               }
          (Property pname states trans props,s) -> 
-                  let accep  = checkAllHTsExist (getAccepting states) cns pname
-                      bad    = checkAllHTsExist (getBad states) cns pname
-                      normal = checkAllHTsExist (getNormal states) cns pname
-                      start  = checkAllHTsExist (getStarting states) cns pname
-                      errs   = concat $ start ++ accep ++ bad ++ normal
-                      s'     = if (not.null) (fst s)
-                               then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
-                                     ++ snd s ++ errs
-                               else snd s ++ errs
+                  let accep   = checkAllHTsExist (getAccepting states) cns pname
+                      bad     = checkAllHTsExist (getBad states) cns pname
+                      normal  = checkAllHTsExist (getNormal states) cns pname
+                      start   = checkAllHTsExist (getStarting states) cns pname
+                      errs    = concat $ start ++ accep ++ bad ++ normal
+                      s'      = snd s ++ errs
+                      temptrs = splitOnIdentifier "," $ fst s
                   in if ((not.null) s')
                      then fail s'
-                     else return $ Template { tempId       = getIdAbs id
-                                            , tempBinds    = map ((uncurry makeArgs).getArgsAbs) args
-                                            , tempVars     = getVars vars
-                                            , tempActEvents  = getActEvents ies
-                                            , tempTriggers = trigs'
-                                            , tempProp     = Property pname states trans props
-                                            }
+                     else do put env { triggersInTemps = triggersInTemps env ++ temptrs }
+                             return $ Template { tempId       = getIdAbs id
+                                               , tempBinds    = map ((uncurry makeArgs).getArgsAbs) args
+                                               , tempVars     = getVars vars
+                                               , tempActEvents  = getActEvents ies
+                                               , tempTriggers = trigs'
+                                               , tempProp     = Property pname states trans props
+                                               }
 
 -----------------
 -- CInvariants --
@@ -868,6 +873,8 @@ data Env = Env
  , methodsInFiles      :: [(String, ClassInfo, [(Type,Id,[String])])] --[(path_to_class,class_name,[(returned_type,method_name,arguments)])]
  , oldExpTypes         :: OldExprM
  , tempsId             :: [Id]
+ , triggersInTemps     :: [Trigger] --used to check whether the trigger is already defined in 
+                                    --the triggers of the ppDATE instead of a template
  }
   deriving (Show)
 
@@ -883,6 +890,7 @@ emptyEnv = Env { forsVars            = []
                , methodsInFiles      = []
                , oldExpTypes         = Map.empty
                , tempsId             = []
+               , triggersInTemps     = []
                }
 
 updateEntryTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
