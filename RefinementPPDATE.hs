@@ -142,8 +142,8 @@ generateNewTriggers ppd consts =
      let ppdate  = getValue ppd     
      let mfiles  = methodsInFiles env
      let mns     = removeDuplicates [mn | mn <- map methodCN consts]
-     let entry   = filterDefinedTriggers (entryTriggersInfo env) mns
-     let exit    = filterDefinedTriggers (exitTriggersInfo env) mns
+     let entry   = filterDefinedTriggers (entryTriggersInfo env) env 0 mns
+     let exit    = filterDefinedTriggers (exitTriggersInfo env) env 1 mns
      let entry'  = [(x,y,head $ filter (\(a,b,c) -> y == b) z) | (x,y) <- entry, (_,d,z) <- mfiles,d==x]
      let exit'   = [(x,y,head $ filter (\(a,b,c) -> y == b) z) | (x,y) <- exit, (_,d,z) <- mfiles,d==x]
      let (env',ppdate')   = addNewTriggerEntry env ppdate 0 entry'
@@ -152,22 +152,25 @@ generateNewTriggers ppd consts =
      return ppdate''
 
 
-filterDefinedTriggers :: Map.Map ClassInfo MapTrigger -> [(ClassInfo,MethodName)] -> [(ClassInfo,MethodName)]
-filterDefinedTriggers mci []           = []
-filterDefinedTriggers mci ((ci,mn):xs) = 
- case Map.lookup ci mci of
-      Nothing -> case Map.lookup "*" mci of
-                      Nothing -> (ci,mn):filterDefinedTriggers mci xs
-                      Just m'  -> case Map.lookup mn m' of
-                                       Nothing -> (ci,mn):filterDefinedTriggers mci xs
-                                       Just _  -> filterDefinedTriggers mci xs
-      Just m  -> case Map.lookup mn m of
-                      Nothing -> case Map.lookup "*" mci of
-                                      Nothing -> (ci,mn):filterDefinedTriggers mci xs
-                                      Just m'  -> case Map.lookup mn m' of
-                                                       Nothing -> (ci,mn):filterDefinedTriggers mci xs
-                                                       Just _  -> filterDefinedTriggers mci xs
-                      Just _  -> filterDefinedTriggers mci xs
+filterDefinedTriggers :: Map.Map ClassInfo MapTrigger -> Env -> Integer -> [(ClassInfo,MethodName)] -> [(ClassInfo,MethodName)]
+filterDefinedTriggers _ _ _ []               = []
+filterDefinedTriggers mci env n ((ci,mn):xs) =
+ if elem (ci,mn) (exitTriggersInTemps env) && n == 1
+ then (ci,mn):filterDefinedTriggers mci env n xs
+ else 
+   case Map.lookup ci mci of
+        Nothing -> case Map.lookup "*" mci of
+                        Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
+                        Just m'  -> case Map.lookup mn m' of
+                                         Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
+                                         Just _  -> filterDefinedTriggers mci env n xs
+        Just m  -> case Map.lookup mn m of
+                        Nothing -> case Map.lookup "*" mci of
+                                        Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
+                                        Just m'  -> case Map.lookup mn m' of
+                                                         Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
+                                                         Just _  -> filterDefinedTriggers mci env n xs
+                        Just _  -> filterDefinedTriggers mci env n xs
 
 --Creates the info to be added in the environment and the ppDATE about the new entry trigger
 createTriggerEntry :: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> ((ClassInfo,MethodName,(Id, String, [Args])),TriggerDef)
@@ -249,7 +252,7 @@ addTrigger2Foreach [Foreach [Args t id] (Ctxt vars ies trs p for)] tr =
 updateWhereTr :: TriggerDef -> Args -> TriggerDef
 updateWhereTr (TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) w) (Args t id) = 
  if t == cn
- then TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) (id ++ " = " ++ id' ++ ";")
+ then TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) (id ++ " = " ++ cl ++ ";")
  else TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) (id ++ " = null ;")
 
 makeBind :: String -> Bind

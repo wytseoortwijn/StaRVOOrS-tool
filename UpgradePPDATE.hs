@@ -569,8 +569,10 @@ genTemplate :: Abs.Template -> UpgradePPD Template
 genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) = 
  do trigs' <- getTriggers trs
     env <- get
-    let cns = htsNames env
+    let cns   = htsNames env
     let prop' = getProperty prop (map tName trigs')
+    let extrs = getExitTrsInfo trigs'
+    let env' = env { exitTriggersInTemps = exitTriggersInTemps env ++ extrs }
     case runWriter prop' of
          (PNIL,_)                      -> fail $ "Error: The template " ++ getIdAbs id ++ " does not have a PROPERTY section.\n"
          (PINIT pname id' xs props,s)  -> 
@@ -578,13 +580,13 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                       s'      = snd s
                   in if (null s')
                      then fail s'
-                     else do put env { triggersInTemps = triggersInTemps env ++ temptrs }
-                             return $ Template { tempId       = getIdAbs id
-                                               , tempBinds    = map ((uncurry makeArgs).getArgsAbs) args
-                                               , tempVars     = getVars vars
-                                               , tempActEvents  = getActEvents ies
-                                               , tempTriggers = trigs'
-                                               , tempProp     = PINIT pname id' xs props
+                     else do put env' { triggersInTemps = triggersInTemps env ++ temptrs }
+                             return $ Template { tempId        = getIdAbs id
+                                               , tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
+                                               , tempVars      = getVars vars
+                                               , tempActEvents = getActEvents ies
+                                               , tempTriggers  = trigs'
+                                               , tempProp      = PINIT pname id' xs props
                                                }
          (Property pname states trans props,s) -> 
                   let accep   = checkAllHTsExist (getAccepting states) cns pname
@@ -596,7 +598,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                       temptrs = splitOnIdentifier "," $ fst s
                   in if ((not.null) s')
                      then fail s'
-                     else do put env { triggersInTemps = triggersInTemps env ++ temptrs }
+                     else do put env' { triggersInTemps = triggersInTemps env ++ temptrs }
                              return $ Template { tempId       = getIdAbs id
                                                , tempBinds    = map ((uncurry makeArgs).getArgsAbs) args
                                                , tempVars     = getVars vars
@@ -604,6 +606,12 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                                                , tempTriggers = trigs'
                                                , tempProp     = Property pname states trans props
                                                }
+
+getExitTrsInfo :: Triggers -> [(ClassInfo,MethodName)]
+getExitTrsInfo [] = []
+getExitTrsInfo ((TriggerDef _ _ (NormalEvent (BindingVar (BindType t _)) id _ (EVExit _)) _):ts) = 
+ (t,id):getExitTrsInfo ts
+getExitTrsInfo (_:ts) = getExitTrsInfo ts
 
 -----------------
 -- CInvariants --
@@ -875,6 +883,7 @@ data Env = Env
  , tempsId             :: [Id]
  , triggersInTemps     :: [Trigger] --used to check whether the trigger is already defined in 
                                     --the triggers of the ppDATE instead of a template
+ , exitTriggersInTemps :: [(ClassInfo,MethodName)]
  }
   deriving (Show)
 
@@ -891,6 +900,7 @@ emptyEnv = Env { forsVars            = []
                , oldExpTypes         = Map.empty
                , tempsId             = []
                , triggersInTemps     = []
+               , exitTriggersInTemps = []
                }
 
 updateEntryTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
