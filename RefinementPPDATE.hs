@@ -151,7 +151,7 @@ generateNewTriggers ppd consts =
      put env''
      return ppdate''
 
-     
+
 filterDefinedTriggers :: Map.Map ClassInfo MapTrigger -> [(ClassInfo,MethodName)] -> [(ClassInfo,MethodName)]
 filterDefinedTriggers mci []           = []
 filterDefinedTriggers mci ((ci,mn):xs) = 
@@ -173,7 +173,7 @@ filterDefinedTriggers mci ((ci,mn):xs) =
 createTriggerEntry :: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> ((ClassInfo,MethodName,(Id, String, [Args])),TriggerDef)
 createTriggerEntry (cn,mn,(rt,mn',xs)) n = 
  if (mn == mn')
- then let trnm = mn ++ "_en"
+ then let trnm = mn ++ "_ppden"
           nvar = "cv" ++ "_" ++ (show n)
           cn'  = cn ++ " " ++ nvar
           cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) EVEntry
@@ -203,7 +203,7 @@ addNewTriggerEntry env ppdate n (x:xs) =
 --Creates the info to be added in the environment and the ppDATE about the new exit trigger
 createTriggerExit:: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> ((ClassInfo,MethodName,(Id, String, [Args])), TriggerDef)
 createTriggerExit (cn,mn,(rt,mn',xs)) n = 
- let trnm = mn ++ "_ex" 
+ let trnm = mn ++ "_ppdex" 
      nvar = "cv" ++ "_" ++ (show n)
      cn'  = cn ++ " " ++ nvar
      ret  = "ret_ppd" ++ (show n) in
@@ -237,8 +237,20 @@ addNewTriggerExit env ppdate n (x:xs) =
                                      , allTriggers = (tName tr,mn, getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs
 
 addTrigger2ppDATE :: TriggerDef -> PPDATE -> PPDATE
+addTrigger2ppDATE tr (PPDATE imp (Global (Ctxt [] [] [] PNIL (f:fs))) temps ci consts ms) =
+ PPDATE imp (Global (Ctxt [] [] [] PNIL (addTrigger2Foreach (f:fs) tr))) temps ci consts ms
 addTrigger2ppDATE tr (PPDATE imp (Global (Ctxt vars ies trs p for)) temps ci consts ms) =
  PPDATE imp (Global (Ctxt vars ies (tr:trs) p for)) temps ci consts ms
+
+addTrigger2Foreach :: Foreaches -> TriggerDef -> Foreaches
+addTrigger2Foreach [Foreach [Args t id] (Ctxt vars ies trs p for)] tr = 
+ [Foreach [Args t id] (Ctxt vars ies (trs ++ [updateWhereTr tr (Args t id)]) p for)]
+
+updateWhereTr :: TriggerDef -> Args -> TriggerDef
+updateWhereTr (TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) w) (Args t id) = 
+ if t == cn
+ then TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) (id ++ " = " ++ id' ++ ";")
+ else TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) (id ++ " = null ;")
 
 makeBind :: String -> Bind
 makeBind [] = error "f"

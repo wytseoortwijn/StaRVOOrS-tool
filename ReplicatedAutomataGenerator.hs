@@ -23,7 +23,9 @@ makeReplicateAutomaton c n env =
 
 makeTransitions :: HT -> Int -> Env -> Transitions
 makeTransitions c n env =
-   let trig    = lookForExitTrigger (allTriggers env) (snd $ methodCN c)
+   let mn      = snd $ methodCN c
+       trigs   = lookForExitTrigger (allTriggers env) mn
+       trig    = getGenTrEx trigs mn
        esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
        cn      = htName c
        oldExpM = oldExpTypes env
@@ -42,3 +44,8 @@ makeTransitions c n env =
       Transition "idle" idle_to_bad "bad"
       ]
 
+
+getGenTrEx :: [Trigger] -> MethodName -> Trigger
+getGenTrEx trs mn = if elem (mn++"_ppdex") trs
+                    then mn++"_ppdex"
+                    else head trs

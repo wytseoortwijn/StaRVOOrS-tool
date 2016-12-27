@@ -284,15 +284,19 @@ accumTransitions (cn:cns) ns consts ts es env =
  in accumTransitions cns ns consts ts' es env
 
 generateTransition :: HTName -> NameState -> HTriples -> Transitions -> Triggers -> Env -> Transitions
-generateTransition p ns cs ts es env = let c             = lookForHT p cs
-                                           mn            = snd $ methodCN c
-                                           e             = lookForEntryTrigger (allTriggers env) mn
-                                           (lts, nonlts) = lookForLeavingTransitions e ns ts
-                                       in if (null lts)
-                                          then ts ++ [(makeTransitionAlg1Cond ns e c env)]
-                                          else let ext = makeExtraTransitionAlg2 lts c e ns env
-                                                   xs  = map (\x -> instrumentTransitionAlg2 c x e env) lts
-                                               in nonlts ++ xs ++ [ext]
+generateTransition p ns cs ts es env = 
+ let c             = lookForHT p cs
+     mn            = snd $ methodCN c
+     entrs         = lookForEntryTrigger (allTriggers env) mn
+     entrs'        = [tr | tr <- entrs, tr /= (mn++"_ppden")]
+     (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
+ in if null entrs
+    then error $ "Translation: Missing entry trigger for method " ++ mn ++ ".\n"
+    else if (null lts)
+         then ts ++ map (\e -> makeTransitionAlg1Cond ns e c env) entrs
+         else let ext = map (\e -> makeExtraTransitionAlg2 lts c e ns env) entrs'
+                  xs  = concat [map (\x -> instrumentTransitionAlg2 c x tr env) lts | tr <- entrs']
+              in nonlts ++ xs ++ ext
 
 
 makeTransitionAlg1Cond :: NameState -> Trigger -> HT -> Env -> Transition

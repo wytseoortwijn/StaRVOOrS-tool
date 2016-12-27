@@ -51,21 +51,21 @@ checkIfParseErrors es = let (ls, rs) = partitionEithers es
                            else Right rs
 
 
-lookForExitTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> Trigger
-lookForExitTrigger [] mn                = error $ "Missing exit trigger for method " ++ mn ++ ".\n"
+lookForExitTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> [Trigger]
+lookForExitTrigger [] mn                = []
 lookForExitTrigger ((tr,mn',e,_):es) mn = 
     case e of
         EVExit _ -> if (mn == mn')
-                    then tr
+                    then tr:lookForExitTrigger es mn
                     else lookForExitTrigger es mn
         _        -> lookForExitTrigger es mn        
 
-lookForEntryTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> Trigger
-lookForEntryTrigger [] mn                = error $ "Missing exit trigger for method " ++ mn ++ ".\n"
+lookForEntryTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> [Trigger]
+lookForEntryTrigger [] mn                = []
 lookForEntryTrigger ((tr,mn',e,_):es) mn = 
     case e of
         EVEntry -> if (mn == mn')
-                   then tr
+                   then tr:lookForEntryTrigger es mn
                    else lookForEntryTrigger es mn
         _       -> lookForEntryTrigger es mn  
 
