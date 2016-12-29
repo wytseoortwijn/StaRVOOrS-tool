@@ -5,6 +5,7 @@ import CommonFunctions
 import DL2JML
 import qualified Data.Map as Map
 import UpgradePPDATE
+import Data.List
 
 -----------------------
 -- ppDATE refinement --
@@ -105,8 +106,37 @@ getClassVar c es ev = lookupClassVar es c ev
 
 -- returns variable name used to instantiate the class in the ppDATE
 lookupClassVar :: Triggers -> HT -> TriggerVariation -> String
-lookupClassVar [] _ _      = ""
-lookupClassVar (e:es) c ev = 
+lookupClassVar trs c ev = 
+ let trs' = filterTriggers trs c ev
+ in case getGeneratedExTr trs' of
+         []   -> getExTr trs' c ev
+         [id] -> id
+
+filterTriggers :: Triggers -> HT -> TriggerVariation -> Triggers
+filterTriggers [] _ _      = []
+filterTriggers (e:es) c ev = 
+ case (compTrigger e) of
+      NormalEvent (BindingVar b) id _ ev' -> 
+                  if (id == snd (methodCN c) && compareEV ev ev')
+                  then e:filterTriggers es c ev
+                  else filterTriggers es c ev
+      _                                   -> filterTriggers es c ev
+
+getGeneratedExTr :: Triggers -> [String]
+getGeneratedExTr []       = []
+getGeneratedExTr (tr:trs) = 
+  case (compTrigger tr) of
+      NormalEvent (BindingVar b) id _ ev' -> 
+                  if (isSuffixOf "_ppdex" (tName tr))
+                  then case b of
+                            BindStar      -> []
+                            BindType _ id -> [id]
+                            BindId id     -> [id]
+                  else getGeneratedExTr trs
+
+getExTr :: Triggers -> HT -> TriggerVariation -> String
+getExTr [] _ _      = ""
+getExTr (e:es) c ev = 
  case (compTrigger e) of
       NormalEvent (BindingVar b) id _ ev' -> 
                   if (id == snd (methodCN c) && compareEV ev ev')
@@ -114,17 +144,9 @@ lookupClassVar (e:es) c ev =
                             BindStar      -> ""
                             BindType _ id -> id
                             BindId id     -> id
-                  else lookupClassVar es c ev
-      ClockEvent id _        -> if (id == snd (methodCN c))
-                                then ""
-                                else lookupClassVar es c ev
-      OnlyId id              -> if (id == snd (methodCN c))
-                                then ""
-                                else lookupClassVar es c ev
-      OnlyIdPar id           -> if (id == snd (methodCN c))
-                                then ""
-                                else lookupClassVar es c ev
-      otherwise              -> lookupClassVar es c ev
+                  else getExTr es c ev
+      _                                   -> getExTr es c ev
+
 
 compareEV :: TriggerVariation -> TriggerVariation -> Bool
 compareEV EVEntry EVEntry         = True

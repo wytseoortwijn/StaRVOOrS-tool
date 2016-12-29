@@ -46,7 +46,7 @@ operationalizePrePostORB c vars trigs methods oldExprTypesM =
 -- bind class variables --
 --------------------------
 
--- TODO: if classes with the same name in different folders, then fix this method
+--Note: if classes with the same name in different folders allowed, then fix this method
 bindCV :: HT -> [(String, ClassInfo, [(String, String)])] -> Triggers -> [(String, ClassInfo, [String])] -> HT
 bindCV c vars es methods =
  let bindEntry = getClassVar c es EVEntry

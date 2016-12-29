@@ -824,13 +824,13 @@ lookForAllEntryTriggerArgs env cinf mn =
 lookForAllExitTriggerArgs :: Env -> ClassInfo -> MethodName -> (String, String)
 lookForAllExitTriggerArgs env cinf mn =
  case Map.lookup cinf (exitTriggersInfo env) of
-      Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
+      Nothing -> case Map.lookup "*" (exitTriggersInfo env) of
                       Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                       Just m' -> case Map.lookup mn m' of
                                       Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                                       Just _  -> error $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
       Just m  -> case Map.lookup mn m of
-                      Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
+                      Nothing -> case Map.lookup "*" (exitTriggersInfo env) of
                                       Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                                       Just m' -> case Map.lookup mn m' of
                                                  Nothing ->  error $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
