@@ -805,21 +805,10 @@ lookForAllEntryTriggerArgs env cinf mn =
                                       Just m' -> case Map.lookup mn m' of
                                                  Nothing ->  error $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                                                  Just _  -> error $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
-                      Just (_, varClass', argsPre) ->
-                           let classPre     = words $ varClass'
-                               varClass     = last classPre
-                               argsPrewt    = map getArgsId argsPre
-                               argsPrewt'   = addComma argsPrewt
-                               argsPrewt''  = if (elem varClass argsPrewt)
-                                              then argsPrewt'
-                                              else varClass ++ "," ++ argsPrewt'
-                               flatArgsPre  = flattenArgs argsPre
-                               argsPre'     = if (elem varClass argsPrewt)
-                                              then flattenArgs argsPre
-                                              else if (null flatArgsPre)
-                                                   then trim varClass'
-                                                   else (trim varClass')  ++ "," ++ flattenArgs argsPre
-                           in (argsPre', argsPrewt'')
+                      Just xs -> let ys = filter (\(x,_,_) -> isSuffixOf "_ppden" x) xs
+                                 in if null ys
+                                    then getArgsGenMethods (head xs)
+                                    else getArgsGenMethods (head ys) 
 
 lookForAllExitTriggerArgs :: Env -> ClassInfo -> MethodName -> (String, String)
 lookForAllExitTriggerArgs env cinf mn =
@@ -835,21 +824,28 @@ lookForAllExitTriggerArgs env cinf mn =
                                       Just m' -> case Map.lookup mn m' of
                                                  Nothing ->  error $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                                                  Just _  -> error $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
-                      Just (_, varClass', argsPost) ->
-                           let classPost    = words $ varClass'
-                               varClass     = last classPost
-                               argsPostwt   = map getArgsId argsPost
-                               argsPostwt'  = addComma argsPostwt
-                               argsPostwt'' = if (elem varClass argsPostwt)
-                                              then argsPostwt'
-                                              else varClass ++ "," ++ argsPostwt'
-                               flatArgsPost = flattenArgs argsPost
-                               argsPost'    = if (elem varClass argsPostwt)
-                                              then flatArgsPost
-                                              else if (null flatArgsPost)
-                                                   then trim varClass'
-                                                   else (trim varClass')  ++ "," ++ flattenArgs argsPost
-                           in (argsPost', argsPostwt'')
+                      Just xs -> let ys = filter (\(x,_,_) -> isSuffixOf "_ppdex" x) xs
+                                 in if null ys
+                                    then getArgsGenMethods (head xs)
+                                    else getArgsGenMethods (head ys) 
+                           
+
+getArgsGenMethods :: (Id, String, [Args]) -> (String,String)
+getArgsGenMethods (trn, varClass', args) = 
+ let classPost = words $ varClass'
+     varClass  = last classPost
+     argswt    = map getArgsId args
+     argswt'   = addComma argswt
+     argswt''  = if (elem varClass argswt)
+                 then argswt'
+                 else varClass ++ "," ++ argswt'
+     flatArgs  = flattenArgs args
+     args'     = if (elem varClass argswt)
+                 then flatArgs
+                 else if (null flatArgs)
+                      then trim varClass'
+                      else (trim varClass')  ++ "," ++ flattenArgs args
+ in (args', argswt'')
 
 flattenArgs :: [Args] -> String
 flattenArgs []               = ""
@@ -868,7 +864,7 @@ getTriggerClass bn = case bn of
 -- Environment with variables, triggers and foreaches information --
 --------------------------------------------------------------------
 
-type MapTrigger = Map.Map MethodName (Id, String, [Args]) --(trigger_name,type class_variable,trigger_arguments)
+type MapTrigger = Map.Map MethodName [(Id, String, [Args])] --[(trigger_name,type class_variable,trigger_arguments)]
 
 --Triggers associated to methods in Hoare triples should include: type class_variable
 data Env = Env
@@ -907,27 +903,27 @@ updateEntryTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bi
 updateEntryTriggersInfo env einfo args mn BindStar        = 
  let t = "*" in
  case Map.lookup t (entryTriggersInfo env) of
-      Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
+      Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
                  in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
       Just mapeinfo -> 
-           let mapeinfo' = Map.insert mn einfo mapeinfo
+           let mapeinfo' = updateInfo mapeinfo mn einfo 
            in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
 updateEntryTriggersInfo env einfo args mn (BindType t id) = 
  case Map.lookup t (entryTriggersInfo env) of
-      Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
+      Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
                  in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
       Just mapeinfo -> 
-           let mapeinfo' = Map.insert mn einfo mapeinfo
+           let mapeinfo' = updateInfo mapeinfo mn einfo 
            in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
 updateEntryTriggersInfo env einfo args mn (BindId id)     = 
  let ts = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
  in if (length ts /= 1)
     then error $ "The entry trigger associated to method " ++ mn ++ " does not include a class variable declaration.\n"
     else case Map.lookup (head ts) (entryTriggersInfo env) of
-              Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
+              Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
                          in env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) }
               Just mapeinfo -> 
-                   let mapeinfo' = Map.insert mn einfo mapeinfo
+                   let mapeinfo' = updateInfo mapeinfo mn einfo 
                    in env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) }
 
 
@@ -935,30 +931,37 @@ updateExitTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bin
 updateExitTriggersInfo env einfo args mn BindStar        = 
  let t = "*" in
  case Map.lookup t (exitTriggersInfo env) of
-      Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
+      Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
                  in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
       Just mapeinfo -> 
-           let mapeinfo' = Map.insert mn einfo mapeinfo
+           let mapeinfo' = updateInfo mapeinfo mn einfo 
            in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
 updateExitTriggersInfo env einfo args mn (BindType t id) = 
  case Map.lookup t (exitTriggersInfo env) of
-      Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
+      Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
                  in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
       Just mapeinfo -> 
-           let mapeinfo' = Map.insert mn einfo mapeinfo
+           let mapeinfo' = updateInfo mapeinfo mn einfo 
            in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
 updateExitTriggersInfo env einfo args mn (BindId id)     = 
  let ts = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
  in if (length ts /= 1)
     then error $ "The exit trigger associated to method " ++ mn ++ " does not include a class variable declaration.\n"
     else case Map.lookup (head ts) (exitTriggersInfo env) of
-              Nothing -> let mapeinfo' =  Map.insert mn einfo Map.empty
+              Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
                          in env { exitTriggersInfo = Map.insert (head ts) mapeinfo' (exitTriggersInfo env) }
               Just mapeinfo -> 
-                   let mapeinfo' = Map.insert mn einfo mapeinfo
+                   let mapeinfo' = updateInfo mapeinfo mn einfo 
                    in env { exitTriggersInfo = Map.insert (head ts) mapeinfo' (exitTriggersInfo env) }
 
  
+updateInfo :: Map.Map MethodName [(Id, String, [Args])] -> MethodName -> (Id, String, [Args]) -> Map.Map MethodName [(Id, String, [Args])]
+updateInfo m mn einfo = 
+ case Map.lookup mn m of
+      Nothing -> Map.insert mn [einfo] m
+      Just xs -> Map.insert mn (einfo:xs) m
+
+
 ----------------------------
 -- Monad State operations --
 ----------------------------

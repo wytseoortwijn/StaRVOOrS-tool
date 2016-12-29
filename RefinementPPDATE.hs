@@ -215,12 +215,12 @@ addNewTriggerEntry env ppdate n (x:xs) =
      v      = (\(x,y,z) -> z) p 
      cl     = makeBind $ (\(x,y,z) -> y) v
   in case Map.lookup cn (entryTriggersInfo env) of
-      Nothing -> let mapeinfo' =  Map.insert mn v Map.empty
+      Nothing -> let mapeinfo' =  Map.insert mn [v] Map.empty
                      ppdate'   = addTrigger2ppDATE tr ppdate 
                  in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
                                             , allTriggers = (tName tr,mn,EVEntry,cl:args tr):allTriggers env}) ppdate' (n+1) xs
       Just mapeinfo -> 
-           let mapeinfo' = Map.insert mn v mapeinfo
+           let mapeinfo' = updateInfo mapeinfo mn v 
                ppdate'   = addTrigger2ppDATE tr ppdate 
            in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
                                       , allTriggers = (tName tr,mn,EVEntry, cl:args tr):allTriggers env}) ppdate' (n+1) xs
@@ -251,12 +251,12 @@ addNewTriggerExit env ppdate n (x:xs) =
      v      = (\(x,y,z) -> z) p 
      cl     = makeBind $ (\(x,y,z) -> y) v
  in case Map.lookup cn (exitTriggersInfo env) of
-      Nothing -> let mapeinfo' = Map.insert mn v Map.empty
+      Nothing -> let mapeinfo' = Map.insert mn [v] Map.empty
                      ppdate'   = addTrigger2ppDATE tr ppdate 
                  in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
                                            , allTriggers = (tName tr,mn, getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs
       Just mapeinfo -> 
-           let mapeinfo' = Map.insert mn v mapeinfo
+           let mapeinfo' = updateInfo mapeinfo mn v 
                ppdate'   = addTrigger2ppDATE tr ppdate 
            in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
                                      , allTriggers = (tName tr,mn, getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs
