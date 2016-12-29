@@ -158,6 +158,12 @@ lookfor (x:xs) e = if (fst x==e)
                    then snd x
                    else lookfor xs e
 
+lookforClVar :: PropertyName -> [(PropertyName, ClassInfo, String)] -> String
+lookforClVar pn []              = ""
+lookforClVar pn ((pn',_,cl):xs) = if pn == pn'
+                                  then cl
+                                  else lookforClVar pn xs
+
 ---------------------------------------
 -- Manipulating the parsed .xml file --
 ---------------------------------------

@@ -73,7 +73,10 @@ replacePInit ppd =
                       tmpFors   = map (\pi -> pinit2foreach pi templates) (p:ps)
                       fors'     = tmpFors ++ fors
                       global'   = updateGlobal (globalGet ppdate) (Ctxt vars acts es prop' fors')
-                  in do put env { forsVars = forsVars env ++ map getArgsId (concatMap getArgsForeach tmpFors) }
+                      propns    = map piName (p:ps)
+                      pif       = map (\(x,Args t cl) -> (x,t,cl)) $ zip propns (map (head.getArgsForeach) tmpFors)
+                  in do put env { forsVars = forsVars env ++ map getArgsId (concatMap getArgsForeach tmpFors) 
+                                , propInForeach = pif ++ propInForeach env  }
                         return $ updateGlobalPP ppdate global'
               []     -> ppd
 
@@ -538,9 +541,12 @@ getForeach :: Abs.Foreaches -> UpgradePPD Foreach
 getForeach (Abs.ForeachesDef args ctxt Abs.ForeachesNil) = 
  do ctxt' <- getCtxt ctxt 1
     case foreaches ctxt' of
-      [] -> do let args' = map getArgs args
+      [] -> do let args'     = map getArgs args
+               let propn     = pName $ property ctxt'
+               let Args t cl = head $ args'
                env <- get
-               put env { forsVars = forsVars env ++ map getArgsId args' }
+               put env { forsVars = forsVars env ++ map getArgsId args'
+                       , propInForeach = (propn,t,cl):propInForeach env }
                return $ Foreach args' ctxt'
       _  -> fail $ "Error: StaRVOOrS does not support nested Foreaches.\n"
 
@@ -877,9 +883,10 @@ data Env = Env
  , methodsInFiles      :: [(String, ClassInfo, [(Type,Id,[String])])] --[(path_to_class,class_name,[(returned_type,method_name,arguments)])]
  , oldExpTypes         :: OldExprM
  , tempsId             :: [Id]
- , triggersInTemps     :: [Trigger] --used to check whether the trigger is already defined in 
+ , triggersInTemps     :: [Trigger] --is used to check whether the trigger is already defined in 
                                     --the triggers of the ppDATE instead of a template
  , exitTriggersInTemps :: [(ClassInfo,MethodName)]
+ , propInForeach       :: [(PropertyName, ClassInfo, String)]-- is used to avoid ambigous reference to variable id in foreaches
  }
   deriving (Show)
 
@@ -897,6 +904,7 @@ emptyEnv = Env { forsVars            = []
                , tempsId             = []
                , triggersInTemps     = []
                , exitTriggersInTemps = []
+               , propInForeach       = []
                }
 
 updateEntryTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env

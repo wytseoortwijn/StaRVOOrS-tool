@@ -217,7 +217,7 @@ writeProperty PNIL _ _ _                                   = ""
 writeProperty (Property name states trans props) cs es env =
   "PROPERTY " ++ name ++ " \n{\n\n"
   ++ writeStates states
-  ++ writeTransitions trans cs states es env
+  ++ writeTransitions name trans cs states es env
   ++ "}\n\n"
   ++ writeProperty props cs es env
 
@@ -249,42 +249,42 @@ getInitCode' (InitProg java) = "{" ++ init java ++ "}"
 
 --HTriples [] -> Replicated Automata
 --HTriples non-empty -> Property transitions instrumentation
-writeTransitions :: Transitions -> HTriples -> States -> Triggers -> Env -> String
-writeTransitions ts [] _ _ _ =
+writeTransitions :: PropertyName -> Transitions -> HTriples -> States -> Triggers -> Env -> String
+writeTransitions _ ts [] _ _ _ =
  "TRANSITIONS \n{ \n"
  ++ concat (map getTransition ts)
  ++ "}\n\n"
-writeTransitions ts (c:cs) states es env =
+writeTransitions pn ts (c:cs) states es env =
  "TRANSITIONS \n{ \n"
-  ++ (concat (map getTransition (getTransitionsGeneral (c:cs) states ts es env)))
+  ++ (concat (map getTransition (getTransitionsGeneral (c:cs) states ts es env pn)))
   ++ "}\n\n"
 
 getTransition :: Transition -> String
 getTransition (Transition q (Arrow e c act) q') =
      q ++ " -> " ++ q' ++ " [" ++ e ++ " \\ "  ++ c ++ " \\ " ++ act ++ "]\n"
 
-getTransitionsGeneral :: HTriples -> States -> Transitions -> Triggers -> Env -> Transitions
-getTransitionsGeneral cs (States star acc bad nor) ts es env =
- let ts1 = generateTransitions star cs ts es env
-     ts2 = generateTransitions acc cs ts1 es env 
-     ts3 = generateTransitions bad cs ts2 es env
-     ts4 = generateTransitions nor cs ts3 es env
+getTransitionsGeneral :: HTriples -> States -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
+getTransitionsGeneral cs (States star acc bad nor) ts es env pn =
+ let ts1 = generateTransitions star cs ts es env pn
+     ts2 = generateTransitions acc cs ts1 es env pn
+     ts3 = generateTransitions bad cs ts2 es env pn
+     ts4 = generateTransitions nor cs ts3 es env pn
  in ts4
 
-generateTransitions :: [State] -> HTriples -> Transitions -> Triggers -> Env -> Transitions
-generateTransitions [] _ ts _ _                              = ts
-generateTransitions ((State ns ic []):xs) cs ts es env       = generateTransitions xs cs ts es env
-generateTransitions ((State ns ic l@(_:_)):xs) cs ts es env  = let ts' = accumTransitions l ns cs ts es env
-                                                               in generateTransitions xs cs ts' es env
+generateTransitions :: [State] -> HTriples -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
+generateTransitions [] _ ts _ _ _                              = ts
+generateTransitions ((State ns ic []):xs) cs ts es env pn      = generateTransitions xs cs ts es env pn
+generateTransitions ((State ns ic l@(_:_)):xs) cs ts es env pn = let ts' = accumTransitions l ns cs ts es env pn
+                                                                 in generateTransitions xs cs ts' es env pn
 
-accumTransitions :: [HTName] -> NameState -> HTriples -> Transitions -> Triggers -> Env -> Transitions
-accumTransitions [] _ _ ts _ _                = ts
-accumTransitions (cn:cns) ns consts ts es env =
- let ts' = generateTransition cn ns consts ts es env
- in accumTransitions cns ns consts ts' es env
+accumTransitions :: [HTName] -> NameState -> HTriples -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
+accumTransitions [] _ _ ts _ _ _                 = ts
+accumTransitions (cn:cns) ns consts ts es env pn =
+ let ts' = generateTransition cn ns consts ts es env pn
+ in accumTransitions cns ns consts ts' es env pn
 
-generateTransition :: HTName -> NameState -> HTriples -> Transitions -> Triggers -> Env -> Transitions
-generateTransition p ns cs ts es env = 
+generateTransition :: HTName -> NameState -> HTriples -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
+generateTransition p ns cs ts es env pn = 
  let c             = lookForHT p cs
      mn            = snd $ methodCN c
      entrs         = lookForEntryTrigger (allTriggers env) mn
@@ -293,14 +293,14 @@ generateTransition p ns cs ts es env =
  in if null entrs
     then error $ "Translation: Missing entry trigger for method " ++ mn ++ ".\n"
     else if (null lts)
-         then ts ++ map (\e -> makeTransitionAlg1Cond ns e c env) entrs
-         else let ext = map (\e -> makeExtraTransitionAlg2 lts c e ns env) entrs'
-                  xs  = concat [map (\x -> instrumentTransitionAlg2 c x tr env) lts | tr <- entrs']
+         then ts ++ map (\e -> makeTransitionAlg1Cond ns e c env pn) entrs
+         else let ext = map (\e -> makeExtraTransitionAlg2 lts c e ns env pn) entrs'
+                  xs  = concat [map (\x -> instrumentTransitionAlg2 c x tr env pn) lts | tr <- entrs']
               in nonlts ++ xs ++ ext
 
 
-makeTransitionAlg1Cond :: NameState -> Trigger -> HT -> Env -> Transition
-makeTransitionAlg1Cond ns e c env =
+makeTransitionAlg1Cond :: NameState -> Trigger -> HT -> Env -> PropertyName -> Transition
+makeTransitionAlg1Cond ns e c env pn =
  let cn      = htName c
      oldExpM = oldExpTypes env
      esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
@@ -313,7 +313,9 @@ makeTransitionAlg1Cond ns e c env =
      act     = " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
      type_   = if null zs then "PPD" else "Old_" ++ cn
      old     = if null zs then "" else "," ++ zs
-     msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
+     ident   = lookforClVar pn (propInForeach env)
+     ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
+     msg     = "new Messages" ++ type_ ++ ident' ++ old ++ ")"
  in Transition ns (Arrow e c' act) ns
 
 getExpForOld :: OldExprM -> HTName -> String
@@ -330,34 +332,37 @@ initOldExpr oel cn =
 
 
 
-makeExtraTransitionAlg2Cond :: Transitions -> String
-makeExtraTransitionAlg2Cond []     = ""
-makeExtraTransitionAlg2Cond (t:ts) =
+makeExtraTransitionAlg2Cond :: Transitions -> PropertyName -> String
+makeExtraTransitionAlg2Cond [] _      = ""
+makeExtraTransitionAlg2Cond (t:ts) pn =
  let cond'  = cond $ arrow t
      cond'' = if (null $ clean cond') then "true" else cond'
  in
- "!("++ cond'' ++ ") && " ++ makeExtraTransitionAlg2Cond ts
+ "!("++ cond'' ++ ") && " ++ makeExtraTransitionAlg2Cond ts pn
 
-makeExtraTransitionAlg2 :: Transitions -> HT -> Trigger -> NameState -> Env -> Transition
-makeExtraTransitionAlg2 ts c e ns env = let esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
-                                            oldExpM = oldExpTypes env
-                                            cn      = htName c
-                                            zs      = getExpForOld oldExpM cn
-                                            esinf'  = filter (/="") $ lookfor esinf e
-                                            arg     = if null esinf' 
-                                                      then ""
-                                                      else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
-                                            pre'    = "HoareTriplesPPD." ++ (htName c) ++ "_pre(" ++ arg ++ ")"
-                                            type_   = if null zs then "PPD" else "Old_" ++ cn
-                                            old     = if null zs then "" else "," ++ zs
-                                            msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
-                                            act     = " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
-                                            c'      = makeExtraTransitionAlg2Cond ts ++ pre'
-                                        in Transition ns (Arrow e c' act) ns
+makeExtraTransitionAlg2 :: Transitions -> HT -> Trigger -> NameState -> Env -> PropertyName -> Transition
+makeExtraTransitionAlg2 ts c e ns env pn = 
+ let esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
+     oldExpM = oldExpTypes env
+     cn      = htName c
+     zs      = getExpForOld oldExpM cn
+     esinf'  = filter (/="") $ lookfor esinf e
+     arg     = if null esinf' 
+               then ""
+               else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
+     pre'    = "HoareTriplesPPD." ++ (htName c) ++ "_pre(" ++ arg ++ ")"
+     type_   = if null zs then "PPD" else "Old_" ++ cn
+     old     = if null zs then "" else "," ++ zs
+     ident   = lookforClVar pn (propInForeach env)
+     ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
+     msg     = "new Messages" ++ type_ ++ ident' ++ old ++ ")"
+     act     = " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
+     c'      = makeExtraTransitionAlg2Cond ts pn ++ pre'
+ in Transition ns (Arrow e c' act) ns
 
 
-instrumentTransitionAlg2 :: HT -> Transition -> Trigger -> Env -> Transition
-instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env =
+instrumentTransitionAlg2 :: HT -> Transition -> Trigger -> Env -> PropertyName -> Transition
+instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env pn =
  let cn      = htName c
      oldExpM = oldExpTypes env
      esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
@@ -369,7 +374,9 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env =
      zs      = getExpForOld oldExpM cn
      type_   = if null zs then "PPD" else "Old_" ++ cn
      old     = if null zs then "" else "," ++ zs
-     msg     = "new Messages" ++ type_ ++ "(id" ++ old ++ ")"
+     ident   = lookforClVar pn (propInForeach env)
+     ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
+     msg     = "new Messages" ++ type_ ++ ident' ++ old ++ ")"
      act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "}"
  in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
 
@@ -474,6 +481,6 @@ generateRAString esinf es env c n =
       cn = pName ra
   in ("PROPERTY " ++ cn ++ "\n{\n\n"
      ++ writeStates (pStates ra)
-     ++ writeTransitions (pTransitions ra) [] (States [] [] [] []) [] emptyEnv
+     ++ writeTransitions cn (pTransitions ra) [] (States [] [] [] []) [] emptyEnv
      ++ "}\n\n",cn)
 
