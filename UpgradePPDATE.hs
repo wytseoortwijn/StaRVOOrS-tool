@@ -962,8 +962,8 @@ writePPDTransitions trans =
  ++ "}\n\n"
 
 writePPDForeaches :: Foreaches -> String
-writePPDForeaches []   = ""
-writePPDForeaches fors = unlines (map writePPDForeach fors)
+writePPDForeaches []          = ""
+writePPDForeaches fors@(f:fs) = unlines (map writePPDForeach fors)
  
 writePPDForeach :: Foreach -> String
 writePPDForeach (Foreach args ctxt) = 

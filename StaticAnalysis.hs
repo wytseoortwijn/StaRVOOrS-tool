@@ -16,11 +16,12 @@ import OperationalizationPP
 import Instrumentation
 import PartialInfoFilesGeneration
 import Data.Functor ((<$>))
-import Data.List ((\\))
+import Data.List ((\\),isSuffixOf)
 import Data.Maybe
 import System.FilePath
 import qualified Data.Map as Map
 import TypeInferenceXml
+import DL2JML
 
 
 -------------------------------
@@ -68,9 +69,10 @@ staticAnalysis' jpath ppd output_add fn =
                let cns     = getHTNamesEnv ppd
                let xml'    = removeNoneHTs xml cns
                let ppdref  = refinePPDATE ppd xml'
+               let ppdref' = prepareRefPPD ppdref
                let ppdate' = replacePInit ppdref
                let refFile = output_addr ++ generateRefPPDFileName fn
-               writeFile refFile (writePPD ppdref)
+               writeFile refFile (writePPD ppdref')
                generateReport xml' output_addr
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
                oldExpTypes <- inferTypesOldExprs ppdate' jpath (output_addr ++ "workspace/")
@@ -150,3 +152,48 @@ generateRefPPDFileName fn =
  in if (length xs == 1)
     then reverse name ++ "_optimised.ppd"
     else reverse (head xs) ++ "_optimised.ppd"
+
+prepareRefPPD :: UpgradePPD PPDATE -> UpgradePPD PPDATE
+prepareRefPPD = removeGeneratedTriggers . introduceNewHTriples
+
+
+removeGeneratedTriggers :: UpgradePPD PPDATE -> UpgradePPD PPDATE
+removeGeneratedTriggers ppd = 
+ do ppdate <- ppd
+    return $ remGeneratedTriggers ppdate
+
+remGeneratedTriggers :: PPDATE -> PPDATE
+remGeneratedTriggers ppdate@(PPDATE _ (Global ctxt@(Ctxt [] [] [] PNIL (Foreach args ctxt':fors))) _ _ _ _) = 
+ let ctxt''  = removeFromTrsCtxt ctxt'
+     fors'   = Foreach args ctxt'':fors
+     ctxt''' = updateCtxtFors ctxt fors'
+     global' = Global ctxt'''
+ in updateGlobalPP ppdate global'
+remGeneratedTriggers ppdate@(PPDATE _ (Global ctxt) _ _ _ _) = 
+ let ctxt'   = removeFromTrsCtxt ctxt
+     global' = Global ctxt'
+ in updateGlobalPP ppdate global'
+
+removeFromTrsCtxt :: Context -> Context 
+removeFromTrsCtxt ctxt@(Ctxt _ _ trs _ _) = updateCtxtTrs ctxt (removeFromTriggers trs)
+
+removeFromTriggers :: Triggers -> Triggers
+removeFromTriggers []       = []
+removeFromTriggers (tr:trs) = 
+ if isSuffixOf "_ppden" (tName tr) || isSuffixOf "_ppdex" (tName tr)
+ then removeFromTriggers trs
+ else tr:removeFromTriggers trs
+
+introduceNewHTriples :: UpgradePPD PPDATE -> UpgradePPD PPDATE
+introduceNewHTriples ppd = 
+ do ppdate <- ppd
+    return (updateHTsPP ppdate (newHTriples (htsGet ppdate)))
+
+newHTriples :: HTriples -> HTriples
+newHTriples []      = []
+newHTriples (h:hts) = 
+ let newpre = (removeSelf.head.optimized) h
+     pre'   = "(" ++ pre h ++ ") && " ++ newpre
+ in if ((head.optimized) h == "(true)")
+    then h:newHTriples hts
+    else updatePre h pre':newHTriples hts

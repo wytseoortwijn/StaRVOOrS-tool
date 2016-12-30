@@ -98,6 +98,8 @@ data Context =
 updateCtxtFors :: Context -> Foreaches -> Context
 updateCtxtFors (Ctxt vars acts trs props fors) fors' = Ctxt vars acts trs props fors'
 
+updateCtxtTrs :: Context -> Triggers -> Context
+updateCtxtTrs (Ctxt vars acts trs props fors) trs' = Ctxt vars acts trs' props fors
 
 data Global = Global
   { ctxtGet  :: Context } deriving (Show, Eq)
