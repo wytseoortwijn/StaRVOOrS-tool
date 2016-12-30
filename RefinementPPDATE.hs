@@ -93,9 +93,8 @@ updateHT (mn,cn,pres,path) (c:cs) es =
  if (htName c == cn && (snd.methodCN) c == mn)
  then if (null pres)
       then c:updateHT (mn,cn,pres,path) cs es
-      else let clvar = getClassVar c es EVEntry
-               pres' = removeDuplicates pres
-               opt'  = map (addParenthesisNot.(replaceSelfWith clvar).removeDLstrContent) pres'
+      else let pres' = removeDuplicates pres
+               opt'  = map (addParenthesisNot.removeDLstrContent) pres'
                opt'' = '(':introduceOr opt' ++ [')']
                c'    = updatePath (updateOpt c [opt'']) path
                c''   = updatePre c' $ removeDLstrContent (pre c)

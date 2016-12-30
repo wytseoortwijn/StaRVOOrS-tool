@@ -97,8 +97,7 @@ run flags java_fn_add ppdate_fn output_add =
                             checkOutputDirectory output_add'
                             createDirectoryIfMissing False output_add'      
                             createDirectoryIfMissing False (output_add' ++ "/workspace")
-                            let pp  = upgradePPD absppdate
-                            let ppd = replacePInit pp
+                            let ppd  = upgradePPD absppdate
                             case runStateT ppd emptyEnv of
                                  Bad s -> putStrLn s
                                  Ok _  -> do ppd' <- programVariables ppd java_fn_add'

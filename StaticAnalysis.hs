@@ -67,7 +67,7 @@ staticAnalysis' jpath ppd output_add =
                let xml     = ParserXMLKeYOut.parse xml_to_parse
                let cns     = getHTNamesEnv ppd
                let xml'    = removeNoneHTs xml cns
-               let ppdate' = refinePPDATE ppd xml'
+               let ppdate' = replacePInit $ refinePPDATE ppd xml'
                generateReport xml' output_addr
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
                oldExpTypes <- inferTypesOldExprs ppdate' jpath (output_addr ++ "workspace/")
