@@ -27,17 +27,17 @@ import TypeInferenceXml
 -- Static Analysis using KeY --
 -------------------------------
 
-staticAnalysis :: FilePath -> UpgradePPD PPDATE -> FilePath -> IO (UpgradePPD PPDATE)
-staticAnalysis jpath ppd output_add =
+staticAnalysis :: FilePath -> UpgradePPD PPDATE -> FilePath -> Filename -> IO (UpgradePPD PPDATE)
+staticAnalysis jpath ppd output_add fn =
  let ppdate      = getValue ppd
      consts      = htsGet ppdate
  in if (null consts)
     then do putStrLn "\nThere are no Hoare triples to analyse."
             return ppd
-    else staticAnalysis' jpath ppd output_add
+    else staticAnalysis' jpath ppd output_add fn
 
-staticAnalysis' :: FilePath -> UpgradePPD PPDATE -> FilePath -> IO (UpgradePPD PPDATE)
-staticAnalysis' jpath ppd output_add =
+staticAnalysis' :: FilePath -> UpgradePPD PPDATE -> FilePath -> Filename -> IO (UpgradePPD PPDATE)
+staticAnalysis' jpath ppd output_add fn =
  let output_addr = if ((last $ trim output_add) == '/') 
                    then output_add
                    else output_add ++ "/"
@@ -67,7 +67,10 @@ staticAnalysis' jpath ppd output_add =
                let xml     = ParserXMLKeYOut.parse xml_to_parse
                let cns     = getHTNamesEnv ppd
                let xml'    = removeNoneHTs xml cns
-               let ppdate' = replacePInit $ refinePPDATE ppd xml'
+               let ppdref  = refinePPDATE ppd xml'
+               let ppdate' = replacePInit ppdref
+               let refFile = output_addr ++ generateRefPPDFileName fn
+               writeFile refFile (writePPD ppdref)
                generateReport xml' output_addr
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
                oldExpTypes <- inferTypesOldExprs ppdate' jpath (output_addr ++ "workspace/")
@@ -140,3 +143,10 @@ getSourceCodeFolderName :: FilePath -> String
 getSourceCodeFolderName s = let (xs,ys) = splitAtIdentifier '/' $ (reverse . init) s
                             in reverse xs
 
+generateRefPPDFileName :: Filename -> Filename
+generateRefPPDFileName fn = 
+ let (ext, _:name) = break ('.' ==) $ reverse fn 
+     xs = splitOnIdentifier "/" name     
+ in if (length xs == 1)
+    then reverse name ++ "_optimised.ppd"
+    else reverse (head xs) ++ "_optimised.ppd"

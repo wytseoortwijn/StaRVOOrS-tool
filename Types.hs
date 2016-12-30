@@ -1,6 +1,6 @@
 module Types where
 
-import Data.Map
+import qualified Data.Map as Map
 import System.FilePath
 
 ------------
@@ -25,23 +25,32 @@ updateGlobalPP (PPDATE imp global temps cinvs conts ms) global' = PPDATE imp glo
 updateTemplatesPP :: PPDATE -> Templates -> PPDATE
 updateTemplatesPP (PPDATE imp global temps cinvs conts ms) temps' = PPDATE imp global temps' cinvs conts ms
 
-data Import = Import String deriving (Show, Eq)
+data Import = Import String deriving (Eq)
+
+instance Show Import where
+ show (Import imp) = "import " ++ imp ++ " ;"
+
 type Imports = [Import]
 
 type Class = String
 type ClassInfo = String
 type BodyCInv = String
 
-data CInvariant = CI Class BodyCInv | CInvNil deriving (Show, Eq)
+data CInvariant = CI Class BodyCInv | CInvNil deriving (Eq)
+
+instance Show CInvariant where
+ show (CI cl body) = cl ++ " {" ++ (concat.lines) body ++ "}"
+ show CInvNil      = ""
+
 type CInvariants = [CInvariant]
 
 
-type HTName   = String
-type MethodName     = String
-type Pre            = JMLExp
-type Post           = JMLExp
-type Assignable     = String
-type MethodCN       = (ClassInfo, MethodName)
+type HTName     = String
+type MethodName = String
+type Pre        = JMLExp
+type Post       = JMLExp
+type Assignable = String
+type MethodCN   = (ClassInfo, MethodName)
 
 
 data HT = HT
@@ -133,7 +142,10 @@ getArgsForeach (Foreach args _) = args
 
 data Args =
    Args Type Id
-  deriving (Eq,Ord,Show,Read)
+  deriving (Eq,Ord,Read)
+
+instance Show Args where
+ show (Args t id) = t ++ " " ++ id
 
 getArgsId :: Args -> Id
 getArgsId (Args t id) = id
@@ -156,21 +168,35 @@ type Variables = [Variable]
 
 data Variable =
    Var VarModifier Type [VarDecl]
-  deriving (Eq,Ord,Show,Read)
+  deriving (Eq,Ord,Read)
+
+instance Show Variable where
+ show (Var modif t vdecls) = show modif ++ t ++ " " ++ addComma' (map show vdecls) ++ " ;"
 
 data VarModifier =
    VarModifierFinal
  | VarModifierNil
-  deriving (Eq,Ord,Show,Read)
+  deriving (Eq,Ord,Read)
+
+instance Show VarModifier where
+ show VarModifierFinal = "final "
+ show VarModifierNil   = ""
 
 data VarDecl =
    VarDecl Id VariableInitializer
-  deriving (Eq,Ord,Show,Read)
+  deriving (Eq,Ord,Read)
+
+instance Show VarDecl where
+ show (VarDecl id varinit) = id ++ show varinit
 
 data VariableInitializer =
    VarInit VarExp
  | VarInitNil
-  deriving (Eq,Ord,Show,Read)
+  deriving (Eq,Ord,Read)
+
+instance Show VariableInitializer where
+ show VarInitNil    = ""
+ show (VarInit exp) = " = " ++ exp 
 
 getVariableArgs :: Variable -> [Args]
 getVariableArgs (Var vm t [])          = []
@@ -178,6 +204,11 @@ getVariableArgs (Var vm t (dec:decls)) = Args t (getVarDeclId dec) : getVariable
 
 getVarDeclId :: VarDecl -> Id
 getVarDeclId (VarDecl id _) = id
+
+addComma' :: [String] -> String
+addComma' []          = ""
+addComma' [xs]        = xs
+addComma' (xs:ys:xss) = xs ++ "," ++ addComma' (ys:xss)
 
 ------------------
 -- Useful types --
@@ -206,12 +237,21 @@ type JMLExp = String
 data InitialCode =
    InitNil
  | InitProg Java
-  deriving (Eq,Ord,Show,Read)
+  deriving (Eq,Ord,Read)
+
+instance Show InitialCode where
+ show InitNil         = ""
+ show (InitProg java) = " { " ++ java ++ " } " 
 
 type PropertyName = String
 type NameState = String
 
-data State = State NameState InitialCode [HTName] deriving (Show, Eq,Read)
+data State = State NameState InitialCode [HTName] deriving (Eq,Read)
+
+instance Show State where
+ show (State ns initc hts) = ns ++ show initc ++ foo hts ++ "; "
+                                 where foo []  = ""
+                                       foo hts = " (" ++ addComma' hts ++ ") "
 
 getCNList :: State -> [HTName]
 getCNList (State ns ic cns) = cns
@@ -242,17 +282,21 @@ type Action  = String
 
 data Arrow = Arrow 
   { trigger :: Trigger
-  , cond    ::  Cond
+  , cond    :: Cond
   , action  :: Action
-  } deriving (Show, Eq,Read)
+  } deriving (Eq,Read)
 
+instance Show Arrow where
+ show (Arrow tr c act) = " [" ++ tr ++ " \\ "  ++ c ++ " \\ " ++ (concat.lines) act ++ " ]"
 
 data Transition = Transition 
   { fromState :: NameState
   , arrow :: Arrow
   , toState :: NameState
-  } deriving (Show, Eq,Read)
+  } deriving (Eq,Read)
 
+instance Show Transition where
+ show (Transition fns arr tns) = fns ++ " -> " ++ tns ++ show arr
 
 data Property = Property
   { pName        :: PropertyName
@@ -276,7 +320,10 @@ type ActEvents = [ActEvent]
 
 data ActEvent =
    ActEvent Id
-  deriving (Eq,Ord,Show,Read)
+  deriving (Eq,Ord,Read)
+
+instance Show ActEvent where
+ show (ActEvent id) = id
 
 --------------
 -- Triggers --
@@ -289,7 +336,15 @@ data TriggerDef = TriggerDef
   , args :: [Bind]
   , compTrigger :: CompoundTrigger
   , whereClause :: WhereClause
-  } deriving (Show, Eq,Read)
+  } deriving (Eq,Read)
+
+instance Show TriggerDef where 
+ show (TriggerDef nm [] ct w) = nm ++ "() = { " ++ show ct ++ " }" ++ showWhere w
+ show (TriggerDef nm xs ct w) = nm ++ "(" ++ addComma' (map show xs) ++ ") = { " ++ show ct ++ " }" ++ showWhere w
+
+showWhere :: String -> String
+showWhere [] = ""
+showWhere xs = " where { " ++ xs ++ " }"
 
 data CompoundTrigger =
    NormalEvent Binding Id [Bind] TriggerVariation
@@ -297,7 +352,14 @@ data CompoundTrigger =
  | OnlyId Id
  | OnlyIdPar Id
  | Collection TriggerList
-  deriving (Eq,Show,Read)
+  deriving (Eq,Read)
+
+instance Show CompoundTrigger where
+ show (NormalEvent b id binds tv) = show b ++ "." ++ id ++ "(" ++ addComma' (map show binds) ++ ")" ++ show tv
+ show (ClockEvent id n)           = id ++ "@" ++ show n
+ show (OnlyId id)                 = id
+ show (OnlyIdPar id)              = id ++ "()"
+ show (Collection tls)            = show tls
 
 getCTVariation :: CompoundTrigger -> TriggerVariation
 getCTVariation (NormalEvent _ _ _ tv) = tv
@@ -308,17 +370,32 @@ data TriggerVariation =
  | EVThrow [Bind]
  | EVHadle [Bind]
  | EVNil--Added to simplify search of triggers during the translation
-  deriving (Eq,Show,Read)
+  deriving (Eq,Read)
+
+instance Show TriggerVariation where
+ show EVEntry      = "entry"
+ show (EVExit rs)  = "exit(" ++ concatMap show rs ++ ")" 
+ show (EVThrow rs) = "throw(" ++ concatMap show rs ++ ")"
+ show (EVHadle rs) = "handle(" ++ concatMap show rs ++ ")"
+ show EVNil        = ""
 
 data TriggerList =
    CECollection [CompoundTrigger]
-  deriving (Eq,Show,Read)
+  deriving (Eq,Read)
+
+instance Show TriggerList where
+ show (CECollection xs) = foldr (\x xs -> "{" ++ x ++ "}" ++ " | " ++ xs) [] (map show xs)
 
 data Bind =
    BindStar
  | BindType Type Id
  | BindId Id
-  deriving (Eq,Show,Read)
+  deriving (Eq,Read)
+
+instance Show Bind where
+ show BindStar        = "*"
+ show (BindType t id) = t ++ " " ++ id
+ show (BindId id)     = id
 
 getBindTypeId :: Bind -> Id
 getBindTypeId (BindType t id) = id
@@ -331,7 +408,10 @@ getBindIdId (BindId id) = id
 
 data Binding =
    BindingVar Bind
-  deriving (Eq,Show,Read)
+  deriving (Eq,Read)
+
+instance Show Binding where
+ show (BindingVar b) = show b 
 
 getBind :: Binding -> Bind
 getBind (BindingVar bn) = bn
@@ -361,7 +441,7 @@ type Triggers = [TriggerDef]
 -------------------------------------------------------------------
 
 type OldExprL = [(String,Type,String)] --(expr_in_old,type_expr_in_old,name_to_replace_expr_in_old)
-type OldExprM = Map HTName OldExprL
+type OldExprM = Map.Map HTName OldExprL
 
 -----------------------
 -- XML related types --

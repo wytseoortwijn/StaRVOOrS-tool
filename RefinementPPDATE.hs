@@ -41,6 +41,7 @@ optimizedProvenHTs [] f ps     = ps
 optimizedProvenHTs (c:cs) f ps = f (htName c) $ optimizedProvenHTs cs f ps
 
 refinePropertyOptTemplates :: HTName -> Templates -> Templates
+refinePropertyOptTemplates _ TempNil       = TempNil
 refinePropertyOptTemplates cn (Temp temps) = Temp $ map (refineTemplate cn) temps
 
 refineTemplate :: HTName -> Template -> Template
@@ -281,10 +282,4 @@ updateWhereTr (TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id'
 makeBind :: String -> Bind
 makeBind [] = error "Cannot make bind\n."
 makeBind s  = (\[x,y] -> BindType x y) $ words s
-
-
---------------------------------------
--- Refined ppDATE to input language --
---------------------------------------
-
 

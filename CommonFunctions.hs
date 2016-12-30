@@ -113,9 +113,7 @@ getListOfArgs mn ((t,mn',ts):xs) = if (mn == mn')
                                    else getListOfArgs mn xs
 
 addComma :: [String] -> String
-addComma []          = ""
-addComma [xs]        = xs
-addComma (xs:ys:xss) = xs ++ "," ++ addComma (ys:xss)
+addComma = addComma'
 
 
 getConstTnv :: HT -> OldExprM -> Variables

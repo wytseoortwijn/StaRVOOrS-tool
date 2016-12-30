@@ -103,7 +103,7 @@ run flags java_fn_add ppdate_fn output_add =
                                  Ok _  -> do ppd' <- programVariables ppd java_fn_add'
                                              ppdate <- programMethods ppd' java_fn_add'
                                              putStrLn "Initiating static verification of Hoare triples with KeY."
-                                             ppdate' <- staticAnalysis java_fn_add' ppdate output_add'
+                                             ppdate' <- staticAnalysis java_fn_add' ppdate output_add' ppdate_fn
                                              putStrLn "Initiating monitor files generation."
                                              let larva_fn  = generateLarvaFileName ppdate_fn
                                              let larva_add = output_addr ++ "out/" ++ larva_fn
