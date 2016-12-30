@@ -28,8 +28,9 @@ refinePPDATE ppd proofs =
      global'   = optimizedProvenHTs cproved refinePropertyOptGlobal global
      temps     = templatesGet ppdate'
      temps'    = optimizedProvenHTs cproved refinePropertyOptTemplates temps
+     ppdate''  = updateTemplatesPP (updateHTsPP (updateGlobalPP ppdate' global') consts'') temps'
  in do put env'
-       return $ updateTemplatesPP (updateHTsPP (updateGlobalPP ppdate' global') consts'') temps'
+       return ppdate''
 
 --------------------------------------------------
 -- Remove Hoare triples which were fully proved --
@@ -51,9 +52,10 @@ refinePropertyOptGlobal cn (Global ctxt) = Global $ refineContext cn ctxt
 refineContext :: HTName -> Context -> Context
 refineContext cn (Ctxt vars ies trigs prop fors) = 
  let prop' = removeStatesProp cn prop
- in case fors of
-         []                  -> Ctxt vars ies trigs prop' [] 
-         [Foreach args ctxt] -> Ctxt vars ies trigs prop' [Foreach args (refineContext cn ctxt)] 
+ in Ctxt vars ies trigs prop' (map (refineForeach cn) fors)
+
+refineForeach :: HTName -> Foreach -> Foreach
+refineForeach cn (Foreach args ctxt) = Foreach args (refineContext cn ctxt)
 
 removeStatesProp :: HTName -> Property -> Property
 removeStatesProp _ PNIL               = PNIL
@@ -278,6 +280,12 @@ updateWhereTr (TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id'
  else TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) (id ++ " = null ;")
 
 makeBind :: String -> Bind
-makeBind [] = error "f"
+makeBind [] = error "Cannot make bind\n."
 makeBind s  = (\[x,y] -> BindType x y) $ words s
+
+
+--------------------------------------
+-- Refined ppDATE to input language --
+--------------------------------------
+
 

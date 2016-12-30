@@ -19,15 +19,9 @@ import Data.Either
 --import TranslatorActions
 
 
-upgradePPD :: Abs.AbsPPDATE -> UpgradePPD PPDATE
-upgradePPD appd = 
- let ppdate = upgradePPD' appd in
- case runStateT (upgradePPD' appd) emptyEnv of
-      Bad s        -> fail s
-      Ok (ppd,env) -> replacePInit ppdate
 
-upgradePPD' :: Abs.AbsPPDATE -> UpgradePPD PPDATE
-upgradePPD' (Abs.AbsPPDATE imports global temps cinvs consts methods) =
+upgradePPD :: Abs.AbsPPDATE -> UpgradePPD PPDATE
+upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
  do let imports' = genImports imports
     let methods' = genMethods methods
     case runStateT (genHTs consts imports') emptyEnv of
@@ -53,6 +47,10 @@ upgradePPD' (Abs.AbsPPDATE imports global temps cinvs consts methods) =
                                                           do put env''
                                                              return (PPDATE imports' global' temps' cinvs' consts' methods')
 
+
+--------------------
+-- PINIT property --
+--------------------
 
 replacePInit :: UpgradePPD PPDATE -> UpgradePPD PPDATE
 replacePInit ppd = 

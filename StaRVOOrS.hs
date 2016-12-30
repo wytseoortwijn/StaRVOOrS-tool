@@ -35,7 +35,7 @@ options =
 -------------
 
 version :: String
-version = "StaRVOOrS version 1.3"
+version = "StaRVOOrS version 1.35"
 
 ----------
 -- Main --
@@ -97,13 +97,14 @@ run flags java_fn_add ppdate_fn output_add =
                             checkOutputDirectory output_add'
                             createDirectoryIfMissing False output_add'      
                             createDirectoryIfMissing False (output_add' ++ "/workspace")
-                            let ppd = upgradePPD absppdate
+                            let pp  = upgradePPD absppdate
+                            let ppd = replacePInit pp
                             case runStateT ppd emptyEnv of
                                  Bad s -> putStrLn s
                                  Ok _  -> do ppd' <- programVariables ppd java_fn_add'
                                              ppdate <- programMethods ppd' java_fn_add'
                                              putStrLn "Initiating static verification of Hoare triples with KeY."
-                                             ppdate' <- staticAnalysis java_fn_add' ppdate output_add'                                
+                                             ppdate' <- staticAnalysis java_fn_add' ppdate output_add'
                                              putStrLn "Initiating monitor files generation."
                                              let larva_fn  = generateLarvaFileName ppdate_fn
                                              let larva_add = output_addr ++ "out/" ++ larva_fn
