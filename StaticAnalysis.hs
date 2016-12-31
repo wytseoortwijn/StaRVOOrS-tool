@@ -244,6 +244,7 @@ translateAction []  = ""
 translateAction act = 
  case ParAct.parse act of 
       Ok ac -> PrintAct.printTree (translateAct ac)
+      Bad s -> error s
 
 translateActInTemps :: Templates -> Templates
 translateActInTemps TempNil = TempNil

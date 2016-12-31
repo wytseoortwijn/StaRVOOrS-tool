@@ -261,7 +261,7 @@ writeTransitions pn ts (c:cs) states es env =
 
 getTransition :: Transition -> String
 getTransition (Transition q (Arrow e c act) q') =
-     q ++ " -> " ++ q' ++ " [" ++ e ++ " \\ "  ++ c ++ " \\ " ++ act ++ "]\n"
+     q ++ " -> " ++ q' ++ " [" ++ e ++ " \\ "  ++ c ++ " \\ " ++ (concat.lines) act ++ "]\n"
 
 getTransitionsGeneral :: HTriples -> States -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
 getTransitionsGeneral cs (States star acc bad nor) ts es env pn =

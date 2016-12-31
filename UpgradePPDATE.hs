@@ -7,6 +7,7 @@ import Control.Monad.Writer
 import qualified Control.Monad.State as CM
 import qualified Data.Map as Map
 import qualified Absppdate as Abs
+import qualified Absactions as Act
 import ErrM
 import Printppdate
 import qualified Printactions as PrintAct
@@ -131,7 +132,7 @@ getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ 
     let cns   = htsNames env
     trigs' <- getTriggers trigs
     let vars' = getVars vars
-    let prop' = getProperty prop (map tName trigs')
+    let prop' = getProperty prop (map tName trigs') env
     let ies'  = getActEvents ies    
     case runWriter prop' of
          (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
@@ -165,7 +166,7 @@ getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ 
     let cns   = htsNames env
     trigs' <- getTriggers trigs
     let vars' = getVars vars
-    let prop' = getProperty prop (map tName trigs')
+    let prop' = getProperty prop (map tName trigs') env
     let ies'  = getActEvents ies    
     case runWriter prop' of
          (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
@@ -423,10 +424,10 @@ getWhereClause (Abs.WhereClauseDef wexp) = (concat.lines.printTree) wexp
 
 -- Properties --
 
-getProperty :: Abs.Properties -> [Id] -> Writer (String,String) Property
-getProperty Abs.PropertiesNil _                                                = return PNIL
-getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms      = 
- let props' = getProperty props enms 
+getProperty :: Abs.Properties -> [Id] -> Env -> Writer (String,String) Property
+getProperty Abs.PropertiesNil _ _                                             = return PNIL
+getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms env = 
+ let props' = getProperty props enms env
  in case runWriter props' of
       (p, s) -> do tell s
                    return (PINIT { piName  = getIdAbs id
@@ -434,9 +435,9 @@ getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms      =
                                  , bounds  = map getIdAbs ids'
                                  , piProps = p
                                  })
-getProperty (Abs.ProperiesDef id (Abs.PropKindNormal states trans) props) enms =
- let props' = getProperty props enms
-     trans' = getTransitions (getIdAbs id) trans in
+getProperty (Abs.ProperiesDef id (Abs.PropKindNormal states trans) props) enms env =
+ let props' = getProperty props enms env
+     trans' = getTransitions (getIdAbs id) trans env in
  case runWriter trans' of
       (t,s') -> let ts = map (trigger.arrow) t
                 in case runWriter props' of
@@ -487,13 +488,13 @@ getInitCode :: Abs.InitialCode -> InitialCode
 getInitCode Abs.InitNil      = InitNil
 getInitCode (Abs.InitProg p) = InitProg (getJava p)
 
-getTransitions :: PropertyName -> Abs.Transitions -> Writer String Transitions
-getTransitions id (Abs.Transitions ts) = 
- sequence $ map (getTransition' id) ts
+getTransitions :: PropertyName -> Abs.Transitions -> Env -> Writer String Transitions
+getTransitions id (Abs.Transitions ts) env = 
+ sequence $ map (getTransition' id env) ts
 
-getTransition' :: PropertyName -> Abs.Transition -> Writer String Transition
-getTransition' id (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) = 
- case runWriter (getArrow ar) of
+getTransition' :: PropertyName -> Env -> Abs.Transition -> Writer String Transition
+getTransition' id env (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) = 
+ case runWriter (getArrow ar env) of
       (xs,s) -> do let err = "Error: Parsing error in an action of a transition from state " ++ getIdAbs q1 ++ " to state " 
                              ++ getIdAbs q2 ++ " in property " ++ id ++ ".\n"
                    let s' = if null s then "" else err
@@ -503,9 +504,9 @@ getTransition' id (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) =
                                       , toState = getIdAbs q2
                                       })
 
-getArrow :: Abs.Arrow -> Writer String Arrow
-getArrow (Abs.Arrow id Abs.Cond1)        = return $ Arrow { trigger = getIdAbs id, cond = "", action = "" }
-getArrow (Abs.Arrow id (Abs.Cond2 cond)) = 
+getArrow :: Abs.Arrow -> Env -> Writer String Arrow
+getArrow (Abs.Arrow id Abs.Cond1) _          = return $ Arrow { trigger = getIdAbs id, cond = "", action = "" }
+getArrow (Abs.Arrow id (Abs.Cond2 cond)) env = 
  case cond of
       Abs.CondExpDef cexp     -> return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = "" }
       Abs.CondAction cexp act -> 
@@ -513,8 +514,28 @@ getArrow (Abs.Arrow id (Abs.Cond2 cond)) =
         case ParAct.parse act' of 
              Bad s -> do tell s
                          return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = "Parse error" }
-             Ok ac -> return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = PrintAct.printTree ac }
-
+             Ok (Act.Actions ac) -> 
+                      case runWriter $ sequence (map (\a -> checkTempInCreate a env) ac) of
+                           (ac',s') -> do tell s'
+                                          return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = foldr (\ x xs -> x ++ "; " ++ xs) [] $ map PrintAct.printTree ac' }
+                  
+         
+checkTempInCreate :: Act.Action -> Env -> Writer String Act.Action
+checkTempInCreate ac@(Act.ActCreate (Act.Temp (Act.IdAct id) ) _) env = 
+ let tmpids = tempsId env
+ in if elem id tmpids
+    then do tell $ "Error: Template " ++ id ++ ", which is used in an action create does not exist.\n"
+            return Act.ActSkip
+    else return ac
+checkTempInCreate (Act.ActCond conds act) env = 
+ case runWriter $ checkTempInCreate act env of
+      (ac,s) -> do tell s
+                   return $ Act.ActCond conds ac
+checkTempInCreate (Act.ActBlock (Act.Actions acts)) env     = 
+ case runWriter $ sequence $ map (\act -> checkTempInCreate act env) acts of
+      (ac,s) -> do tell s
+                   return $ Act.ActBlock (Act.Actions ac)
+checkTempInCreate act env                     = return act
 
 ---------------
 -- Foreaches --
@@ -573,15 +594,17 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
  do trigs' <- getTriggers trs
     env <- get
     let cns   = htsNames env
-    let prop' = getProperty prop (map tName trigs')
+    let prop' = getProperty prop (map tName trigs') env
     let extrs = getExitTrsInfo trigs'
     let env' = env { exitTriggersInTemps = exitTriggersInTemps env ++ extrs }
     case runWriter prop' of
          (PNIL,_)                      -> fail $ "Error: The template " ++ getIdAbs id ++ " does not have a PROPERTY section.\n"
          (PINIT pname id' xs props,s)  -> 
                   let temptrs = splitOnIdentifier "," $ fst s
-                      s'      = snd s
-                  in if (null s')
+                      s'      = snd s ++ if props /= PNIL 
+                                         then "Error: In template " ++ getIdAbs id ++ ", a template should describe eonly one property.\n"
+                                         else "" 
+                  in if ((not.null) s')
                      then fail s'
                      else do put env' { triggersInTemps = triggersInTemps env ++ temptrs }
                              return $ Template { tempId        = getIdAbs id
@@ -597,7 +620,9 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                       normal  = checkAllHTsExist (getNormal states) cns pname
                       start   = checkAllHTsExist (getStarting states) cns pname
                       errs    = concat $ start ++ accep ++ bad ++ normal
-                      s'      = snd s ++ errs
+                      s'      = snd s ++ errs ++ if props /= PNIL 
+                                                 then "Error: In template " ++ getIdAbs id ++ ", a template should describe eonly one property.\n"
+                                                 else ""
                       temptrs = splitOnIdentifier "," $ fst s
                   in if ((not.null) s')
                      then fail s'
