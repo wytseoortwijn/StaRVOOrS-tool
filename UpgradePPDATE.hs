@@ -16,7 +16,7 @@ import qualified ParserAct as ParAct
 import qualified ParserJML as ParJML
 import Data.List
 import Data.Either
---import TranslatorActions
+import TranslatorActions
 
 
 
@@ -513,7 +513,6 @@ getArrow (Abs.Arrow id (Abs.Cond2 cond)) =
         case ParAct.parse act' of 
              Bad s -> do tell s
                          return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = "Parse error" }
-             --Ok ac -> return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = PrintAct.printTree (translateAct ac) }
              Ok ac -> return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = PrintAct.printTree ac }
 
 

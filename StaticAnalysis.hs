@@ -22,6 +22,9 @@ import System.FilePath
 import qualified Data.Map as Map
 import TypeInferenceXml
 import DL2JML
+import qualified Printactions as PrintAct
+import qualified ParserAct as ParAct
+import TranslatorActions
 
 
 -------------------------------
@@ -70,7 +73,7 @@ staticAnalysis' jpath ppd output_add fn =
                let xml'    = removeNoneHTs xml cns
                let ppdref  = refinePPDATE ppd xml'
                let ppdref' = prepareRefPPD ppdref
-               let ppdate' = replacePInit ppdref
+               let ppdate' = translateActions $ replacePInit ppdref
                let refFile = output_addr ++ generateRefPPDFileName fn
                writeFile refFile (writePPD ppdref')
                generateReport xml' output_addr
@@ -197,3 +200,56 @@ newHTriples (h:hts) =
  in if ((head.optimized) h == "(true)")
     then h:newHTriples hts
     else updatePre h pre':newHTriples hts
+
+
+translateActions :: UpgradePPD PPDATE -> UpgradePPD PPDATE
+translateActions ppd =
+ do ppdate <- ppd
+    return $ translateActInPPD ppdate
+
+translateActInPPD :: PPDATE -> PPDATE
+translateActInPPD (PPDATE imps global temps cinvs hts ms) = 
+ PPDATE imps (translateActInGlobal global) temps cinvs hts ms
+
+
+translateActInGlobal :: Global -> Global
+translateActInGlobal (Global ctxt) = Global (translateActInCtxt ctxt)
+
+translateActInCtxt :: Context -> Context
+translateActInCtxt ctxt = 
+ let prop' = translateActInProps (property ctxt)
+     fors' = translateActInFors (foreaches ctxt)
+ in updateCtxtProps (updateCtxtFors ctxt fors') prop'
+ 
+translateActInProps :: Property -> Property
+translateActInProps PNIL                          = PNIL
+translateActInProps (PINIT nm tmp bnds props)     = PINIT nm tmp bnds (translateActInProps props)
+translateActInProps (Property nm sts trans props) = Property nm sts (translateActInTrans trans) (translateActInProps props)
+
+translateActInFors :: Foreaches -> Foreaches
+translateActInFors = map translateActInFor
+
+translateActInFor :: Foreach -> Foreach
+translateActInFor (Foreach args ctxt) = Foreach args (translateActInCtxt ctxt)
+
+translateActInTrans :: Transitions -> Transitions
+translateActInTrans = map translateActInTran
+
+translateActInTran :: Transition -> Transition
+translateActInTran (Transition q (Arrow tr cond act) q') =
+ Transition q (Arrow tr cond (translateAction act)) q'
+
+translateAction :: Action -> Action
+translateAction []  = ""
+translateAction act = 
+ case ParAct.parse act of 
+      Ok ac -> PrintAct.printTree (translateAct ac)
+
+translateActInTemps :: Templates -> Templates
+translateActInTemps TempNil = TempNil
+translateActInTemps (Temp tmps) = Temp $ map translateActInTemp tmps
+
+translateActInTemp :: Template -> Template
+translateActInTemp tmp = 
+ updateTemplateProp tmp (translateActInProps $ tempProp tmp)
+
