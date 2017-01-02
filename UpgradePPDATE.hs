@@ -555,7 +555,8 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                                          else "" 
                   in if ((not.null) s')
                      then fail s'
-                     else do put env' { triggersInTemps = triggersInTemps env ++ temptrs }
+                     else do put env' { triggersInTemps = triggersInTemps env ++ temptrs 
+                                      , actes           = actes env ++ map show (getActEvents ies)}
                              return $ Template { tempId        = getIdAbs id
                                                , tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
                                                , tempVars      = getVars vars
@@ -575,7 +576,8 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                       temptrs = splitOnIdentifier "," $ fst s
                   in if ((not.null) s')
                      then fail s'
-                     else do put env' { triggersInTemps = triggersInTemps env ++ temptrs }
+                     else do put env' { triggersInTemps = triggersInTemps env ++ temptrs 
+                                      , actes           = actes env ++ map show (getActEvents ies)}
                              return $ Template { tempId       = getIdAbs id
                                                , tempBinds    = map ((uncurry makeArgs).getArgsAbs) args
                                                , tempVars     = getVars vars
