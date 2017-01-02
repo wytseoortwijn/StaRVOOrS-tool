@@ -84,11 +84,11 @@ getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ 
     let prop' = getProperty prop (map tName trigs') env
     let ies'  = getActEvents ies    
     case runWriter prop' of
-         (PNIL,_)                              -> do put env { actes = actes env ++ map show ies'}
-                                                     getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
+         (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
          (PINIT pname id xs props,s)           -> 
-                  let s'  = if (not.null) (fst s)
-                            then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
+                  let trs = addComma [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
+                      s'  = if (not.null) trs
+                            then "Error: Triggers [" ++ trs ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
                                  ++ snd s
                             else snd s
                       s'' = if elem id (tempsId env)
@@ -104,12 +104,13 @@ getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ 
                       normal = checkAllHTsExist (getNormal states) cns pname
                       start  = checkAllHTsExist (getStarting states) cns pname
                       errs   = concat $ start ++ accep ++ bad ++ normal
-                      s'     = if (not.null) (fst s)
-                               then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
+                      trs    = addComma [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
+                      s'     = if (not.null) trs
+                               then "Error: Triggers [" ++ trs ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
                                      ++ snd s ++ errs
                                else snd s ++ errs
                   in if (null s')
-                     then  getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) [])
+                     then getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) [])
                      else fail s'
 getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ _) foreaches) 1 =
  do env <- get
@@ -119,10 +120,13 @@ getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ 
     let prop' = getProperty prop (map tName trigs') env
     let ies'  = getActEvents ies    
     case runWriter prop' of
-         (PNIL,_)                              -> do put env { actes = actes env ++ map show ies'}
-                                                     getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
+         (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
          (PINIT pname id xs props,s)           -> 
-                  let s'  = snd s                            
+                  let trs = addComma [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
+                      s'  = if (not.null) trs
+                            then "Error: Triggers [" ++ trs ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
+                                 ++ snd s
+                            else snd s
                       s'' = if elem id (tempsId env)
                             then ""
                             else "Error: In the definition of property " ++ pname
@@ -136,9 +140,13 @@ getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ 
                       normal = checkAllHTsExist (getNormal states) cns pname
                       start  = checkAllHTsExist (getStarting states) cns pname
                       errs   = concat $ start ++ accep ++ bad ++ normal
-                      s'     = snd s ++ errs
+                      trs    = addComma [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
+                      s'     = if (not.null) trs
+                               then "Error: Triggers [" ++ trs ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
+                                     ++ snd s ++ errs
+                               else snd s ++ errs
                   in if (null s')
-                     then  getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) [])
+                     then getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) [])
                      else fail s'
 getCtxt _ _ = fail "Error: Triggers, action events or variables, cannot be defined before a global FOREACH.\n"
 
@@ -502,7 +510,9 @@ getForeaches (Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ (Abs.ForeachesDef args actxt 
  fail "Error: StaRVOOrS does not support nested Foreaches.\n"
 getForeaches afors@(Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ Abs.ForeachesNil) _) ctxt = 
  let afors' = prepareForeaches afors
- in do fors <- sequence $ map getForeach afors'
+ in do env <- get
+       put env { actes = actes env ++ map show (actevents ctxt)} 
+       fors <- sequence $ map getForeach afors'
        return (updateCtxtFors ctxt fors)       
 
 prepareForeaches :: Abs.Foreaches -> [Abs.Foreaches]
