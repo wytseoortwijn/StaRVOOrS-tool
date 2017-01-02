@@ -5,6 +5,7 @@ import CommonFunctions
 import DL2JML
 import qualified Data.Map as Map
 import UpgradePPDATE
+import Data.List
 
 -----------------------
 -- ppDATE refinement --
@@ -12,50 +13,54 @@ import UpgradePPDATE
 
 refinePPDATE :: UpgradePPD PPDATE -> [Proof] -> UpgradePPD PPDATE
 refinePPDATE ppd proofs = 
- let ppdate                = getValue ppd 
-     consts                = htsGet ppdate
-     nproved               = filter (\(x,y,z,t) -> (not.null) z) $ map getInfoFromProof proofs
-     proved                = filter (\(x,y,z,t) -> (null z)) $ map getInfoFromProof proofs
-     consts'               = [c | c <- consts, (x,y,z,t) <- nproved, htName c == y]  
-     cproved               = [c | c <- consts, (x,y,z,t) <- proved, htName c == y]  
-     ppd'                  = generateNewTriggers ppd consts'
-     ppdate'               = getValue ppd'
-     global                = globalGet ppdate'
-     triggers'             = getAllTriggers global 
-     consts''              = updateHTs nproved consts' triggers'
-     env'                  = getEnvVal ppd'     
-     global'               = globalGet ppdate'
-     (consts''', global'') = optimizedProvenHTs cproved global'
+ let ppdate    = getValue ppd 
+     consts    = htsGet ppdate
+     nproved   = filter (\(x,y,z,t) -> (not.null) z) $ map getInfoFromProof proofs
+     proved    = filter (\(x,y,z,t) -> (null z)) $ map getInfoFromProof proofs
+     consts'   = [c | c <- consts, (x,y,z,t) <- nproved, htName c == y]  
+     cproved   = [c | c <- consts, (x,y,z,t) <- proved, htName c == y]  
+     ppd'      = generateNewTriggers ppd consts'
+     ppdate'   = getValue ppd'
+     global    = globalGet ppdate'
+     triggers' = getAllTriggers global 
+     consts''  = updateHTs nproved consts' triggers'
+     env'      = getEnvVal ppd'     
+     global'   = optimizedProvenHTs cproved refinePropertyOptGlobal global
+     temps     = templatesGet ppdate'
+     temps'    = optimizedProvenHTs cproved refinePropertyOptTemplates temps
+     ppdate''  = updateTemplatesPP (updateHTsPP (updateGlobalPP ppdate' global') consts'') temps'
  in do put env'
-       return $ PPDATE (importsGet ppdate') global'' (cinvariantsGet ppdate') (consts'''++consts'') (methodsGet ppdate')
+       return ppdate''
 
 --------------------------------------------------
 -- Remove Hoare triples which were fully proved --
 --------------------------------------------------
 
-optimizedProvenHTs :: HTriples -> Global -> (HTriples, Global)
-optimizedProvenHTs [] ps     = ([], ps)
-optimizedProvenHTs (c:cs) ps = if (null $ optimized c)
-                                     then (a, refinePropertyOpt (htName c) b)
-                                     else (c:a, b)
-                                           where (a, b) = optimizedProvenHTs cs ps
+optimizedProvenHTs :: HTriples -> (HTName -> a -> a) -> a -> a
+optimizedProvenHTs [] f ps     = ps
+optimizedProvenHTs (c:cs) f ps = f (htName c) $ optimizedProvenHTs cs f ps
 
-refinePropertyOpt :: HTName -> Global -> Global
-refinePropertyOpt cn (Global (Ctxt vars ies trigs prop fors)) = 
- let prop' = removeStatesProp cn prop
- in case fors of
-         []                  -> Global (Ctxt vars ies trigs prop' [])
-         [Foreach args ctxt] -> Global (Ctxt vars ies trigs prop' [Foreach args (refineContext cn ctxt)])
+refinePropertyOptTemplates :: HTName -> Templates -> Templates
+refinePropertyOptTemplates _ TempNil       = TempNil
+refinePropertyOptTemplates cn (Temp temps) = Temp $ map (refineTemplate cn) temps
+
+refineTemplate :: HTName -> Template -> Template
+refineTemplate cn temp = updateTemplateProp temp (removeStatesProp cn $ tempProp temp)
+
+refinePropertyOptGlobal :: HTName -> Global -> Global
+refinePropertyOptGlobal cn (Global ctxt) = Global $ refineContext cn ctxt
 
 refineContext :: HTName -> Context -> Context
 refineContext cn (Ctxt vars ies trigs prop fors) = 
  let prop' = removeStatesProp cn prop
- in case fors of
-         []                  -> Ctxt vars ies trigs prop' [] 
-         [Foreach args ctxt] -> Ctxt vars ies trigs prop' [Foreach args (refineContext cn ctxt)] 
+ in Ctxt vars ies trigs prop' (map (refineForeach cn) fors)
+
+refineForeach :: HTName -> Foreach -> Foreach
+refineForeach cn (Foreach args ctxt) = Foreach args (refineContext cn ctxt)
 
 removeStatesProp :: HTName -> Property -> Property
-removeStatesProp _ PNIL  = PNIL
+removeStatesProp _ PNIL               = PNIL
+removeStatesProp _ p@(PINIT _ _ _ _)  = p
 removeStatesProp cn prop = let States acc bad nor star = pStates prop
                                acc'  = map (\s -> removeStateProp s cn) acc
                                bad'  = map (\s -> removeStateProp s cn) bad
@@ -89,9 +94,8 @@ updateHT (mn,cn,pres,path) (c:cs) es =
  if (htName c == cn && (snd.methodCN) c == mn)
  then if (null pres)
       then c:updateHT (mn,cn,pres,path) cs es
-      else let clvar = getClassVar c es EVEntry
-               pres' = removeDuplicates pres
-               opt'  = map (addParenthesisNot.(replaceSelfWith clvar).removeDLstrContent) pres'
+      else let pres' = removeDuplicates pres
+               opt'  = map (addParenthesisNot.removeDLstrContent) pres'
                opt'' = '(':introduceOr opt' ++ [')']
                c'    = updatePath (updateOpt c [opt'']) path
                c''   = updatePre c' $ removeDLstrContent (pre c)
@@ -104,8 +108,37 @@ getClassVar c es ev = lookupClassVar es c ev
 
 -- returns variable name used to instantiate the class in the ppDATE
 lookupClassVar :: Triggers -> HT -> TriggerVariation -> String
-lookupClassVar [] _ _      = ""
-lookupClassVar (e:es) c ev = 
+lookupClassVar trs c ev = 
+ let trs' = filterTriggers trs c ev
+ in case getGeneratedExTr trs' of
+         []   -> getExTr trs' c ev
+         [id] -> id
+
+filterTriggers :: Triggers -> HT -> TriggerVariation -> Triggers
+filterTriggers [] _ _      = []
+filterTriggers (e:es) c ev = 
+ case (compTrigger e) of
+      NormalEvent (BindingVar b) id _ ev' -> 
+                  if (id == snd (methodCN c) && compareEV ev ev')
+                  then e:filterTriggers es c ev
+                  else filterTriggers es c ev
+      _                                   -> filterTriggers es c ev
+
+getGeneratedExTr :: Triggers -> [String]
+getGeneratedExTr []       = []
+getGeneratedExTr (tr:trs) = 
+  case (compTrigger tr) of
+      NormalEvent (BindingVar b) id _ ev' -> 
+                  if (isSuffixOf "_ppdex" (tName tr))
+                  then case b of
+                            BindStar      -> []
+                            BindType _ id -> [id]
+                            BindId id     -> [id]
+                  else getGeneratedExTr trs
+
+getExTr :: Triggers -> HT -> TriggerVariation -> String
+getExTr [] _ _      = ""
+getExTr (e:es) c ev = 
  case (compTrigger e) of
       NormalEvent (BindingVar b) id _ ev' -> 
                   if (id == snd (methodCN c) && compareEV ev ev')
@@ -113,17 +146,9 @@ lookupClassVar (e:es) c ev =
                             BindStar      -> ""
                             BindType _ id -> id
                             BindId id     -> id
-                  else lookupClassVar es c ev
-      ClockEvent id _        -> if (id == snd (methodCN c))
-                                then ""
-                                else lookupClassVar es c ev
-      OnlyId id              -> if (id == snd (methodCN c))
-                                then ""
-                                else lookupClassVar es c ev
-      OnlyIdPar id           -> if (id == snd (methodCN c))
-                                then ""
-                                else lookupClassVar es c ev
-      otherwise              -> lookupClassVar es c ev
+                  else getExTr es c ev
+      _                                   -> getExTr es c ev
+
 
 compareEV :: TriggerVariation -> TriggerVariation -> Bool
 compareEV EVEntry EVEntry         = True
@@ -134,7 +159,6 @@ compareEV _ _                     = False
 -- Generate triggers whenever a method to be runtime verified is not associated to one --
 -----------------------------------------------------------------------------------------
 
---TODO: Fix this method if classes with the same name in different paths are allowed
 --If trigger associated to *, it will be considered as defined even if the the class is wrong
 generateNewTriggers :: UpgradePPD PPDATE -> HTriples -> UpgradePPD PPDATE
 generateNewTriggers ppd consts =
@@ -142,8 +166,8 @@ generateNewTriggers ppd consts =
      let ppdate  = getValue ppd     
      let mfiles  = methodsInFiles env
      let mns     = removeDuplicates [mn | mn <- map methodCN consts]
-     let entry   = filterDefinedTriggers (entryTriggersInfo env) mns
-     let exit    = filterDefinedTriggers (exitTriggersInfo env) mns
+     let entry   = filterDefinedTriggers (entryTriggersInfo env) env 0 mns
+     let exit    = filterDefinedTriggers (exitTriggersInfo env) env 1 mns
      let entry'  = [(x,y,head $ filter (\(a,b,c) -> y == b) z) | (x,y) <- entry, (_,d,z) <- mfiles,d==x]
      let exit'   = [(x,y,head $ filter (\(a,b,c) -> y == b) z) | (x,y) <- exit, (_,d,z) <- mfiles,d==x]
      let (env',ppdate')   = addNewTriggerEntry env ppdate 0 entry'
@@ -151,29 +175,32 @@ generateNewTriggers ppd consts =
      put env''
      return ppdate''
 
-     
-filterDefinedTriggers :: Map.Map ClassInfo MapTrigger -> [(ClassInfo,MethodName)] -> [(ClassInfo,MethodName)]
-filterDefinedTriggers mci []           = []
-filterDefinedTriggers mci ((ci,mn):xs) = 
- case Map.lookup ci mci of
-      Nothing -> case Map.lookup "*" mci of
-                      Nothing -> (ci,mn):filterDefinedTriggers mci xs
-                      Just m'  -> case Map.lookup mn m' of
-                                       Nothing -> (ci,mn):filterDefinedTriggers mci xs
-                                       Just _  -> filterDefinedTriggers mci xs
-      Just m  -> case Map.lookup mn m of
-                      Nothing -> case Map.lookup "*" mci of
-                                      Nothing -> (ci,mn):filterDefinedTriggers mci xs
-                                      Just m'  -> case Map.lookup mn m' of
-                                                       Nothing -> (ci,mn):filterDefinedTriggers mci xs
-                                                       Just _  -> filterDefinedTriggers mci xs
-                      Just _  -> filterDefinedTriggers mci xs
+
+filterDefinedTriggers :: Map.Map ClassInfo MapTrigger -> Env -> Integer -> [(ClassInfo,MethodName)] -> [(ClassInfo,MethodName)]
+filterDefinedTriggers _ _ _ []               = []
+filterDefinedTriggers mci env n ((ci,mn):xs) =
+ if elem (ci,mn) (exitTriggersInTemps env) && n == 1
+ then (ci,mn):filterDefinedTriggers mci env n xs
+ else 
+   case Map.lookup ci mci of
+        Nothing -> case Map.lookup "*" mci of
+                        Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
+                        Just m'  -> case Map.lookup mn m' of
+                                         Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
+                                         Just _  -> filterDefinedTriggers mci env n xs
+        Just m  -> case Map.lookup mn m of
+                        Nothing -> case Map.lookup "*" mci of
+                                        Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
+                                        Just m'  -> case Map.lookup mn m' of
+                                                         Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
+                                                         Just _  -> filterDefinedTriggers mci env n xs
+                        Just _  -> filterDefinedTriggers mci env n xs
 
 --Creates the info to be added in the environment and the ppDATE about the new entry trigger
 createTriggerEntry :: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> ((ClassInfo,MethodName,(Id, String, [Args])),TriggerDef)
 createTriggerEntry (cn,mn,(rt,mn',xs)) n = 
  if (mn == mn')
- then let trnm = mn ++ "_en"
+ then let trnm = mn ++ "_ppden"
           nvar = "cv" ++ "_" ++ (show n)
           cn'  = cn ++ " " ++ nvar
           cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) EVEntry
@@ -190,12 +217,12 @@ addNewTriggerEntry env ppdate n (x:xs) =
      v      = (\(x,y,z) -> z) p 
      cl     = makeBind $ (\(x,y,z) -> y) v
   in case Map.lookup cn (entryTriggersInfo env) of
-      Nothing -> let mapeinfo' =  Map.insert mn v Map.empty
+      Nothing -> let mapeinfo' =  Map.insert mn [v] Map.empty
                      ppdate'   = addTrigger2ppDATE tr ppdate 
                  in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
                                             , allTriggers = (tName tr,mn,EVEntry,cl:args tr):allTriggers env}) ppdate' (n+1) xs
       Just mapeinfo -> 
-           let mapeinfo' = Map.insert mn v mapeinfo
+           let mapeinfo' = updateInfo mapeinfo mn v 
                ppdate'   = addTrigger2ppDATE tr ppdate 
            in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
                                       , allTriggers = (tName tr,mn,EVEntry, cl:args tr):allTriggers env}) ppdate' (n+1) xs
@@ -203,7 +230,7 @@ addNewTriggerEntry env ppdate n (x:xs) =
 --Creates the info to be added in the environment and the ppDATE about the new exit trigger
 createTriggerExit:: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> ((ClassInfo,MethodName,(Id, String, [Args])), TriggerDef)
 createTriggerExit (cn,mn,(rt,mn',xs)) n = 
- let trnm = mn ++ "_ex" 
+ let trnm = mn ++ "_ppdex" 
      nvar = "cv" ++ "_" ++ (show n)
      cn'  = cn ++ " " ++ nvar
      ret  = "ret_ppd" ++ (show n) in
@@ -226,21 +253,33 @@ addNewTriggerExit env ppdate n (x:xs) =
      v      = (\(x,y,z) -> z) p 
      cl     = makeBind $ (\(x,y,z) -> y) v
  in case Map.lookup cn (exitTriggersInfo env) of
-      Nothing -> let mapeinfo' = Map.insert mn v Map.empty
+      Nothing -> let mapeinfo' = Map.insert mn [v] Map.empty
                      ppdate'   = addTrigger2ppDATE tr ppdate 
                  in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
                                            , allTriggers = (tName tr,mn, getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs
       Just mapeinfo -> 
-           let mapeinfo' = Map.insert mn v mapeinfo
+           let mapeinfo' = updateInfo mapeinfo mn v 
                ppdate'   = addTrigger2ppDATE tr ppdate 
            in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
                                      , allTriggers = (tName tr,mn, getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs
 
 addTrigger2ppDATE :: TriggerDef -> PPDATE -> PPDATE
-addTrigger2ppDATE tr (PPDATE imp (Global (Ctxt vars ies trs p for)) ci consts ms) =
- PPDATE imp (Global (Ctxt vars ies (tr:trs) p for)) ci consts ms
+addTrigger2ppDATE tr (PPDATE imp (Global (Ctxt [] [] [] PNIL (f:fs))) temps ci consts ms) =
+ PPDATE imp (Global (Ctxt [] [] [] PNIL (addTrigger2Foreach (f:fs) tr))) temps ci consts ms
+addTrigger2ppDATE tr (PPDATE imp (Global (Ctxt vars ies trs p for)) temps ci consts ms) =
+ PPDATE imp (Global (Ctxt vars ies (tr:trs) p for)) temps ci consts ms
+
+addTrigger2Foreach :: Foreaches -> TriggerDef -> Foreaches
+addTrigger2Foreach [Foreach [Args t id] (Ctxt vars ies trs p for)] tr = 
+ [Foreach [Args t id] (Ctxt vars ies (trs ++ [updateWhereTr tr (Args t id)]) p for)]
+
+updateWhereTr :: TriggerDef -> Args -> TriggerDef
+updateWhereTr (TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) w) (Args t id) = 
+ if t == cn
+ then TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) (id ++ " = " ++ cl ++ ";")
+ else TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) (id ++ " = null ;")
 
 makeBind :: String -> Bind
-makeBind [] = error "f"
+makeBind [] = error "Cannot make bind\n."
 makeBind s  = (\[x,y] -> BindType x y) $ words s
 

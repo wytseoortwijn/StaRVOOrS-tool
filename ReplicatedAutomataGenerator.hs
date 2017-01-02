@@ -14,16 +14,18 @@ generateRA = makeReplicateAutomaton
 makeReplicateAutomaton :: HT -> Int -> Env -> Property
 makeReplicateAutomaton c n env = 
  Property (htName c)
-          (States [State "postOK" InitNil []] 
+          (States [State "start" InitNil []] 
+                  [State "postOK" InitNil []] 
                   [State "bad" InitNil []] 
-                  [State "idle" InitNil []] 
-                  [State "start" InitNil []])
+                  [State "idle" InitNil []])
           (makeTransitions c n env)
           PNIL
 
 makeTransitions :: HT -> Int -> Env -> Transitions
 makeTransitions c n env =
-   let trig    = lookForExitTrigger (allTriggers env) (snd $ methodCN c)
+   let mn      = snd $ methodCN c
+       trigs   = lookForExitTrigger (allTriggers env) mn
+       trig    = getGenTrEx trigs mn
        esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
        cn      = htName c
        oldExpM = oldExpTypes env
@@ -32,7 +34,7 @@ makeTransitions c n env =
                  then ""
                  else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
        checkId = "id.equals(idAux) && "
-       zs      = getOldExpr oldExpM cn  
+       zs      = if getOldExpr oldExpM cn == "" then "" else ",oldExpAux"
        nvar    = if null zs then "" else "CopyUtilsPPD.copy(MessagesOld_" ++ cn ++ ".getOldExpr(msg),oldExpAux); "
        idle_to_postok = Arrow trig (checkId ++ "HoareTriplesPPD." ++ cn ++ "_post(" ++ arg ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_postOK \\n \");")
        idle_to_bad    = Arrow trig (checkId ++ "!HoareTriplesPPD." ++ cn ++ "_post(" ++ arg ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_bad \\n \");")
@@ -42,3 +44,8 @@ makeTransitions c n env =
       Transition "idle" idle_to_bad "bad"
       ]
 
+
+getGenTrEx :: [Trigger] -> MethodName -> Trigger
+getGenTrEx trs mn = if elem (mn++"_ppdex") trs
+                    then mn++"_ppdex"
+                    else head trs

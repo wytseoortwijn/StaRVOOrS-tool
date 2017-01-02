@@ -10,7 +10,7 @@ module Absppdate where
 newtype Id = Id String deriving (Eq,Ord,Show,Read)
 newtype Symbols = Symbols String deriving (Eq,Ord,Show,Read)
 data AbsPPDATE =
-   AbsPPDATE Imports Global CInvariants HTriples Methods
+   AbsPPDATE Imports Global Templates CInvariants HTriples Methods
   deriving (Eq,Ord,Show,Read)
 
 data Imports =
@@ -30,7 +30,7 @@ data Global =
   deriving (Eq,Ord,Show,Read)
 
 data Context =
-   Ctxt Variables IEvents Triggers Properties Foreaches
+   Ctxt Variables ActEvents Triggers Properties Foreaches
   deriving (Eq,Ord,Show,Read)
 
 data Variables =
@@ -47,13 +47,13 @@ data VarModifier =
  | VarModifierNil
   deriving (Eq,Ord,Show,Read)
 
-data IEvents =
-   IEventsNil
- | IEventsDef [IEvent]
+data ActEvents =
+   ActEventsNil
+ | ActEventsDef [ActEvent]
   deriving (Eq,Ord,Show,Read)
 
-data IEvent =
-   IEvent Id
+data ActEvent =
+   ActEvent Id
   deriving (Eq,Ord,Show,Read)
 
 data Triggers =
@@ -109,11 +109,16 @@ data Vars =
 
 data Properties =
    PropertiesNil
- | ProperiesDef Id States Transitions Properties
+ | ProperiesDef Id PropKind Properties
+  deriving (Eq,Ord,Show,Read)
+
+data PropKind =
+   PropKindNormal States Transitions
+ | PropKindPinit Id [Id]
   deriving (Eq,Ord,Show,Read)
 
 data States =
-   States Accepting Bad Normal Starting
+   States Starting Accepting Bad Normal
   deriving (Eq,Ord,Show,Read)
 
 data Accepting =
@@ -166,7 +171,12 @@ data Transition =
   deriving (Eq,Ord,Show,Read)
 
 data Arrow =
-   Arrow Id Condition
+   Arrow Id Actmark Condition
+  deriving (Eq,Ord,Show,Read)
+
+data Actmark =
+   ActMarkNil
+ | ActMark
   deriving (Eq,Ord,Show,Read)
 
 data Condition =
@@ -180,12 +190,25 @@ data Cond =
   deriving (Eq,Ord,Show,Read)
 
 data Action =
-   Action Java
+   Action Expressions
   deriving (Eq,Ord,Show,Read)
 
 data Foreaches =
    ForeachesNil
- | ForeachesDef [Args] Context
+ | ForeachesDef [Args] Context Foreaches
+  deriving (Eq,Ord,Show,Read)
+
+data Templates =
+   Temps [Template]
+ | TempsNil
+  deriving (Eq,Ord,Show,Read)
+
+data Template =
+   Temp Id [Args] BodyTemp
+  deriving (Eq,Ord,Show,Read)
+
+data BodyTemp =
+   Body Variables ActEvents Triggers Properties
   deriving (Eq,Ord,Show,Read)
 
 data CInvariants =
@@ -308,54 +331,30 @@ data VarExp =
  | VarExpNil
   deriving (Eq,Ord,Show,Read)
 
+data Expressions =
+   ExpId Id Expressions
+ | ExpSymb Symbols Expressions
+ | ExpInt Integer Expressions
+ | ExpDouble Double Expressions
+ | ExpTimes Expressions
+ | ExpDot Expressions
+ | ExpBrack Expressions Expressions
+ | ExpParent Expressions Expressions
+ | ExpCorchete Expressions Expressions
+ | ExpEq Expressions
+ | ExpSemiColon Expressions
+ | ExpBSlash Expressions
+ | ExpComma Expressions
+ | ExpSlash Expressions
+ | ExpBar Expressions
+ | ExpNil
+  deriving (Eq,Ord,Show,Read)
+
 data Java =
-   JavaId Id Java
- | JavaSymb Symbols Java
- | JavaInt Integer Java
- | JavaDouble Double Java
- | JavaTimes Java
- | JavaDot Java
- | JavaBrack Java Java
- | JavaParent Java Java
- | JavaCorchete Java Java
- | JavaEq Java
- | JavaSemiColon Java
- | JavaBSlash Java
- | JavaComma Java
- | JavaSlash Java
- | JavaBar Java
- | JavaNil
+   Java Expressions
   deriving (Eq,Ord,Show,Read)
 
 data JML =
-   JMLId Id JML
- | JMLMath Symbols JML
- | JMLInt Integer JML
- | JMLDouble Double JML
- | JMLTimes JML
- | JMLDot JML
- | JMLBrack JML JML
- | JMLParent JML JML
- | JMLCorchete JML JML
- | JMLSemiColon JML
- | JMLEq JML
- | JMLComma JML
- | JMLSlash JML
- | JMLBar JML
- | JMLBackS JML
- | JMLOld JML JML
- | JMLRes JML
- | JMLForallRT Type Id BodyF JML
- | JMLExistsRT Type Id BodyF JML
- | JMLNil
-  deriving (Eq,Ord,Show,Read)
-
-data BodyF =
-   BodyF RangeTerm
-  deriving (Eq,Ord,Show,Read)
-
-data RangeTerm =
-   RangeTerm JML JML
- | OnlyRange JML
+   JML Expressions
   deriving (Eq,Ord,Show,Read)
 

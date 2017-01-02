@@ -1,4 +1,4 @@
-module ParserJML where
+module JMLGenerator where
 
 import Types
 import UpgradePPDATE

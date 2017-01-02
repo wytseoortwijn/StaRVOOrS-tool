@@ -28,6 +28,7 @@ inferTypesOldExprs ppd jpath output_add =
              xml_add = output_add ++ "tmp.xml"
          in if (null [y | x <- toXml', y <- oldExprs x, inferType y == ""])
             then do let oldExpTypes = foldr (\x xs -> Map.insert (htID x) (map toTuple $ oldExprs x) xs) Map.empty toXml'
+                    generateXmlFile toXml' jpath xml_add
                     return oldExpTypes
             else do generateXmlFile toXml' jpath xml_add
                     javaExprReader xml_add output_add
@@ -146,12 +147,12 @@ generateOldExpr (c:cs) jpath =
      classI = fst $ methodCN c
      path   = jpath
      tar    = path2it c
-     mn = snd $ methodCN c
+     mn     = snd $ methodCN c
      xs     = splitOnIdentifier "\\old(" p
  in if (length xs == 1)
     then generateOldExpr cs jpath
     else let ys    = tail xs
-             zs    = removeDuplicates $ map ((\(x,y) -> trim (tail x)) . (splitAtClosingParen 0)) ys
+             zs    = removeDuplicates $ map (trim . fst . (splitAtClosingParen 0)) ys
              xs'   = foldr (\x xs -> (OExpr x ""):xs) [] zs
          in (OldExpr cn classI tar path mn xs'):generateOldExpr cs jpath
 

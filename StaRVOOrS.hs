@@ -35,7 +35,7 @@ options =
 -------------
 
 version :: String
-version = "StaRVOOrS version 1.3"
+version = "StaRVOOrS 1.35"
 
 ----------
 -- Main --
@@ -51,24 +51,25 @@ main =
         do s <- isPPDATEfile ppdate_fn
            if (s == "")
            then do ppdate_txt <- readFile ppdate_fn
-                   let ppdateP = parse ppdate_txt
-                   case ppdateP of
+                   case parse ppdate_txt of
                         Bad s        -> putStrLn $ "\nThe parsing has failed: " ++ s ++ "\n"
-                        Ok absppdate -> putStrLn "\nThe parsing was successful.\n"
+                        Ok absppdate -> let ppd = upgradePPD absppdate in
+                                        case runStateT ppd emptyEnv of
+                                             Bad s -> putStrLn $ "\nThe parsing has failed: " ++ s ++ "\n"
+                                             Ok _  -> putStrLn "\nThe parsing was successful.\n"
            else putStrLn s
       ([],[java_fn_add, ppdate_fn, output_add],[]) -> run [] java_fn_add ppdate_fn output_add      
       (_,_,[]) -> do
                      name <- getProgName
                      putStrLn ("Usage: " ++ name ++ " [-OPTIONS] <java_source_files_address> <ppDATE_file> <output_address>")
-      (_,_,errs) -> do xs <- sequence $ map putStrLn errs
-                       return ()
+      (_,_,errs) -> sequence_ $ map putStrLn errs
 
 
 --Runs StaRVOOrS --
 
 run :: [Flag] -> FilePath -> FilePath -> FilePath -> IO ()
 run flags java_fn_add ppdate_fn output_add =  
- do putStrLn "\nWelcome to StaRVOOrS\n"
+ do putStrLn $ "\nWelcome to StaRVOOrS " ++ version ++ "\n" 
     b2 <- doesDirectoryExist output_add
     b3 <- doesDirectoryExist java_fn_add
     if (not b3)
@@ -96,13 +97,13 @@ run flags java_fn_add ppdate_fn output_add =
                             checkOutputDirectory output_add'
                             createDirectoryIfMissing False output_add'      
                             createDirectoryIfMissing False (output_add' ++ "/workspace")
-                            let ppd = upgradePPD absppdate
+                            let ppd  = upgradePPD absppdate
                             case runStateT ppd emptyEnv of
                                  Bad s -> putStrLn s
                                  Ok _  -> do ppd' <- programVariables ppd java_fn_add'
                                              ppdate <- programMethods ppd' java_fn_add'
                                              putStrLn "Initiating static verification of Hoare triples with KeY."
-                                             ppdate' <- staticAnalysis java_fn_add' ppdate output_add'                                
+                                             ppdate' <- staticAnalysis java_fn_add' ppdate output_add' ppdate_fn
                                              putStrLn "Initiating monitor files generation."
                                              let larva_fn  = generateLarvaFileName ppdate_fn
                                              let larva_add = output_addr ++ "out/" ++ larva_fn

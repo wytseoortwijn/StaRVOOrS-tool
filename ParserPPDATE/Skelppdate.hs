@@ -21,7 +21,7 @@ transSymbols x = case x of
 
 transAbsPPDATE :: AbsPPDATE -> Result
 transAbsPPDATE x = case x of
-  AbsPPDATE imports global cinvariants htriples methods  -> failure x
+  AbsPPDATE imports global templates cinvariants htriples methods  -> failure x
 
 
 transImports :: Imports -> Result
@@ -46,7 +46,7 @@ transGlobal x = case x of
 
 transContext :: Context -> Result
 transContext x = case x of
-  Ctxt variables ievents triggers properties foreaches  -> failure x
+  Ctxt variables actevents triggers properties foreaches  -> failure x
 
 
 transVariables :: Variables -> Result
@@ -66,15 +66,15 @@ transVarModifier x = case x of
   VarModifierNil  -> failure x
 
 
-transIEvents :: IEvents -> Result
-transIEvents x = case x of
-  IEventsNil  -> failure x
-  IEventsDef ievents  -> failure x
+transActEvents :: ActEvents -> Result
+transActEvents x = case x of
+  ActEventsNil  -> failure x
+  ActEventsDef actevents  -> failure x
 
 
-transIEvent :: IEvent -> Result
-transIEvent x = case x of
-  IEvent id  -> failure x
+transActEvent :: ActEvent -> Result
+transActEvent x = case x of
+  ActEvent id  -> failure x
 
 
 transTriggers :: Triggers -> Result
@@ -141,12 +141,18 @@ transVars x = case x of
 transProperties :: Properties -> Result
 transProperties x = case x of
   PropertiesNil  -> failure x
-  ProperiesDef id states transitions properties  -> failure x
+  ProperiesDef id propkind properties  -> failure x
+
+
+transPropKind :: PropKind -> Result
+transPropKind x = case x of
+  PropKindNormal states transitions  -> failure x
+  PropKindPinit id ids  -> failure x
 
 
 transStates :: States -> Result
 transStates x = case x of
-  States accepting bad normal starting  -> failure x
+  States starting accepting bad normal  -> failure x
 
 
 transAccepting :: Accepting -> Result
@@ -211,7 +217,13 @@ transTransition x = case x of
 
 transArrow :: Arrow -> Result
 transArrow x = case x of
-  Arrow id condition  -> failure x
+  Arrow id actmark condition  -> failure x
+
+
+transActmark :: Actmark -> Result
+transActmark x = case x of
+  ActMarkNil  -> failure x
+  ActMark  -> failure x
 
 
 transCondition :: Condition -> Result
@@ -228,13 +240,29 @@ transCond x = case x of
 
 transAction :: Action -> Result
 transAction x = case x of
-  Action java  -> failure x
+  Action expressions  -> failure x
 
 
 transForeaches :: Foreaches -> Result
 transForeaches x = case x of
   ForeachesNil  -> failure x
-  ForeachesDef argss context  -> failure x
+  ForeachesDef argss context foreaches  -> failure x
+
+
+transTemplates :: Templates -> Result
+transTemplates x = case x of
+  Temps templates  -> failure x
+  TempsNil  -> failure x
+
+
+transTemplate :: Template -> Result
+transTemplate x = case x of
+  Temp id argss bodytemp  -> failure x
+
+
+transBodyTemp :: BodyTemp -> Result
+transBodyTemp x = case x of
+  Body variables actevents triggers properties  -> failure x
 
 
 transCInvariants :: CInvariants -> Result
@@ -379,59 +407,34 @@ transVarExp x = case x of
   VarExpNil  -> failure x
 
 
+transExpressions :: Expressions -> Result
+transExpressions x = case x of
+  ExpId id expressions  -> failure x
+  ExpSymb symbols expressions  -> failure x
+  ExpInt n expressions  -> failure x
+  ExpDouble d expressions  -> failure x
+  ExpTimes expressions  -> failure x
+  ExpDot expressions  -> failure x
+  ExpBrack expressions1 expressions2  -> failure x
+  ExpParent expressions1 expressions2  -> failure x
+  ExpCorchete expressions1 expressions2  -> failure x
+  ExpEq expressions  -> failure x
+  ExpSemiColon expressions  -> failure x
+  ExpBSlash expressions  -> failure x
+  ExpComma expressions  -> failure x
+  ExpSlash expressions  -> failure x
+  ExpBar expressions  -> failure x
+  ExpNil  -> failure x
+
+
 transJava :: Java -> Result
 transJava x = case x of
-  JavaId id java  -> failure x
-  JavaSymb symbols java  -> failure x
-  JavaInt n java  -> failure x
-  JavaDouble d java  -> failure x
-  JavaTimes java  -> failure x
-  JavaDot java  -> failure x
-  JavaBrack java1 java2  -> failure x
-  JavaParent java1 java2  -> failure x
-  JavaCorchete java1 java2  -> failure x
-  JavaEq java  -> failure x
-  JavaSemiColon java  -> failure x
-  JavaBSlash java  -> failure x
-  JavaComma java  -> failure x
-  JavaSlash java  -> failure x
-  JavaBar java  -> failure x
-  JavaNil  -> failure x
+  Java expressions  -> failure x
 
 
 transJML :: JML -> Result
 transJML x = case x of
-  JMLId id jml  -> failure x
-  JMLMath symbols jml  -> failure x
-  JMLInt n jml  -> failure x
-  JMLDouble d jml  -> failure x
-  JMLTimes jml  -> failure x
-  JMLDot jml  -> failure x
-  JMLBrack jml1 jml2  -> failure x
-  JMLParent jml1 jml2  -> failure x
-  JMLCorchete jml1 jml2  -> failure x
-  JMLSemiColon jml  -> failure x
-  JMLEq jml  -> failure x
-  JMLComma jml  -> failure x
-  JMLSlash jml  -> failure x
-  JMLBar jml  -> failure x
-  JMLBackS jml  -> failure x
-  JMLOld jml1 jml2  -> failure x
-  JMLRes jml  -> failure x
-  JMLForallRT type' id bodyf jml  -> failure x
-  JMLExistsRT type' id bodyf jml  -> failure x
-  JMLNil  -> failure x
-
-
-transBodyF :: BodyF -> Result
-transBodyF x = case x of
-  BodyF rangeterm  -> failure x
-
-
-transRangeTerm :: RangeTerm -> Result
-transRangeTerm x = case x of
-  RangeTerm jml1 jml2  -> failure x
-  OnlyRange jml  -> failure x
+  JML expressions  -> failure x
 
 
 

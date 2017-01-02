@@ -28,7 +28,7 @@ splitAtIdentifier :: Char -> String -> (String, String)
 splitAtIdentifier iden s = (takeWhile (\c -> not (c == iden)) s, dropWhile (\c -> not (c == iden)) s)
 
 splitAtClosingParen :: Int -> String -> (String, String)
-splitAtClosingParen n ""       = ("","")
+splitAtClosingParen _ ""       = ("","")
 splitAtClosingParen n ('(':xs) = 
  let (a,b) = splitAtClosingParen (n+1) xs
  in ('(':a,b)
@@ -51,21 +51,21 @@ checkIfParseErrors es = let (ls, rs) = partitionEithers es
                            else Right rs
 
 
-lookForExitTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> Trigger
-lookForExitTrigger [] mn                = error $ "Missing exit trigger for method " ++ mn ++ ".\n"
+lookForExitTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> [Trigger]
+lookForExitTrigger [] mn                = []
 lookForExitTrigger ((tr,mn',e,_):es) mn = 
     case e of
         EVExit _ -> if (mn == mn')
-                    then tr
+                    then tr:lookForExitTrigger es mn
                     else lookForExitTrigger es mn
         _        -> lookForExitTrigger es mn        
 
-lookForEntryTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> Trigger
-lookForEntryTrigger [] mn                = error $ "Missing exit trigger for method " ++ mn ++ ".\n"
+lookForEntryTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> [Trigger]
+lookForEntryTrigger [] mn                = []
 lookForEntryTrigger ((tr,mn',e,_):es) mn = 
     case e of
         EVEntry -> if (mn == mn')
-                   then tr
+                   then tr:lookForEntryTrigger es mn
                    else lookForEntryTrigger es mn
         _       -> lookForEntryTrigger es mn  
 
@@ -107,15 +107,13 @@ getListOfTypesAndMethods cl ((main, cl',ts):xs) = if (cl == cl')
                                                   else getListOfTypesAndMethods cl xs
 
 getListOfArgs :: MethodName -> [(Type, Id,[String])] -> [String]
-getListOfArgs mn []                  = []
+getListOfArgs mn []              = []
 getListOfArgs mn ((t,mn',ts):xs) = if (mn == mn') 
                                    then ts
                                    else getListOfArgs mn xs
 
 addComma :: [String] -> String
-addComma []       = ""
-addComma [xs]     = xs
-addComma (xs:xss) = xs ++ "," ++ addComma xss
+addComma = addComma'
 
 
 getConstTnv :: HT -> OldExprM -> Variables
@@ -157,6 +155,12 @@ lookfor [] _     = []
 lookfor (x:xs) e = if (fst x==e)
                    then snd x
                    else lookfor xs e
+
+lookforClVar :: PropertyName -> [(PropertyName, ClassInfo, String)] -> String
+lookforClVar pn []              = ""
+lookforClVar pn ((pn',_,cl):xs) = if pn == pn'
+                                  then cl
+                                  else lookforClVar pn xs
 
 ---------------------------------------
 -- Manipulating the parsed .xml file --
@@ -217,12 +221,14 @@ introduceOr (x:xs) = x ++ " || " ++ introduceOr xs
 
 
 getAllTriggers :: Global -> Triggers
-getAllTriggers (Global (Ctxt vars ies trigs prop []))                  = trigs
-getAllTriggers (Global (Ctxt vars ies trigs prop [Foreach args ctxt])) = trigs ++ getTriggersCtxt ctxt
+getAllTriggers (Global (Ctxt vars ies trigs prop fors)) = trigs ++ getTriggersFors fors
+
+getTriggersFors :: Foreaches -> Triggers
+getTriggersFors []     = []
+getTriggersFors (Foreach args ctxt:fs) = getTriggersCtxt ctxt ++ getTriggersFors fs
 
 getTriggersCtxt :: Context -> Triggers
-getTriggersCtxt (Ctxt vars ies trigs prop [])                  = trigs
-getTriggersCtxt (Ctxt vars ies trigs prop [Foreach args ctxt]) = trigs ++ getTriggersCtxt ctxt
+getTriggersCtxt (Ctxt vars ies trigs prop fors) = trigs ++ getTriggersFors fors
 
 
 makeAddFile :: Import -> IO (String, ClassInfo)

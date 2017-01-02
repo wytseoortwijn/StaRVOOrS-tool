@@ -1,5 +1,5 @@
 
-# StaRVOOrS 1.3
+# StaRVOOrS 1.35
 
 In order to work with the source code you have to install the following packages:
 

@@ -22,15 +22,14 @@ operationalizeOldResultBind ppd oldExprTypesM =
      methods  = map (\(x,y,z) -> (x,y,map (\(x,y,z) -> y) z)) mfiles
      es       = getAllTriggers global
      xs       = map (\ c -> operationalizePrePostORB c (varsInFiles env) es methods oldExprTypesM) consts
-     oldExpT  = Map.unions $ map (\(x,y,z) -> z) xs
-     consts'  = map (\(x,y,z) -> x) xs
-     newvars  = genNewVarsOld global (concat (map (\(x,y,z) -> y) xs))
-     global'  = updateGlobal global (Ctxt newvars (ievents $ ctxtGet global) (triggers $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
-     ppdate'  = ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ PPDATE (importsGet ppdate) global' (cinvariantsGet ppdate) consts' (methodsGet ppdate))
- in ppdate'
+     oldExpT  = Map.unions $ map snd xs
+     consts'  = map fst xs
+     global'  = updateGlobal global (Ctxt (variables $ ctxtGet global) (actevents $ ctxtGet global) (triggers $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
+ in ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ updateHTsPP (updateGlobalPP ppdate global') consts')
 
 
-operationalizePrePostORB :: HT -> [(String, ClassInfo, [(Type, Id)])] -> Triggers -> [(String, ClassInfo, [String])] -> Map.Map HTName [(String,Type)] -> (HT, Variables,OldExprM)
+
+operationalizePrePostORB :: HT -> [(String, ClassInfo, [(Type, Id)])] -> Triggers -> [(String, ClassInfo, [String])] -> Map.Map HTName [(String,Type)] -> (HT,OldExprM)
 operationalizePrePostORB c vars trigs methods oldExprTypesM = 
  let cn                  = htName c
      p                   = pre c
@@ -38,17 +37,16 @@ operationalizePrePostORB c vars trigs methods oldExprTypesM =
      (xsPost, oldExprl)  = operationalizeOld p' cn
      ysPost              = operationalizeResult xsPost
      oldExprl'           = addType2NewVars cn oldExprTypesM oldExprl
-     tvars               = getConstTnv c (Map.singleton cn oldExprl'')
-     const'              = updatePost c ysPost
+     c'                  = updatePost c ysPost
      oldExprl''          = bindOldExp c vars trigs methods oldExprl'
- in (bindCV const' vars trigs methods, tvars,Map.singleton cn oldExprl'')
+ in (bindCV c' vars trigs methods, Map.singleton cn oldExprl'')
 
 
 --------------------------
 -- bind class variables --
 --------------------------
 
--- TODO: if classes with the same name in different folders, then fix this method
+--Note: if classes with the same name in different folders allowed, then fix this method
 bindCV :: HT -> [(String, ClassInfo, [(String, String)])] -> Triggers -> [(String, ClassInfo, [String])] -> HT
 bindCV c vars es methods =
  let bindEntry = getClassVar c es EVEntry
@@ -59,7 +57,8 @@ bindCV c vars es methods =
      post'  = concat $ bindVars bindExit varsc (post c)
      pre''  = concat $ bindMethods bindEntry mnames pre'
      post'' = concat $ bindMethods bindExit mnames post'
- in updatePre (updatePost c post'') pre''
+     opt    = map (replaceSelfWith bindEntry) (optimized c)
+ in updateOpt (updatePre (updatePost c post'') pre'') opt
 
 bindOldExp :: HT -> [(String, ClassInfo, [(String, String)])] -> Triggers -> [(String, ClassInfo, [String])] -> OldExprL -> OldExprL
 bindOldExp c vars es _ []             = []
@@ -96,7 +95,7 @@ bindVars bindn varsc s =
  in bindExps bindn varsc exps
 
 bindExps :: String -> [String] -> [String] -> [String]
-bindExps bindn _ []          = []
+bindExps bindn _ []            = []
 bindExps bindn vars (exp:exps) = (bindExp bindn exp vars) : bindExps bindn vars exps
 
 bindExp :: String -> String -> [String] -> String
@@ -143,7 +142,7 @@ operationalizeOld post cn =
     then (post, [])
     else let begin = head xs
              ys    = tail xs
-             zs    = map ((\(x,y) -> (trim (tail x), clean $ tail y)) . (splitAtClosingParen 0)) ys
+             zs    = map ((\(x,y) -> (trim x, clean $ tail y)) . (splitAtClosingParen 0)) ys
              fszs  = foldr (\(x,y) xs -> (x,"","e" ++ show y):xs) [] $ zip (removeDuplicates (map fst zs)) [1..length zs]
              s'    = begin ++ flattenOld zs cn fszs
          in (s',fszs)
@@ -165,13 +164,6 @@ addType2NewVars cn _ []                      = []
 addType2NewVars cn mtypes oexpr@((v,t,e):vs) = 
  let typE  = getType v cn mtypes     
  in (v,typE,e):addType2NewVars cn mtypes vs
-
-genNewVarsOld :: Global -> Variables -> Variables
-genNewVarsOld global ss = 
-  let vars = (variables.ctxtGet) global
-  in if (null vars)
-     then ss
-     else ss ++ vars
 
 getType :: Id -> HTName -> Map.Map HTName [(String,Type)] -> Type
 getType var cn oldExprTypesM = 
