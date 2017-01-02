@@ -35,7 +35,7 @@ options =
 -------------
 
 version :: String
-version = "StaRVOOrS version 1.35"
+version = "StaRVOOrS 1.35"
 
 ----------
 -- Main --
@@ -69,7 +69,7 @@ main =
 
 run :: [Flag] -> FilePath -> FilePath -> FilePath -> IO ()
 run flags java_fn_add ppdate_fn output_add =  
- do putStrLn "\nWelcome to StaRVOOrS\n"
+ do putStrLn $ "\nWelcome to StaRVOOrS " ++ version ++ "\n" 
     b2 <- doesDirectoryExist output_add
     b3 <- doesDirectoryExist java_fn_add
     if (not b3)

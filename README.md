@@ -1,4 +1,4 @@
-# StaRVOOrS 1.35 (unstable)
+# StaRVOOrS 1.35
 
 In order to work with the source code you have to install the following packages:
 
