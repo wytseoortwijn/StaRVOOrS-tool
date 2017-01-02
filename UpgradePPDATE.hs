@@ -505,8 +505,8 @@ getTransition' id env (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) 
                                       })
 
 getArrow :: Abs.Arrow -> Env -> Writer String Arrow
-getArrow (Abs.Arrow id Abs.Cond1) _          = return $ Arrow { trigger = getIdAbs id, cond = "", action = "" }
-getArrow (Abs.Arrow id (Abs.Cond2 cond)) env = 
+getArrow (Abs.Arrow id mark Abs.Cond1) _          = return $ Arrow { trigger = getIdAbs id, cond = "", action = "" }
+getArrow (Abs.Arrow id mark (Abs.Cond2 cond)) env = 
  case cond of
       Abs.CondExpDef cexp     -> return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = "" }
       Abs.CondAction cexp act -> 

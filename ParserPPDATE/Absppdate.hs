@@ -171,7 +171,12 @@ data Transition =
   deriving (Eq,Ord,Show,Read)
 
 data Arrow =
-   Arrow Id Condition
+   Arrow Id Actmark Condition
+  deriving (Eq,Ord,Show,Read)
+
+data Actmark =
+   ActMarkNil
+ | ActMark
   deriving (Eq,Ord,Show,Read)
 
 data Condition =

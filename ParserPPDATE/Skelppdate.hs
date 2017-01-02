@@ -217,7 +217,13 @@ transTransition x = case x of
 
 transArrow :: Arrow -> Result
 transArrow x = case x of
-  Arrow id condition  -> failure x
+  Arrow id actmark condition  -> failure x
+
+
+transActmark :: Actmark -> Result
+transActmark x = case x of
+  ActMarkNil  -> failure x
+  ActMark  -> failure x
 
 
 transCondition :: Condition -> Result

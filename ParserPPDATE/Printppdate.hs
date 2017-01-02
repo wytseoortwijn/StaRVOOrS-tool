@@ -349,7 +349,13 @@ instance Print Transition where
 
 instance Print Arrow where
   prt i e = case e of
-   Arrow id condition -> prPrec i 0 (concatD [prt 0 id , prt 0 condition])
+   Arrow id actmark condition -> prPrec i 0 (concatD [prt 0 id , prt 0 actmark , prt 0 condition])
+
+
+instance Print Actmark where
+  prt i e = case e of
+   ActMarkNil  -> prPrec i 0 (concatD [])
+   ActMark  -> prPrec i 0 (concatD [doc (showString "?")])
 
 
 instance Print Condition where
