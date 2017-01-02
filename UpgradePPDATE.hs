@@ -84,7 +84,8 @@ getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ 
     let prop' = getProperty prop (map tName trigs') env
     let ies'  = getActEvents ies    
     case runWriter prop' of
-         (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
+         (PNIL,_)                              -> do put env { actes = actes env ++ map show ies'}
+                                                     getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
          (PINIT pname id xs props,s)           -> 
                   let s'  = if (not.null) (fst s)
                             then "Error: Triggers [" ++ fst s ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
@@ -118,7 +119,8 @@ getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ 
     let prop' = getProperty prop (map tName trigs') env
     let ies'  = getActEvents ies    
     case runWriter prop' of
-         (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
+         (PNIL,_)                              -> do put env { actes = actes env ++ map show ies'}
+                                                     getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
          (PINIT pname id xs props,s)           -> 
                   let s'  = snd s                            
                       s'' = if elem id (tempsId env)
@@ -454,21 +456,25 @@ getTransition' id env (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) 
                                       })
 
 getArrow :: Abs.Arrow -> Env -> Writer String Arrow
-getArrow (Abs.Arrow id mark Abs.Cond1) _          = return $ Arrow { trigger = getIdAbs id, cond = "", action = "" }
+getArrow (Abs.Arrow id mark Abs.Cond1) _          = return $ Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = "", action = "" }
 getArrow (Abs.Arrow id mark (Abs.Cond2 cond)) env = 
  case cond of
-      Abs.CondExpDef cexp     -> return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = "" }
+      Abs.CondExpDef cexp     -> return $ Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, action = "" }
       Abs.CondAction cexp act -> 
         let act' = (trim.printTree) act in
         case ParAct.parse act' of 
              Bad s -> do tell s
-                         return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = "Parse error" }
+                         return $ Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, action = "Parse error" }
              Ok (Act.Actions ac) -> 
                       case runWriter $ sequence (map (\a -> checkTempInCreate a env) ac) of
                            (ac',s') -> do tell s'
-                                          return $ Arrow { trigger = getIdAbs id, cond = printTree cexp, action = foldr (\ x xs -> x ++ "; " ++ xs) [] $ map PrintAct.printTree ac' }
-                  
-         
+                                          return $ Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, action = foldr (\ x xs -> x ++ "; " ++ xs) [] $ map PrintAct.printTree ac' }
+      
+
+addQuestionMark :: Abs.Actmark -> String
+addQuestionMark Abs.ActMarkNil  = ""
+addQuestionMark Abs.ActMark     = "?"
+            
 checkTempInCreate :: Act.Action -> Env -> Writer String Act.Action
 checkTempInCreate ac@(Act.ActCreate (Act.Temp (Act.IdAct id) ) _) env = 
  let tmpids = tempsId env
