@@ -48,57 +48,6 @@ upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
                                                           do put env''
                                                              return (PPDATE imports' global' temps' cinvs' consts' methods')
 
-
---------------------
--- PINIT property --
---------------------
-
-replacePInit :: UpgradePPD PPDATE -> UpgradePPD PPDATE
-replacePInit ppd = 
- let env    = getEnvVal ppd
-     ppdate = getValue ppd
-     global = ctxtGet $ globalGet ppdate
-     es     = triggers global
-     vars   = variables global
-     acts   = actevents global
-     prop   = property global
-     fors   = foreaches global 
- in if or $ map checkPInitForeach fors
-    then fail "Error: It is not possible to define a PINIT property within a FOREACH.\n"
-    else case getPInit prop of
-              (p:ps) ->  
-                  let templates = templatesGet ppdate 
-                      prop'     = removePInit prop
-                      tmpFors   = map (\pi -> pinit2foreach pi templates) (p:ps)
-                      fors'     = tmpFors ++ fors
-                      global'   = updateGlobal (globalGet ppdate) (Ctxt vars acts es prop' fors')
-                      propns    = map piName (p:ps)
-                      pif       = map (\(x,Args t cl) -> (x,t,cl)) $ zip propns (map (head.getArgsForeach) tmpFors)
-                  in do put env { forsVars = forsVars env ++ map getArgsId (concatMap getArgsForeach tmpFors) 
-                                , propInForeach = pif ++ propInForeach env  }
-                        return $ updateGlobalPP ppdate global'
-              []     -> ppd
-
-getPInit :: Property -> [Property]
-getPInit PNIL                        = []
-getPInit (PINIT id temp bound props) = (PINIT id temp bound PNIL):getPInit props
-getPInit (Property _ _ _ props)      = getPInit props
-
-removePInit :: Property -> Property
-removePInit PNIL                         = PNIL
-removePInit (PINIT _ _ _ props)          = removePInit props
-removePInit (Property name st trs props) = Property name st trs (removePInit props)
-
-
-checkPInitForeach :: Foreach -> Bool
-checkPInitForeach (Foreach _ (Ctxt _ _ _ props _)) = (not.null) $ getPInit props
-
-pinit2foreach :: Property -> Templates -> Foreach
-pinit2foreach (PINIT id tempid bound PNIL) templates = 
- let temp = getTemplate templates tempid
-     args = tempBinds temp
-     ctxt = Ctxt (tempVars temp) (tempActEvents temp) (tempTriggers temp) (tempProp temp) []
- in Foreach args ctxt
    
 -------------
 -- Imports --
@@ -736,157 +685,56 @@ checkImports cn (Import s:xs) =
 genMethods :: Abs.Methods -> Methods
 genMethods m = printTree m
 
+--------------------
+-- PINIT property --
+--------------------
 
-------------------------
--- Selector functions --
-------------------------
+replacePInit :: UpgradePPD PPDATE -> UpgradePPD PPDATE
+replacePInit ppd = 
+ let env    = getEnvVal ppd
+     ppdate = getValue ppd
+     global = ctxtGet $ globalGet ppdate
+     es     = triggers global
+     vars   = variables global
+     acts   = actevents global
+     prop   = property global
+     fors   = foreaches global 
+ in if or $ map checkPInitForeach fors
+    then fail "Error: It is not possible to define a PINIT property within a FOREACH.\n"
+    else case getPInit prop of
+              (p:ps) ->  
+                  let templates = templatesGet ppdate 
+                      prop'     = removePInit prop
+                      tmpFors   = map (\pi -> pinit2foreach pi templates) (p:ps)
+                      fors'     = tmpFors ++ fors
+                      global'   = updateGlobal (globalGet ppdate) (Ctxt vars acts es prop' fors')
+                      propns    = map piName (p:ps)
+                      pif       = map (\(x,Args t cl) -> (x,t,cl)) $ zip propns (map (head.getArgsForeach) tmpFors)
+                  in do put env { forsVars = forsVars env ++ map getArgsId (concatMap getArgsForeach tmpFors) 
+                                , propInForeach = pif ++ propInForeach env  }
+                        return $ updateGlobalPP ppdate global'
+              []     -> ppd
 
-getArgs :: Abs.Args -> Args
-getArgs (Abs.Args t id) = Args (getTypeAbs t) (getIdAbs id)
+getPInit :: Property -> [Property]
+getPInit PNIL                        = []
+getPInit (PINIT id temp bound props) = (PINIT id temp bound PNIL):getPInit props
+getPInit (Property _ _ _ props)      = getPInit props
 
-getArgsAbs :: Abs.Args -> (Type,Id)
-getArgsAbs (Abs.Args t id) = (getTypeAbs t, getIdAbs id)
-
-getSymbolsAbs :: Abs.Symbols -> String
-getSymbolsAbs (Abs.Symbols s) = s
-
-getIdAbs :: Abs.Id -> String
-getIdAbs (Abs.Id s) = s
-
-getTypeAbs :: Abs.Type -> String
-getTypeAbs (Abs.Type (Abs.Id id)) = id
-
-getJFAbs :: Abs.JavaFiles -> Abs.Id
-getJFAbs (Abs.JavaFiles id) = id
-
-getImportAbs :: Abs.Import -> [Abs.JavaFiles]
-getImportAbs (Abs.Import jfs) = jfs
-
-getVarInitAbs :: Abs.VariableInitializer -> VariableInitializer
-getVarInitAbs Abs.VarInitNil     = VarInitNil
-getVarInitAbs (Abs.VarInit vexp) = VarInit (printTree vexp)
-
-getVarsAbs :: Abs.Vars -> Abs.Bind
-getVarsAbs (Abs.Vars bind) = bind
-
-getConstNameAbs :: Abs.HTName -> Abs.Id
-getConstNameAbs (Abs.CN id) = id
-
-getJML :: Abs.JML -> String -> Writer String JMLExp
-getJML jml str = 
- let jml' = printTree jml in
- case ParJML.parse jml' of
-      Bad s -> do tell $ "Parse error on the " ++ str
-                  return "parse error"
-      Ok _  -> return jml' 
-
-getJava :: Abs.Java -> Java
-getJava java = printTree java
-
-getMethodClassInfo :: Abs.Method -> ClassInfo
-getMethodClassInfo (Abs.Method ci _) = getIdAbs ci
-
-getMethodMethodName :: Abs.Method -> MethodName
-getMethodMethodName (Abs.Method _ mn) = getIdAbs mn
-
-getAssig :: Abs.Assig -> Abs.JML
-getAssig (Abs.AssigJML jml) = jml
-
-getPre :: Abs.Pre -> Writer String JMLExp
-getPre (Abs.Pre pre) = getJML pre "precondition"
-
-getPost :: Abs.Post -> Writer String JMLExp
-getPost (Abs.Post post) = getJML post "postcondition"
-
--------------------------
--- Auxiliary functions --
--------------------------
-
-duplicateHT :: [HTName] -> String
-duplicateHT []     = ""
-duplicateHT (c:cs) = "Error: Multiple definitions for Hoare triple " ++ c ++ ".\n" ++ duplicateHT cs
-
-getDuplicate :: [HTName] -> [HTName]
-getDuplicate []     = []
-getDuplicate (c:cs) = if elem c cs
-                      then c:getDuplicate cs
-                      else getDuplicate cs
-
--- Imports are considered to be separated by '.'
-joinImport :: [String] -> String
-joinImport []     = ""
-joinImport [ys]   = ys
-joinImport (xs:ys:iss) = xs ++ "." ++ joinImport (ys:iss)
+removePInit :: Property -> Property
+removePInit PNIL                         = PNIL
+removePInit (PINIT _ _ _ props)          = removePInit props
+removePInit (Property name st trs props) = Property name st trs (removePInit props)
 
 
-lookForAllEntryTriggerArgs :: Env -> ClassInfo -> MethodName -> (String, String)
-lookForAllEntryTriggerArgs env cinf mn =
- case Map.lookup cinf (entryTriggersInfo env) of
-      Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
-                      Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                      Just m' -> case Map.lookup mn m' of
-                                      Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                      Just _  -> error $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"                           
-      Just m  -> case Map.lookup mn m of
-                      Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
-                                      Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                      Just m' -> case Map.lookup mn m' of
-                                                 Nothing ->  error $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                                 Just _  -> error $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
-                      Just xs -> let ys = filter (\(x,_,_) -> isSuffixOf "_ppden" x) xs
-                                 in if null ys
-                                    then getArgsGenMethods (head xs)
-                                    else getArgsGenMethods (head ys) 
+checkPInitForeach :: Foreach -> Bool
+checkPInitForeach (Foreach _ (Ctxt _ _ _ props _)) = (not.null) $ getPInit props
 
-lookForAllExitTriggerArgs :: Env -> ClassInfo -> MethodName -> (String, String)
-lookForAllExitTriggerArgs env cinf mn =
- case Map.lookup cinf (exitTriggersInfo env) of
-      Nothing -> case Map.lookup "*" (exitTriggersInfo env) of
-                      Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                      Just m' -> case Map.lookup mn m' of
-                                      Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                      Just _  -> error $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
-      Just m  -> case Map.lookup mn m of
-                      Nothing -> case Map.lookup "*" (exitTriggersInfo env) of
-                                      Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                      Just m' -> case Map.lookup mn m' of
-                                                 Nothing ->  error $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                                 Just _  -> error $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
-                      Just xs -> let ys = filter (\(x,_,_) -> isSuffixOf "_ppdex" x) xs
-                                 in if null ys
-                                    then getArgsGenMethods (head xs)
-                                    else getArgsGenMethods (head ys) 
-                           
-
-getArgsGenMethods :: (Id, String, [Args]) -> (String,String)
-getArgsGenMethods (trn, varClass', args) = 
- let classPost = words $ varClass'
-     varClass  = last classPost
-     argswt    = map getArgsId args
-     argswt'   = addComma argswt
-     argswt''  = if (elem varClass argswt)
-                 then argswt'
-                 else varClass ++ "," ++ argswt'
-     flatArgs  = flattenArgs args
-     args'     = if (elem varClass argswt)
-                 then flatArgs
-                 else if (null flatArgs)
-                      then trim varClass'
-                      else (trim varClass')  ++ "," ++ flattenArgs args
- in (args', argswt'')
-
-flattenArgs :: [Args] -> String
-flattenArgs []               = ""
-flattenArgs [(Args t id)]    = t ++ " " ++ id
-flattenArgs ((Args t id):xs) = t ++ " " ++ id ++ "," ++ flattenArgs xs
-
--- Get the variable name of a bind
--- It is used to get the name of the class variable associated to an entry/exit Trigger
-getTriggerClass :: Bind -> String
-getTriggerClass bn = case bn of
-                        BindType t id' -> t ++ " " ++ id'
-                        BindId id'     -> id'
-                        BindStar       -> "*"
+pinit2foreach :: Property -> Templates -> Foreach
+pinit2foreach (PINIT id tempid bound PNIL) templates = 
+ let temp = getTemplate templates tempid
+     args = tempBinds temp
+     ctxt = Ctxt (tempVars temp) (tempActEvents temp) (tempTriggers temp) (tempProp temp) []
+ in Foreach args ctxt
 
 
 ------------------------------
@@ -1051,6 +899,158 @@ writePPDMethods xs =
  ++ "}\n"
 
 
+------------------------
+-- Selector functions --
+------------------------
+
+getArgs :: Abs.Args -> Args
+getArgs (Abs.Args t id) = Args (getTypeAbs t) (getIdAbs id)
+
+getArgsAbs :: Abs.Args -> (Type,Id)
+getArgsAbs (Abs.Args t id) = (getTypeAbs t, getIdAbs id)
+
+getSymbolsAbs :: Abs.Symbols -> String
+getSymbolsAbs (Abs.Symbols s) = s
+
+getIdAbs :: Abs.Id -> String
+getIdAbs (Abs.Id s) = s
+
+getTypeAbs :: Abs.Type -> String
+getTypeAbs (Abs.Type (Abs.Id id)) = id
+
+getJFAbs :: Abs.JavaFiles -> Abs.Id
+getJFAbs (Abs.JavaFiles id) = id
+
+getImportAbs :: Abs.Import -> [Abs.JavaFiles]
+getImportAbs (Abs.Import jfs) = jfs
+
+getVarInitAbs :: Abs.VariableInitializer -> VariableInitializer
+getVarInitAbs Abs.VarInitNil     = VarInitNil
+getVarInitAbs (Abs.VarInit vexp) = VarInit (printTree vexp)
+
+getVarsAbs :: Abs.Vars -> Abs.Bind
+getVarsAbs (Abs.Vars bind) = bind
+
+getConstNameAbs :: Abs.HTName -> Abs.Id
+getConstNameAbs (Abs.CN id) = id
+
+getJML :: Abs.JML -> String -> Writer String JMLExp
+getJML jml str = 
+ let jml' = printTree jml in
+ case ParJML.parse jml' of
+      Bad s -> do tell $ "Parse error on the " ++ str
+                  return "parse error"
+      Ok _  -> return jml' 
+
+getJava :: Abs.Java -> Java
+getJava java = printTree java
+
+getMethodClassInfo :: Abs.Method -> ClassInfo
+getMethodClassInfo (Abs.Method ci _) = getIdAbs ci
+
+getMethodMethodName :: Abs.Method -> MethodName
+getMethodMethodName (Abs.Method _ mn) = getIdAbs mn
+
+getAssig :: Abs.Assig -> Abs.JML
+getAssig (Abs.AssigJML jml) = jml
+
+getPre :: Abs.Pre -> Writer String JMLExp
+getPre (Abs.Pre pre) = getJML pre "precondition"
+
+getPost :: Abs.Post -> Writer String JMLExp
+getPost (Abs.Post post) = getJML post "postcondition"
+
+-------------------------
+-- Auxiliary functions --
+-------------------------
+
+duplicateHT :: [HTName] -> String
+duplicateHT []     = ""
+duplicateHT (c:cs) = "Error: Multiple definitions for Hoare triple " ++ c ++ ".\n" ++ duplicateHT cs
+
+getDuplicate :: [HTName] -> [HTName]
+getDuplicate []     = []
+getDuplicate (c:cs) = if elem c cs
+                      then c:getDuplicate cs
+                      else getDuplicate cs
+
+-- Imports are considered to be separated by '.'
+joinImport :: [String] -> String
+joinImport []     = ""
+joinImport [ys]   = ys
+joinImport (xs:ys:iss) = xs ++ "." ++ joinImport (ys:iss)
+
+
+lookForAllEntryTriggerArgs :: Env -> ClassInfo -> MethodName -> (String, String)
+lookForAllEntryTriggerArgs env cinf mn =
+ case Map.lookup cinf (entryTriggersInfo env) of
+      Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
+                      Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                      Just m' -> case Map.lookup mn m' of
+                                      Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                      Just _  -> error $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"                           
+      Just m  -> case Map.lookup mn m of
+                      Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
+                                      Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                      Just m' -> case Map.lookup mn m' of
+                                                 Nothing ->  error $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                                 Just _  -> error $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
+                      Just xs -> let ys = filter (\(x,_,_) -> isSuffixOf "_ppden" x) xs
+                                 in if null ys
+                                    then getArgsGenMethods (head xs)
+                                    else getArgsGenMethods (head ys) 
+
+lookForAllExitTriggerArgs :: Env -> ClassInfo -> MethodName -> (String, String)
+lookForAllExitTriggerArgs env cinf mn =
+ case Map.lookup cinf (exitTriggersInfo env) of
+      Nothing -> case Map.lookup "*" (exitTriggersInfo env) of
+                      Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                      Just m' -> case Map.lookup mn m' of
+                                      Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                      Just _  -> error $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
+      Just m  -> case Map.lookup mn m of
+                      Nothing -> case Map.lookup "*" (exitTriggersInfo env) of
+                                      Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                      Just m' -> case Map.lookup mn m' of
+                                                 Nothing ->  error $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                                 Just _  -> error $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
+                      Just xs -> let ys = filter (\(x,_,_) -> isSuffixOf "_ppdex" x) xs
+                                 in if null ys
+                                    then getArgsGenMethods (head xs)
+                                    else getArgsGenMethods (head ys) 
+                           
+
+getArgsGenMethods :: (Id, String, [Args]) -> (String,String)
+getArgsGenMethods (trn, varClass', args) = 
+ let classPost = words $ varClass'
+     varClass  = last classPost
+     argswt    = map getArgsId args
+     argswt'   = addComma argswt
+     argswt''  = if (elem varClass argswt)
+                 then argswt'
+                 else varClass ++ "," ++ argswt'
+     flatArgs  = flattenArgs args
+     args'     = if (elem varClass argswt)
+                 then flatArgs
+                 else if (null flatArgs)
+                      then trim varClass'
+                      else (trim varClass')  ++ "," ++ flattenArgs args
+ in (args', argswt'')
+
+flattenArgs :: [Args] -> String
+flattenArgs []               = ""
+flattenArgs [(Args t id)]    = t ++ " " ++ id
+flattenArgs ((Args t id):xs) = t ++ " " ++ id ++ "," ++ flattenArgs xs
+
+-- Get the variable name of a bind
+-- It is used to get the name of the class variable associated to an entry/exit Trigger
+getTriggerClass :: Bind -> String
+getTriggerClass bn = case bn of
+                        BindType t id' -> t ++ " " ++ id'
+                        BindId id'     -> id'
+                        BindStar       -> "*"
+
+
 --------------------------------------------------------------------
 -- Environment with variables, triggers and foreaches information --
 --------------------------------------------------------------------
@@ -1072,6 +1072,7 @@ data Env = Env
                                     --the triggers of the ppDATE instead of a template
  , exitTriggersInTemps :: [(ClassInfo,MethodName)]
  , propInForeach       :: [(PropertyName, ClassInfo, String)]-- is used to avoid ambigous reference to variable id in foreaches
+ , actes               :: [Id] --list of all defined action events
  }
   deriving (Show)
 
@@ -1090,6 +1091,7 @@ emptyEnv = Env { forsVars            = []
                , triggersInTemps     = []
                , exitTriggersInTemps = []
                , propInForeach       = []
+               , actes               = []
                }
 
 updateEntryTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
