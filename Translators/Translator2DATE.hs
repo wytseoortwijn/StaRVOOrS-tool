@@ -49,28 +49,29 @@ writeGlobal ppdate env =
  let global = ctxtGet $ globalGet ppdate
      consts = htsGet ppdate
      vars   = variables global
+     acts   = actevents global
      es     = triggers global
      prop   = property global
      fors   = foreaches global                      
  in case prop of
     PNIL -> 
        "GLOBAL {\n\n"
-       ++ writeVariables vars consts
-       ++ writeTriggers es consts
+       ++ writeVariables vars consts acts
+       ++ writeTriggers es consts acts
        ++ writeProperties prop consts es env
        ++ writeForeach fors consts env 0 (generateReplicatedAutomata consts (forsVars env) es env)
        ++ "}\n"
     _    ->
        case fors of
           [] -> "GLOBAL {\n\n"
-                ++ writeVariables vars consts
-                ++ writeTriggers es consts
+                ++ writeVariables vars consts acts
+                ++ writeTriggers es consts acts
                 ++ writeProperties prop consts es env
                 ++ generateReplicatedAutomata consts [] es env  
                 ++ "}\n" 
           _  -> "GLOBAL {\n\n"
-                ++ writeVariables vars consts
-                ++ writeTriggers es consts
+                ++ writeVariables vars consts acts
+                ++ writeTriggers es consts acts
                 ++ writeProperties prop consts es env
                 ++ writeForeach fors consts env 1 (generateReplicatedAutomata consts [] es env)
                 ++ "}\n" 
@@ -79,13 +80,14 @@ writeGlobal ppdate env =
 -- Variables --
 ---------------
 
-writeVariables :: Variables -> HTriples -> String
-writeVariables vars consts = 
+writeVariables :: Variables -> HTriples -> ActEvents -> String
+writeVariables vars consts acts = 
+ let actChann = if (null acts) then "" else concatMap (makeChannelsAct.show) acts in
  if (null consts)
  then if (null vars) 
       then "" 
-      else "VARIABLES {\n" ++ writeVariables' vars ++ "}\n\n"
- else "VARIABLES {\n" ++ makeChannels (length consts) ++ writeVariables' vars ++ "}\n\n"
+      else "VARIABLES {\n" ++ actChann ++ writeVariables' vars ++ "}\n\n"
+ else "VARIABLES {\n" ++ makeChannels (length consts) "h" ++ actChann ++ writeVariables' vars ++ "}\n\n"
 
 writeVariables' :: Variables -> String
 writeVariables' []     = ""
@@ -109,22 +111,34 @@ flattenVariables []       = ""
 flattenVariables [x]      = x
 flattenVariables (x:y:xs) = x ++ "," ++ flattenVariables (y:xs)
 
-makeChannels :: Int -> String
-makeChannels n = generateChannels n ++ "\n"
+makeChannels :: Int -> String -> String
+makeChannels n s = generateChannels n s ++ "\n"
 
-generateChannels :: Int -> String
-generateChannels 0 = "\n"
-generateChannels n = generateChannels (n-1) ++ " Channel h" ++ show n ++ " = new Channel();\n"
+generateChannels :: Int -> String -> String
+generateChannels 0 s = "\n"
+generateChannels n s = generateChannels (n-1) s ++ " Channel " ++ s ++ show n ++ " = new Channel();\n"
+
+makeChannelsAct :: String -> String
+makeChannelsAct s = " Channel " ++ s ++ " = new Channel();\n"
+
 
 --------------
 -- Triggers --
 --------------
 
-writeTriggers :: Triggers -> HTriples -> String
-writeTriggers [] _      = ""
-writeTriggers es consts = "EVENTS {\n"
-                        ++ writeAllTriggers (instrumentTriggers es consts)
-                        ++ "}\n\n"
+writeTriggers :: Triggers -> HTriples -> ActEvents -> String
+writeTriggers [] _ _         = ""
+writeTriggers es consts acts = 
+ "EVENTS {\n"
+ ++ writeTriggersActs acts
+ ++ writeAllTriggers (instrumentTriggers es consts)
+ ++ "}\n\n"
+
+writeTriggersActs :: ActEvents -> String
+writeTriggersActs []         = "" 
+writeTriggersActs (act:acts) =
+ 'r':show act ++ "() = {" ++ show act ++ ".receive()}" ++ "\n" ++ writeTriggersActs acts 
+
 
 writeAllTriggers :: Triggers -> String
 writeAllTriggers []     = ""
@@ -250,18 +264,21 @@ getInitCode' (InitProg java) = "{" ++ init java ++ "}"
 --HTriples [] -> Replicated Automata
 --HTriples non-empty -> Property transitions instrumentation
 writeTransitions :: PropertyName -> Transitions -> HTriples -> States -> Triggers -> Env -> String
-writeTransitions _ ts [] _ _ _ =
+writeTransitions _ ts [] _ _ env =
  "TRANSITIONS \n{ \n"
- ++ concat (map getTransition ts)
+ ++ concat (map (getTransition env) ts)
  ++ "}\n\n"
 writeTransitions pn ts (c:cs) states es env =
  "TRANSITIONS \n{ \n"
-  ++ (concat (map getTransition (getTransitionsGeneral (c:cs) states ts es env pn)))
+  ++ (concat (map (getTransition env) (getTransitionsGeneral (c:cs) states ts es env pn)))
   ++ "}\n\n"
 
-getTransition :: Transition -> String
-getTransition (Transition q (Arrow e c act) q') =
-     q ++ " -> " ++ q' ++ " [" ++ e ++ " \\ "  ++ c ++ " \\ " ++ (concat.lines) act ++ "]\n"
+getTransition :: Env -> Transition -> String
+getTransition env (Transition q (Arrow e c act) q') =
+ let e' = if elem e (map (\ a -> a ++ "?") $ actes env)
+          then "r" ++ init e
+          else e
+ in q ++ " -> " ++ q' ++ " [" ++ e' ++ " \\ "  ++ c ++ " \\ " ++ (concat.lines) act ++ "]\n"
 
 getTransitionsGeneral :: HTriples -> States -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
 getTransitionsGeneral cs (States star acc bad nor) ts es env pn =
@@ -406,10 +423,11 @@ writeForeach (Foreach args ctxt:fors) consts env n ra =
  let vars   = variables ctxt
      es     = triggers ctxt
      prop   = property ctxt
+     acts   = actevents ctxt
      fors'  = foreaches ctxt
  in "FOREACH (" ++ getForeachArgs args ++ ") {\n\n"
-    ++ writeVariables vars []
-    ++ writeTriggers es consts
+    ++ writeVariables vars [] []
+    ++ writeTriggers es consts []
     ++ writeProperties prop consts es env
     ++ writeForeach fors' consts env 2 ra
     ++ if (n == 0) then ra ++ "}\n"  else ""

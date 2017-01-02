@@ -505,7 +505,10 @@ checkTempInCreate act env                     = return act
 ---------------
 
 getForeaches :: Abs.Foreaches -> Context -> UpgradePPD Context
-getForeaches Abs.ForeachesNil ctxt = return ctxt
+getForeaches Abs.ForeachesNil ctxt = 
+ do env <- get
+    put env { actes = actes env ++ map show (actevents ctxt)} 
+    return ctxt
 getForeaches (Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ (Abs.ForeachesDef args actxt fors)) afors) ctxt = 
  fail "Error: StaRVOOrS does not support nested Foreaches.\n"
 getForeaches afors@(Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ Abs.ForeachesNil) _) ctxt = 
