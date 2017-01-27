@@ -71,8 +71,6 @@ genGlobal (Abs.Global ctxt) =
 
 getCtxt :: Abs.Context -> Integer -> UpgradePPD Context
 getCtxt (Abs.Ctxt vars acts Abs.TriggersNil prop@(Abs.ProperiesDef _ (Abs.PropKindPinit _ _) Abs.PropertiesNil) fors) 0 = getCtxt (Abs.Ctxt vars acts (Abs.TriggersDef []) prop fors) 0
-getCtxt (Abs.Ctxt _ _ Abs.TriggersNil (Abs.ProperiesDef id _ _) _) 0 = 
- fail $ "Error: Missing TRIGGERS section before property " ++ getIdAbs id ++ ".\n"
 getCtxt (Abs.Ctxt Abs.VarNil Abs.ActEventsNil Abs.TriggersNil Abs.PropertiesNil foreaches@(Abs.ForeachesDef _ _ _)) 0 = getForeaches foreaches (Ctxt [] [] [] PNIL [])
 getCtxt (Abs.Ctxt vars ies Abs.TriggersNil prop@(Abs.ProperiesDef _ _ _) foreaches) 1 =
  getCtxt (Abs.Ctxt vars ies (Abs.TriggersDef []) prop foreaches) 1
@@ -1221,4 +1219,5 @@ getOldExpTypesEnv ppd = let env = CM.execStateT ppd emptyEnv
                         in case env of
                                 Bad _ -> Map.empty
                                 Ok fs -> oldExpTypes fs
+
 
