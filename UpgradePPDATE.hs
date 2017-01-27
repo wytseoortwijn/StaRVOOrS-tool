@@ -64,17 +64,17 @@ genImports (Abs.Imports imps) =
 
 genGlobal :: Abs.Global -> UpgradePPD Global
 genGlobal (Abs.Global ctxt) =
- do ctxt' <- getCtxt ctxt 0
+ do ctxt' <- getCtxt ctxt
     return (Global ctxt')
 
 -- Context --
 
-getCtxt :: Abs.Context -> Integer -> UpgradePPD Context
-getCtxt (Abs.Ctxt vars acts Abs.TriggersNil prop@(Abs.ProperiesDef _ (Abs.PropKindPinit _ _) Abs.PropertiesNil) fors) 0 = getCtxt (Abs.Ctxt vars acts (Abs.TriggersDef []) prop fors) 0
-getCtxt (Abs.Ctxt Abs.VarNil Abs.ActEventsNil Abs.TriggersNil Abs.PropertiesNil foreaches@(Abs.ForeachesDef _ _ _)) 0 = getForeaches foreaches (Ctxt [] [] [] PNIL [])
-getCtxt (Abs.Ctxt vars ies Abs.TriggersNil prop@(Abs.ProperiesDef _ _ _) foreaches) 1 =
- getCtxt (Abs.Ctxt vars ies (Abs.TriggersDef []) prop foreaches) 1
-getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ _) foreaches) 0 =
+getCtxt :: Abs.Context -> UpgradePPD Context
+getCtxt (Abs.Ctxt _ _ _ Abs.PropertiesNil Abs.ForeachesNil) = fail $ "Error: No properties were defined in section GLOBAL\n."
+getCtxt (Abs.Ctxt Abs.VarNil Abs.ActEventsNil Abs.TriggersNil Abs.PropertiesNil foreaches@(Abs.ForeachesDef _ _ _)) = getForeaches foreaches (Ctxt [] [] [] PNIL [])
+getCtxt (Abs.Ctxt vars ies Abs.TriggersNil prop foreaches) =
+ getCtxt (Abs.Ctxt vars ies (Abs.TriggersDef []) prop foreaches)
+getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
  do env <- get
     let cns   = htsNames env
     trigs' <- getTriggers trigs
@@ -110,43 +110,6 @@ getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ 
                   in if (null s')
                      then getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) [])
                      else fail s'
-getCtxt (Abs.Ctxt vars ies trigs@(Abs.TriggersDef _) prop@(Abs.ProperiesDef _ _ _) foreaches) 1 =
- do env <- get
-    let cns   = htsNames env
-    trigs' <- getTriggers trigs
-    let vars' = getVars vars
-    let prop' = getProperty prop (map tName trigs') env
-    let ies'  = getActEvents ies    
-    case runWriter prop' of
-         (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
-         (PINIT pname id xs props,s)           -> 
-                  let trs = addComma [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
-                      s'  = if (not.null) trs
-                            then "Error: Triggers [" ++ trs ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
-                                 ++ snd s
-                            else snd s
-                      s'' = if elem id (tempsId env)
-                            then ""
-                            else "Error: In the definition of property " ++ pname
-                                 ++ ". The template " ++ id ++ " does not exist\n." 
-                  in if (null (s'++s''))
-                     then getForeaches foreaches (Ctxt vars' ies' trigs' (PINIT pname id xs props) [])
-                     else fail s'
-         (Property pname states trans props,s) -> 
-                  let accep  = checkAllHTsExist (getAccepting states) cns pname
-                      bad    = checkAllHTsExist (getBad states) cns pname
-                      normal = checkAllHTsExist (getNormal states) cns pname
-                      start  = checkAllHTsExist (getStarting states) cns pname
-                      errs   = concat $ start ++ accep ++ bad ++ normal
-                      trs    = addComma [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
-                      s'     = if (not.null) trs
-                               then "Error: Triggers [" ++ trs ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
-                                     ++ snd s ++ errs
-                               else snd s ++ errs
-                  in if (null s')
-                     then getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) [])
-                     else fail s'
-getCtxt _ _ = fail "Error: Triggers, action events or variables, cannot be defined before a global FOREACH.\n"
 
 
 checkAllHTsExist :: [State] -> [HTName] -> PropertyName -> [String]
@@ -213,7 +176,7 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
     let err  = if (elem id'' (map (\(x,y,z,t) -> x) (allTriggers env))) then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") else ""
     do case runWriter (getBindsArgs binds) of
          (bs, s) ->
-           let err0 = if (not.null) s then (err ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s ++ "].\n") else err
+           let err0 = if (not.null) s then (err ++ "ErrorA: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s ++ "].\n") else err
            in case runWriter (getCompTriggers ce) of
                  (ce',s') ->
                    let err1 = if (not.null) s'
@@ -332,14 +295,12 @@ getCompTrigger ce =
                                  return (OnlyIdPar id')
 
 getCompTriggers :: Abs.CompoundTrigger -> Writer String CompoundTrigger
-getCompTriggers ce@(Abs.NormalEvent _ _ _ _)            = getCompTrigger ce
-getCompTriggers ce@(Abs.ClockEvent _ _)                 = getCompTrigger ce
-getCompTriggers ce@(Abs.OnlyId _)                       = getCompTrigger ce
-getCompTriggers ce@(Abs.OnlyIdPar _)                    = getCompTrigger ce
 getCompTriggers (Abs.Collection (Abs.CECollection esl)) = do
                                                            let xs = map getCompTrigger esl
                                                            ce <- sequence xs
                                                            return (Collection (CECollection ce))
+getCompTriggers ce                                      = getCompTrigger ce
+
 getBindsArgs :: [Abs.Bind] -> Writer String [Bind]
 getBindsArgs []     = return []
 getBindsArgs (b:bs) =
@@ -523,7 +484,7 @@ prepareForeaches (Abs.ForeachesDef args ctxt fors) =
 
 getForeach :: Abs.Foreaches -> UpgradePPD Foreach
 getForeach (Abs.ForeachesDef args ctxt Abs.ForeachesNil) = 
- do ctxt' <- getCtxt ctxt 1
+ do ctxt' <- getCtxt ctxt
     case foreaches ctxt' of
       [] -> do let args'     = map getArgs args
                let propn     = pName $ property ctxt'
