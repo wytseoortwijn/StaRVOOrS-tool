@@ -176,7 +176,7 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
     let err  = if (elem id'' (map (\(x,y,z,t) -> x) (allTriggers env))) then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") else ""
     do case runWriter (getBindsArgs binds) of
          (bs, s) ->
-           let err0 = if (not.null) s then (err ++ "ErrorA: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s ++ "].\n") else err
+           let err0 = if (not.null) s then (err ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s ++ "].\n") else err
            in case runWriter (getCompTriggers ce) of
                  (ce',s') ->
                    let err1 = if (not.null) s'
@@ -191,26 +191,28 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
                                                        wc' = getWhereClause wc
                                                        wcs = [x | x <- argss, not(elem x allArgs)]
                                                        vs  = filter (\ x -> x /= id) $ checkVarsInitialisation wcs (getVarsWC wc)
-                                                    in if ((not.null) vs) then fail (err1 ++ "Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
+                                                    in if ((not.null) vs) 
+                                                       then fail (err1 ++ "Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
                                                        else
                                                          case runWriter ((checkAllArgs argss allArgs bind)) of
                                                           (b,zs) ->
                                                             if b
                                                              then if (not.null) err1 then fail err1 else
-                                                                 do let env' = updateEntryTriggersInfo env (id'', getTriggerClass bind, (map bindToArgs bs)) bs mn bind
-                                                                    put env' { allTriggers = (id'',mn,EVEntry,(properBind bind) ++bs) : allTriggers env }
-                                                                    return TriggerDef { tName = id''
-                                                                                      , args  = bs
-                                                                                      , compTrigger = ce'
-                                                                                      , whereClause = getWhereClause wc
-                                                                                    }
+                                                                  do let env' = updateEntryTriggersInfo env (id'', getTriggerClass bind, (map bindToArgs bs)) bs mn bind
+                                                                     put env' { allTriggers = (id'',mn,EVEntry,(properBind bind) ++bs) : allTriggers env }
+                                                                     return TriggerDef { tName = id''
+                                                                                       , args  = bs
+                                                                                       , compTrigger = ce'
+                                                                                       , whereClause = getWhereClause wc
+                                                                                     }
                                                             else fail (err1 ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n")
                                        EVExit rs -> let id  = getIdBind bind
                                                         wc' = getWhereClause wc
                                                         wcs = [x | x <- argss, not(elem x allArgs)]
                                                         rs' = map getIdBind rs
                                                         vs  = filter (\ x -> (not (elem x rs')) && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
-                                                    in if ((not.null) vs) then fail (err1 ++ "Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
+                                                    in if ((not.null) vs) 
+                                                       then fail (err1 ++ "Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
                                                        else
                                                         case runWriter ((checkAllArgs argss allArgs bind)) of
                                                           (b,zs) ->
@@ -276,14 +278,14 @@ checkVarsInitialisation (x:xs) wc = if (elem x wc)
 getIdBind :: Bind -> Id
 getIdBind (BindType _ id) = id
 getIdBind (BindId id)     = id
-getIdBind _                 = ""
+getIdBind _               = ""
 
 getCompTrigger :: Abs.CompoundTrigger -> Writer String CompoundTrigger
 getCompTrigger ce =
  case ce of
      Abs.NormalEvent (Abs.BindingVar bind) id binds trv ->
         case runWriter (getBindsBody (map getVarsAbs binds)) of
-             (bs, s) -> do let id' = getIdAbs id
+             (bs, s) -> do let id'  = getIdAbs id
                            let trv' = getTriggerVariation trv
                            tell s
                            return (NormalEvent (BindingVar (getBind_ bind)) id' bs trv')
@@ -301,6 +303,7 @@ getCompTriggers (Abs.Collection (Abs.CECollection esl)) = do
                                                            return (Collection (CECollection ce))
 getCompTriggers ce                                      = getCompTrigger ce
 
+--Checks if the arguments in the triggers have the right form
 getBindsArgs :: [Abs.Bind] -> Writer String [Bind]
 getBindsArgs []     = return []
 getBindsArgs (b:bs) =
@@ -311,6 +314,7 @@ getBindsArgs (b:bs) =
                        _                 -> do tell (mAppend (printTree b) s)
                                                return bs'
 
+--Checks if the arguments in the method call on trigger have the right form
 getBindsBody :: [Abs.Bind] -> Writer String [Bind]
 getBindsBody []     = return []
 getBindsBody (b:bs) =
