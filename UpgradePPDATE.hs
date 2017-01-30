@@ -86,7 +86,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
          (PINIT pname id xs props,s)           -> 
                   let trs = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
                       s'  = if (not.null) trs
-                            then "Error: Triggers [" ++ trs ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
+                            then "Error: Trigger(s) [" ++ trs ++ "] is(are) used in the transitions, but is(are) not defined in section TRIGGERS.\n" 
                                  ++ snd s
                             else snd s
                       s'' = if elem id (tempsId env)
@@ -104,7 +104,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
                       errs   = concat $ start ++ accep ++ bad ++ normal
                       trs    = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
                       s'     = if (not.null) trs
-                               then "Error: Triggers [" ++ trs ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
+                               then "Error: Trigger(s) [" ++ trs ++ "] is(are) used in the transitions, but is(are) not defined in section TRIGGERS.\n" 
                                      ++ snd s ++ errs
                                else snd s ++ errs
                   in if (null s')
