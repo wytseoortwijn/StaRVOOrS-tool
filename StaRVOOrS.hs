@@ -35,7 +35,7 @@ options =
 -------------
 
 version :: String
-version = "StaRVOOrS 1.35"
+version = "StaRVOOrS 1.35.5"
 
 ----------
 -- Main --
@@ -110,7 +110,7 @@ run flags java_fn_add ppdate_fn output_add =
                                              writeFile larva_add ""
                                              translate ppdate' larva_add
                                              putStrLn "Running LARVA..."
-                                             rawSystem "java" ["-cp","larva.jar","compiler.Compiler",larva_add,"-o",output_add']
+                                             rawSystem "java" ["-jar","larva.jar",larva_add,"-v","-o",output_add']
                                              putStrLn "Monitor files generation completed."
                                              removeDirectoryRecursive (output_add' ++ "/workspace") 
                                              out_dir_content <- getDirectoryContents output_add'

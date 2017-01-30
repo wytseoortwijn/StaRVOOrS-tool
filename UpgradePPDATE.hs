@@ -84,7 +84,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
     case runWriter prop' of
          (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
          (PINIT pname id xs props,s)           -> 
-                  let trs = addComma [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
+                  let trs = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
                       s'  = if (not.null) trs
                             then "Error: Triggers [" ++ trs ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
                                  ++ snd s
@@ -102,7 +102,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
                       normal = checkAllHTsExist (getNormal states) cns pname
                       start  = checkAllHTsExist (getStarting states) cns pname
                       errs   = concat $ start ++ accep ++ bad ++ normal
-                      trs    = addComma [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
+                      trs    = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
                       s'     = if (not.null) trs
                                then "Error: Triggers [" ++ trs ++ "] are used in the transitions, but are not defined in section TRIGGERS.\n" 
                                      ++ snd s ++ errs
@@ -196,7 +196,7 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
                                                        else
                                                          case runWriter ((checkAllArgs argss allArgs bind)) of
                                                           (b,zs) ->
-                                                            if b
+                                                            if checkMNforNew b mn bind bs []
                                                              then if (not.null) err1 then fail err1 else
                                                                   do let env' = updateEntryTriggersInfo env (id'', getTriggerClass bind, (map bindToArgs bs)) bs mn bind
                                                                      put env' { allTriggers = (id'',mn,EVEntry,(properBind bind) ++bs) : allTriggers env }
@@ -216,7 +216,7 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
                                                        else
                                                         case runWriter ((checkAllArgs argss allArgs bind)) of
                                                           (b,zs) ->
-                                                            if (b && (checkRetVar rs argss))
+                                                            if ((checkMNforNew b mn bind bs rs) && (checkRetVar rs argss))
                                                             then if (not.null) err1 then fail err1 else
                                                                  do let env' = updateExitTriggersInfo env (id'', getTriggerClass bind, (map bindToArgs bs)) bs mn bind
                                                                     put env' { allTriggers = (id'',mn,EVExit rs,(properBind bind) ++ bs) : allTriggers env }
@@ -238,6 +238,19 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
                                                      , compTrigger = ce'
                                                      , whereClause = getWhereClause wc
                                                      }
+
+
+checkMNforNew :: Bool -> MethodName -> Bind -> [Bind] -> [Bind] -> Bool
+checkMNforNew b mn bind bs rs = 
+ if b
+ then True
+ else case bind of
+      BindId id -> if (mn /= "new")
+                   then False
+                   else if null rs
+                        then True
+                        else elem (BindType id (getBindIdId (head rs))) bs
+      _         -> False
 
 properBind :: Bind -> [Bind]
 properBind (BindType t id) = [BindType t id]
@@ -263,7 +276,7 @@ checkRetVar :: [Bind] -> [Id] -> Bool
 checkRetVar xs ids = case length xs of
                           0 -> True
                           1 -> elem (getBindIdId (head xs)) ids
-                          otherwise -> False
+                          _ -> False
 
 getVarsWC :: Abs.WhereClause -> [Id]
 getVarsWC Abs.WhereClauseNil      = []
@@ -1095,9 +1108,10 @@ updateEntryTriggersInfo env einfo args mn (BindType t id) =
            let mapeinfo' = updateInfo mapeinfo mn einfo 
            in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
 updateEntryTriggersInfo env einfo args mn (BindId id)     = 
- let ts = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
+ let ts' = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
+     ts  = if (null ts' && mn == "new") then [id] else ts'
  in if (length ts /= 1)
-    then error $ "The entry trigger associated to method " ++ mn ++ " does not include a class variable declaration.\n"
+    then error $ "The trigger " ++ (\(x,y,z) -> x) einfo ++ " does not include a class variable declaration.\n"
     else case Map.lookup (head ts) (entryTriggersInfo env) of
               Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
                          in env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) }
@@ -1123,9 +1137,10 @@ updateExitTriggersInfo env einfo args mn (BindType t id) =
            let mapeinfo' = updateInfo mapeinfo mn einfo 
            in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
 updateExitTriggersInfo env einfo args mn (BindId id)     = 
- let ts = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
+ let ts' = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
+     ts  = if (null ts' && mn == "new") then [id] else ts'
  in if (length ts /= 1)
-    then error $ "The exit trigger associated to method " ++ mn ++ " does not include a class variable declaration.\n"
+    then error $ "The trigger " ++ (\(x,y,z) -> x) einfo ++ " does not include a class variable declaration.\n"
     else case Map.lookup (head ts) (exitTriggersInfo env) of
               Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
                          in env { exitTriggersInfo = Map.insert (head ts) mapeinfo' (exitTriggersInfo env) }
