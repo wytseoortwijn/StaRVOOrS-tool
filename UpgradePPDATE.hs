@@ -75,18 +75,19 @@ getCtxt (Abs.Ctxt Abs.VarNil Abs.ActEventsNil Abs.TriggersNil Abs.PropertiesNil 
 getCtxt (Abs.Ctxt vars ies Abs.TriggersNil prop foreaches) =
  getCtxt (Abs.Ctxt vars ies (Abs.TriggersDef []) prop foreaches)
 getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
- do env <- get
-    let cns   = htsNames env
+ do vars' <- getVars vars
     trigs' <- getTriggers trigs
-    let vars' = getVars vars
-    let prop' = getProperty prop (map tName trigs') env
+    env <- get
+    let cns   = htsNames env
+    let prop' = getProperty prop (map (\(x,y,z,r) -> x) (allTriggers env)) env
     let ies'  = getActEvents ies    
     case runWriter prop' of
          (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
          (PINIT pname id xs props,s)           -> 
                   let trs = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
                       s'  = if (not.null) trs
-                            then "Error: Trigger(s) [" ++ trs ++ "] is(are) used in the transitions, but is(are) not defined in section TRIGGERS.\n" 
+                            then "Error: Trigger(s) [" ++ trs 
+                                 ++ "] is(are) used in the transitions, but is(are) not defined in section TRIGGERS.\n" 
                                  ++ snd s
                             else snd s
                       s'' = if elem id (tempsId env)
@@ -106,7 +107,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
                       s'     = if (not.null) trs
                                then "Error: Trigger(s) [" ++ trs ++ "] is(are) used in the transitions, but is(are) not defined in section TRIGGERS.\n" 
                                      ++ snd s ++ errs
-                               else snd s ++ errs
+                               else snd s ++ errs 
                   in if (null s')
                      then getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) [])
                      else fail s'
@@ -129,16 +130,18 @@ checkAllHTsExist (s:ss) cns pn =
                                     commaAdd (xs:xss) = xs ++ "," ++ commaAdd xss
 -- Variables --
 
-getVars :: Abs.Variables -> Variables
-getVars Abs.VarNil        = []
-getVars (Abs.VarDef vars) = map getVariable vars
+getVars :: Abs.Variables -> UpgradePPD Variables
+getVars Abs.VarNil        = return []
+getVars (Abs.VarDef vars) = sequence $ map getVariable vars
 
-getVariable :: Abs.Variable -> Variable
+getVariable :: Abs.Variable -> UpgradePPD Variable
 getVariable (Abs.Var varm t vdecls) =
  let varm' = getVarModif varm
      t'    = getTypeAbs t
      vs    = map getVarDecl vdecls
- in Var varm' t' vs
+ in do env <- get
+       put env { varsInPPD = Var varm' t' vs:varsInPPD env}
+       return $ Var varm' t' vs
 
 getVarModif :: Abs.VarModifier -> VarModifier
 getVarModif Abs.VarModifierFinal = VarModifierFinal
@@ -196,16 +199,21 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
                                                        else
                                                          case runWriter ((checkAllArgs argss allArgs bind)) of
                                                           (b,zs) ->
-                                                            if checkMNforNew b mn bind bs []
-                                                             then if (not.null) err1 then fail err1 else
-                                                                  do let env' = updateEntryTriggersInfo env (id'', getTriggerClass bind, (map bindToArgs bs)) bs mn bind
+                                                            case runWriter (checkSpecialCases b mn bind bs [] zs id'' env) of 
+                                                             (b',s'') -> 
+                                                                if b' then
+                                                                  if (not.null) err1 then fail err1 else
+                                                                  do let einfo = if null s''
+                                                                                 then getTriggerClass bind
+                                                                                 else s''
+                                                                     let env' = updateEntryTriggersInfo env (id'',einfo, (map bindToArgs bs)) bs mn bind s''
                                                                      put env' { allTriggers = (id'',mn,EVEntry,(properBind bind) ++bs) : allTriggers env }
                                                                      return TriggerDef { tName = id''
                                                                                        , args  = bs
                                                                                        , compTrigger = ce'
                                                                                        , whereClause = getWhereClause wc
                                                                                      }
-                                                            else fail (err1 ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n")
+                                                                else fail (err1 ++ s'')
                                        EVExit rs -> let id  = getIdBind bind
                                                         wc' = getWhereClause wc
                                                         wcs = [x | x <- argss, not(elem x allArgs)]
@@ -216,16 +224,21 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
                                                        else
                                                         case runWriter ((checkAllArgs argss allArgs bind)) of
                                                           (b,zs) ->
-                                                            if ((checkMNforNew b mn bind bs rs) && (checkRetVar rs argss))
-                                                            then if (not.null) err1 then fail err1 else
-                                                                 do let env' = updateExitTriggersInfo env (id'', getTriggerClass bind, (map bindToArgs bs)) bs mn bind
-                                                                    put env' { allTriggers = (id'',mn,EVExit rs,(properBind bind) ++ bs) : allTriggers env }
-                                                                    return TriggerDef { tName = id''
-                                                                                      , args  = bs
-                                                                                      , compTrigger = ce'
-                                                                                      , whereClause = wc'
-                                                                                      }
-                                                            else fail (err1 ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n")
+                                                            case runWriter (checkSpecialCases b mn bind bs rs zs id'' env) of 
+                                                              (b',s'') -> 
+                                                                if (b' && (checkRetVar rs argss))
+                                                                then if (not.null) err1 then fail err1 else
+                                                                     do let einfo = if null s''
+                                                                                 then getTriggerClass bind
+                                                                                 else s''
+                                                                        let env' = updateExitTriggersInfo env (id'',einfo, (map bindToArgs bs)) bs mn bind s''
+                                                                        put env' { allTriggers = (id'',mn,EVExit rs,(properBind bind) ++ bs) : allTriggers env }
+                                                                        return TriggerDef { tName = id''
+                                                                                          , args  = bs
+                                                                                          , compTrigger = ce'
+                                                                                          , whereClause = wc'
+                                                                                          }
+                                                                else fail (err1 ++ s'')
                                        _        -> return TriggerDef { tName = id''
                                                                      , args  = bs
                                                                      , compTrigger = ce'
@@ -239,18 +252,45 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
                                                      , whereClause = getWhereClause wc
                                                      }
 
-
-checkMNforNew :: Bool -> MethodName -> Bind -> [Bind] -> [Bind] -> Bool
-checkMNforNew b mn bind bs rs = 
+--Method handling the special cases of the use of new and channels
+checkSpecialCases :: Bool -> MethodName -> Bind -> [Bind] -> [Bind] -> [String] -> Trigger -> Env -> Writer String Bool
+checkSpecialCases b mn bind bs rs zs id env = 
  if b
- then True
- else case bind of
+ then return b
+ else case runWriter (checkMNforNew mn bind bs rs id zs) of
+           (True,_)  -> return True
+           (False,s) -> if null s
+                        then case runWriter (checkForChannel bind env) of
+                                  (True,s)  -> writer (True,s)
+                                  (False,_) -> fail $ "Error: Trigger declaration [" ++ id ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n"                             
+                        else fail s
+
+--Method handling new
+checkMNforNew :: MethodName -> Bind -> [Bind] -> [Bind] -> Trigger ->  [String] -> Writer String Bool
+checkMNforNew mn bind bs rs id zs = 
+ case bind of
       BindId id -> if (mn /= "new")
-                   then False
+                   then return False
                    else if null rs
-                        then True
-                        else elem (BindType id (getBindIdId (head rs))) bs
-      _         -> False
+                        then fail $ "Error: new cannot be associated to an entry trigger.\n"
+                        else if elem (BindType id (getBindIdId (head rs))) bs
+                             then if null zs 
+                                  then return True
+                                  else fail $ "Error: Trigger declaration [" ++ id ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n"
+                             else do tell $ "Error: Problem in trigger " ++ id ++ "\n."
+                                     return False
+      _         -> return False
+
+--Method handling channels
+checkForChannel :: Bind -> Env -> Writer String Bool
+checkForChannel bind env = 
+ case bind of
+      BindId id -> let vars = map varDecId $ concatMap getVarDeclVar 
+                              $ filter (\v -> getTypeVar v == "Channel") $ varsInPPD env
+                   in if elem id vars
+                      then writer (True,id)
+                      else return False
+      _         -> return False
 
 properBind :: Bind -> [Bind]
 properBind (BindType t id) = [BindType t id]
@@ -261,7 +301,8 @@ checkAllArgs argss allArgs bind =
  case bind of
       BindId id -> if (elem id argss)
                    then checkArgs argss allArgs
-                   else return False
+                   else case runWriter (checkArgs argss allArgs) of
+                             (b,zs) -> writer (False,zs)
       _         -> checkArgs argss allArgs
 
 
@@ -351,13 +392,14 @@ getTriggerVariation (Abs.EVExit vars)  = EVExit (map (getBind_.getVarsAbs) vars)
 getTriggerVariation (Abs.EVThrow vars) = EVThrow (map (getBind_.getVarsAbs) vars)
 getTriggerVariation (Abs.EVHadle vars) = EVHadle (map (getBind_.getVarsAbs) vars)
 
--- Also removes white spaces added by printTree after ';'
+-- Removes white spaces added by printTree after ';'
 getWhereClause :: Abs.WhereClause -> WhereClause
 getWhereClause Abs.WhereClauseNil        = ""
 getWhereClause (Abs.WhereClauseDef wexp) = (concat.lines.printTree) wexp
 
-
+--
 -- Properties --
+--
 
 getProperty :: Abs.Properties -> [Id] -> Env -> Writer (String,String) Property
 getProperty Abs.PropertiesNil _ _                                             = return PNIL
@@ -554,7 +596,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                                       , actes           = actes env ++ map show (getActEvents ies)}
                              return $ Template { tempId        = getIdAbs id
                                                , tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
-                                               , tempVars      = getVars vars
+                                               , tempVars      = getValue $ getVars vars
                                                , tempActEvents = getActEvents ies
                                                , tempTriggers  = trigs'
                                                , tempProp      = PINIT pname id' xs props
@@ -573,12 +615,12 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                      then fail s'
                      else do put env' { triggersInTemps = triggersInTemps env ++ temptrs 
                                       , actes           = actes env ++ map show (getActEvents ies)}
-                             return $ Template { tempId       = getIdAbs id
-                                               , tempBinds    = map ((uncurry makeArgs).getArgsAbs) args
-                                               , tempVars     = getVars vars
-                                               , tempActEvents  = getActEvents ies
-                                               , tempTriggers = trigs'
-                                               , tempProp     = Property pname states trans props
+                             return $ Template { tempId        = getIdAbs id
+                                               , tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
+                                               , tempVars      = getValue $ getVars vars
+                                               , tempActEvents = getActEvents ies
+                                               , tempTriggers  = trigs'
+                                               , tempProp      = Property pname states trans props
                                                }
 
 getExitTrsInfo :: Triggers -> [(ClassInfo,MethodName)]
@@ -1062,6 +1104,7 @@ data Env = Env
  , allTriggers         :: [(Id,MethodName,TriggerVariation,[Bind])]
  , htsNames            :: [HTName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
+ , varsInPPD           :: Variables
  , methodsInFiles      :: [(String, ClassInfo, [(Type,Id,[String])])] --[(path_to_class,class_name,[(returned_type,method_name,arguments)])]
  , oldExpTypes         :: OldExprM
  , tempsId             :: [Id]
@@ -1082,6 +1125,7 @@ emptyEnv = Env { forsVars            = []
                , allTriggers         = []
                , htsNames            = []
                , varsInFiles         = []
+               , varsInPPD           = []
                , methodsInFiles      = []
                , oldExpTypes         = Map.empty
                , tempsId             = []
@@ -1091,8 +1135,8 @@ emptyEnv = Env { forsVars            = []
                , actes               = []
                }
 
-updateEntryTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
-updateEntryTriggersInfo env einfo args mn BindStar        = 
+updateEntryTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> String -> Env
+updateEntryTriggersInfo env einfo args mn BindStar _        = 
  let t = "*" in
  case Map.lookup t (entryTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
@@ -1100,16 +1144,17 @@ updateEntryTriggersInfo env einfo args mn BindStar        =
       Just mapeinfo -> 
            let mapeinfo' = updateInfo mapeinfo mn einfo 
            in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
-updateEntryTriggersInfo env einfo args mn (BindType t id) = 
+updateEntryTriggersInfo env einfo args mn (BindType t id) _ = 
  case Map.lookup t (entryTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
                  in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
       Just mapeinfo -> 
            let mapeinfo' = updateInfo mapeinfo mn einfo 
            in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
-updateEntryTriggersInfo env einfo args mn (BindId id)     = 
+updateEntryTriggersInfo env einfo args mn (BindId id) s     = 
  let ts' = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
-     ts  = if (null ts' && mn == "new") then [id] else ts'
+     val = prepareValUpd mn s id s
+     ts  = if (null ts') then val else ts'
  in if (length ts /= 1)
     then error $ "The trigger " ++ (\(x,y,z) -> x) einfo ++ " does not include a class variable declaration.\n"
     else case Map.lookup (head ts) (entryTriggersInfo env) of
@@ -1120,8 +1165,8 @@ updateEntryTriggersInfo env einfo args mn (BindId id)     =
                    in env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) }
 
 
-updateExitTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> Env
-updateExitTriggersInfo env einfo args mn BindStar        = 
+updateExitTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> String -> Env
+updateExitTriggersInfo env einfo args mn BindStar _        = 
  let t = "*" in
  case Map.lookup t (exitTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
@@ -1129,18 +1174,18 @@ updateExitTriggersInfo env einfo args mn BindStar        =
       Just mapeinfo -> 
            let mapeinfo' = updateInfo mapeinfo mn einfo 
            in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
-updateExitTriggersInfo env einfo args mn (BindType t id) = 
+updateExitTriggersInfo env einfo args mn (BindType t id) _ = 
  case Map.lookup t (exitTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
                  in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
       Just mapeinfo -> 
            let mapeinfo' = updateInfo mapeinfo mn einfo 
            in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
-updateExitTriggersInfo env einfo args mn (BindId id)     = 
+updateExitTriggersInfo env einfo args mn (BindId id) s     = 
  let ts' = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
-     ts  = if (null ts' && mn == "new") then [id] else ts'
+     ts  = if (null ts') then prepareValUpd mn s id s else ts'
  in if (length ts /= 1)
-    then error $ "The trigger " ++ (\(x,y,z) -> x) einfo ++ " does not include a class variable declaration.\n"
+    then error $ "The trigger " ++ (\(x,y,z) -> x) einfo ++ " does not include a class variable declaration.\n" 
     else case Map.lookup (head ts) (exitTriggersInfo env) of
               Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
                          in env { exitTriggersInfo = Map.insert (head ts) mapeinfo' (exitTriggersInfo env) }
@@ -1149,6 +1194,14 @@ updateExitTriggersInfo env einfo args mn (BindId id)     =
                    in env { exitTriggersInfo = Map.insert (head ts) mapeinfo' (exitTriggersInfo env) }
 
  
+prepareValUpd :: MethodName -> String -> String -> String -> [String]
+prepareValUpd mn s id chan = 
+ if mn == "new"
+ then [id]
+ else if null s
+      then []
+      else [chan]
+
 updateInfo :: Map.Map MethodName [(Id, String, [Args])] -> MethodName -> (Id, String, [Args]) -> Map.Map MethodName [(Id, String, [Args])]
 updateInfo m mn einfo = 
  case Map.lookup mn m of

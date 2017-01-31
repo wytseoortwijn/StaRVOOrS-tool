@@ -171,9 +171,11 @@ bindToArgs _               = error "bindToArgs.\n"
 
 type Variables = [Variable]
 
-data Variable =
-   Var VarModifier Type [VarDecl]
-  deriving (Eq,Ord,Read)
+data Variable = 
+ Var { getVarMod     :: VarModifier
+     , getTypeVar    :: Type
+     , getVarDeclVar :: [VarDecl]
+     } deriving (Eq,Ord,Read)
 
 instance Show Variable where
  show (Var modif t vdecls) = show modif ++ t ++ " " ++ addComma' (map show vdecls) ++ " ;"
@@ -188,8 +190,9 @@ instance Show VarModifier where
  show VarModifierNil   = ""
 
 data VarDecl =
-   VarDecl Id VariableInitializer
-  deriving (Eq,Ord,Read)
+ VarDecl { varDecId   :: Id
+         , varDecInit :: VariableInitializer
+         } deriving (Eq,Ord,Read)
 
 instance Show VarDecl where
  show (VarDecl id varinit) = id ++ show varinit
