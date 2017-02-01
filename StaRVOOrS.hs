@@ -22,12 +22,14 @@ import Data.Functor
 
 data Flag = Version 
  | OnlyParse String
-    deriving Show
+ | NoneVerbose
+    deriving (Show,Eq)
    
 options :: [OptDescr Flag]
 options =
-    [ Option "v" ["version"] (NoArg Version) "show version number"
-    , Option "p" ["only_parse"] (ReqArg OnlyParse "address") "only parse the ppDATE script"    
+    [ Option "v" ["version"] (NoArg Version) "Show version number"
+    , Option "n" ["none_verbose"] (NoArg NoneVerbose) "None verbose monitor generation"
+    , Option "p" ["only_parse"] (ReqArg OnlyParse "address") "Only parse the ppDATE script"    
     ]
 
 -------------
@@ -58,7 +60,10 @@ main =
                                              Bad s -> putStrLn $ "\nThe parsing has failed: " ++ s ++ "\n"
                                              Ok _  -> putStrLn "\nThe parsing was successful.\n"
            else putStrLn s
-      ([],[java_fn_add, ppdate_fn, output_add],[]) -> run [] java_fn_add ppdate_fn output_add      
+      (xs,[java_fn_add, ppdate_fn, output_add],[]) -> 
+          if checkOptions xs
+          then run xs java_fn_add ppdate_fn output_add
+          else putStrLn ("Usage: Some of your options cannot be combined.\n")
       (_,_,[]) -> do
                      name <- getProgName
                      putStrLn ("Usage: " ++ name ++ " [-OPTIONS] <java_source_files_address> <ppDATE_file> <output_address>")
@@ -110,7 +115,8 @@ run flags java_fn_add ppdate_fn output_add =
                                              writeFile larva_add ""
                                              translate ppdate' larva_add
                                              putStrLn "Running LARVA..."
-                                             rawSystem "java" ["-jar","larva.jar",larva_add,"-v","-o",output_add']
+                                             let mode = if elem NoneVerbose flags then "" else "-v"
+                                             rawSystem "java" ["-jar","larva.jar",larva_add,mode,"-o",output_add']
                                              putStrLn "Monitor files generation completed."
                                              removeDirectoryRecursive (output_add' ++ "/workspace") 
                                              out_dir_content <- getDirectoryContents output_add'
@@ -119,6 +125,13 @@ run flags java_fn_add ppdate_fn output_add =
 -------------------------
 -- Auxiliary Functions --
 -------------------------
+
+--Method used to check wrong combination of options
+checkOptions :: [Flag] -> Bool
+checkOptions []               = True
+checkOptions (Version:xs)     = False
+checkOptions (OnlyParse _:xs) = False
+checkOptions (_:xs)           = checkOptions xs
 
 checkOutputDirectory :: FilePath -> IO ()
 checkOutputDirectory file = 
