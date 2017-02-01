@@ -34,10 +34,10 @@ upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
                      Bad s             -> fail s
                      Ok (temps',env') ->
                         case runStateT (genGlobal global) env' of
-                                     Bad s              -> if (not.null) dcs
-                                                           then fail $ s ++ duplicateHT dcs
-                                                           else fail s
-                                     Ok (global', env'') ->  
+                             Bad s              -> if (not.null) dcs
+                                                   then fail $ s ++ duplicateHT dcs
+                                                   else fail s
+                             Ok (global', env'') ->  
                                           let trs = map (\(x,_,_,_) -> x) $ allTriggers env''
                                               noneTrs = [x | x <- triggersInTemps env'', not $ elem x trs] in
                                           if (not.null.trim.concat) noneTrs
@@ -277,7 +277,7 @@ checkMNforNew mn bind bs rs id zs =
                              then if null zs 
                                   then return True
                                   else fail $ "Error: Trigger declaration [" ++ id ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n"
-                             else do tell $ "Error: Problem in trigger " ++ id ++ "\n."
+                             else do tell $ "Error: Wrong exit object in trigger " ++ id ++ "\n."
                                      return False
       _         -> return False
 
