@@ -1,7 +1,7 @@
 module JMLInjection(generateTmpFilesAllConsts,generateTmpFilesCInvs,updateTmpFilesCInvs,generateDummyBoolVars) where
 
 import Types
-import JMLGenerator as PJML
+import JMLGenerator
 import CommonFunctions
 import System.Directory
 import Data.Char

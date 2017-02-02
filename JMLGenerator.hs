@@ -8,7 +8,7 @@ import ErrM
 -- Class Invariants --
 ----------------------
 
-getCInvariants :: CInvariants -> String
+getCInvariants :: CInvariants -> String 
 getCInvariants []           = ""
 getCInvariants (cinv:cinvs) = fromCInvariant2JML cinv ++ getCInvariants cinvs
 
@@ -29,9 +29,9 @@ getHTs' = genJMLConstsAll'
 
 genJMLConstsAll' :: UpgradePPD PPDATE -> [(MethodName, ClassInfo, String)]
 genJMLConstsAll' ppd = 
- let (ppdate, _) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
-     cs          = htsGet ppdate
- in map (\(x,z,y) -> (x, z,"  /*@ public normal_behaviour\n" ++ y ++ "    @*/\n")) $ genJMLConsts' cs []
+ let ppdate = getValue ppd
+     cs     = htsGet ppdate
+ in map (\(x,z,y) -> (x, z,"  /*@ \n" ++ y ++ "    @*/\n")) $ genJMLConsts' cs []
 
 genJMLConsts' :: HTriples -> [(MethodName, ClassInfo, String)] -> [(MethodName, ClassInfo, String)]
 genJMLConsts' [] xs     = xs
@@ -47,7 +47,8 @@ updateJMLForM' c mn cl ((mn', cl', jml):xs) = if (mn == mn' && cl == cl')
 
 fromHT2JML' :: HT -> String
 fromHT2JML' (HT cn _ precon postcon assig _ _ _) =  
-  "    @ " ++ requires' precon cn
+  "    @ public normal_behaviour\n"
+  ++ "    @ " ++ requires' precon cn
   ++ "    @ " ++ ensures postcon
   ++ "    @ " ++ assign assig
   ++ "    @ diverges true;\n" -- partial correctness

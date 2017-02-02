@@ -29,4 +29,4 @@ For older compilers, use:
 
 In addition, to use the compiled code you have to download the APIs for KeY and LARVA:
 
-www.cse.chalmers.se/~chimento/starvoors/files/StaRVOOrS_APIs.zip
+http://cse-212294.cse.chalmers.se/starvoors/files/APIs/StaRVOOrS_APIs.zip
