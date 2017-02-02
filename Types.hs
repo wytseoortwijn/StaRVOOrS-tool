@@ -510,3 +510,13 @@ data OExpr = OExpr
  , inferType :: String
  } deriving (Show,Eq)
 
+
+-----------
+-- Flags --
+-----------
+
+data Flag = Version 
+ | OnlyParse String
+ | NoneVerbose
+ | XML
+    deriving (Show,Eq)

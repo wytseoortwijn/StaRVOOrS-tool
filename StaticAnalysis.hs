@@ -31,17 +31,17 @@ import TranslatorActions
 -- Static Analysis using KeY --
 -------------------------------
 
-staticAnalysis :: FilePath -> UpgradePPD PPDATE -> FilePath -> Filename -> IO (UpgradePPD PPDATE)
-staticAnalysis jpath ppd output_add fn =
+staticAnalysis :: FilePath -> UpgradePPD PPDATE -> FilePath -> Filename -> [Flag] -> IO (UpgradePPD PPDATE)
+staticAnalysis jpath ppd output_add fn flags =
  let ppdate      = getValue ppd
      consts      = htsGet ppdate
  in if (null consts)
     then do putStrLn "\nThere are no Hoare triples to analyse."
             return ppd
-    else staticAnalysis' jpath ppd output_add fn
+    else staticAnalysis' jpath ppd output_add fn flags
 
-staticAnalysis' :: FilePath -> UpgradePPD PPDATE -> FilePath -> Filename -> IO (UpgradePPD PPDATE)
-staticAnalysis' jpath ppd output_add fn =
+staticAnalysis' :: FilePath -> UpgradePPD PPDATE -> FilePath -> Filename -> [Flag] -> IO (UpgradePPD PPDATE)
+staticAnalysis' jpath ppd output_add fn flags =
  let output_addr = if ((last $ trim output_add) == '/') 
                    then output_add
                    else output_add ++ "/"
@@ -75,6 +75,7 @@ staticAnalysis' jpath ppd output_add fn =
                let ppdref' = prepareRefPPD ppdref
                let ppdate' = translateActions $ replacePInit ppdref
                let refFile = output_addr ++ generateRefPPDFileName fn
+               if (not (elem XML flags)) then removeFile xml_add else return ()
                writeFile refFile (writePPD ppdref')
                generateReport xml' output_addr
                putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
