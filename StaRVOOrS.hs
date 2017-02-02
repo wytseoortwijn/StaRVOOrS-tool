@@ -32,6 +32,9 @@ main =
   do
     args <- SE.getArgs
     case getOpt Permute options args of 
+      ([Help],[],[]) -> do name <- getProgName
+                           putStrLn $ usageInfo "" options 
+                           putStrLn ("Usage: " ++ name ++ " [-OPTIONS] <java_source_files> <ppDATE_file> <output>")
       ([Version],[],[]) -> putStrLn version
       ([OnlyParse ppdate_fn],[],[]) -> 
         do s <- isPPDATEfile ppdate_fn
@@ -48,9 +51,8 @@ main =
           if checkOptions xs
           then run xs java_fn_add ppdate_fn output_add
           else putStrLn ("Usage: Some of your options cannot be combined.\n")
-      (_,_,[]) -> do
-                     name <- getProgName
-                     putStrLn ("Usage: " ++ name ++ " [-OPTIONS] <java_source_files_address> <ppDATE_file> <output_address>")
+      (_,_,[]) -> do name <- getProgName
+                     putStrLn ("Usage: " ++ name ++ " [-OPTIONS] <java_source_files> <ppDATE_file> <output>")
       (_,_,errs) -> sequence_ $ map putStrLn errs
 
 
