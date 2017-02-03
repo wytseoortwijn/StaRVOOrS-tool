@@ -25,6 +25,7 @@ import DL2JML
 import qualified Printactions as PrintAct
 import qualified ParserAct as ParAct
 import TranslatorActions
+import System.Exit
 
 
 -------------------------------
@@ -35,10 +36,12 @@ staticAnalysis :: FilePath -> UpgradePPD PPDATE -> FilePath -> Filename -> [Flag
 staticAnalysis jpath ppd output_add fn flags =
  let ppdate      = getValue ppd
      consts      = htsGet ppdate
- in if (null consts)
-    then do putStrLn "\nThere are no Hoare triples to analyse."
-            return ppd
-    else staticAnalysis' jpath ppd output_add fn flags
+ in if elem OnlyRV flags
+    then staticAnalysis' jpath ppd output_add fn flags
+    else if (null consts)
+         then do putStrLn "\nThere are no Hoare triples to analyse."
+                 return $ translateActions $ replacePInit ppd
+         else staticAnalysis' jpath ppd output_add fn flags
 
 staticAnalysis' :: FilePath -> UpgradePPD PPDATE -> FilePath -> Filename -> [Flag] -> IO (UpgradePPD PPDATE)
 staticAnalysis' jpath ppd output_add fn flags =
@@ -63,7 +66,7 @@ staticAnalysis' jpath ppd output_add fn flags =
        let consts_jml = JMLGenerator.getHTs' ppd
        copyFiles jpath output_add'
        generateTmpFilesAllConsts ppd consts_jml output_add' (nulla_add ++ "/")
-       rawSystem "java" ["-jar","key.starvoors.jar",output_add', output_addr]
+       runKeY output_add' output_addr flags
        let xml_add = output_addr ++ "out.xml"
        b <- doesFileExist xml_add
        if b
@@ -93,8 +96,9 @@ staticAnalysis' jpath ppd output_add fn flags =
                copyFiles jpath (output_addr ++ annotated_add)
                methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
                return ppdate''
-       else do generateReportFailure output_addr
-               let ppd' = generateNewTriggers ppd (htsGet $ getValue ppd)               
+       else do generateReportFailure output_addr flags
+               let ppd'' = generateNewTriggers ppd (htsGet $ getValue ppd)    
+               let ppd' = translateActions $ replacePInit ppd''
                putStrLn "Generating Java files to control the Hoare triple(s) at runtime."
                oldExpTypes <- inferTypesOldExprs ppd' jpath (output_addr ++ "workspace/")
                let ppdate'' = operationalizeOldResultBind ppd' oldExpTypes
@@ -109,6 +113,16 @@ staticAnalysis' jpath ppd output_add fn flags =
                messagesFileGen add (getEnvVal ppdate'')
                methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
                return ppdate''
+
+-------------
+-- Run KeY --
+-------------
+
+runKeY :: FilePath -> FilePath -> [Flag] -> IO ExitCode
+runKeY output_add' output_addr flags = 
+ if elem OnlyRV flags
+ then return ExitSuccess
+ else rawSystem "java" ["-jar","key.starvoors.jar",output_add', output_addr]
 
 --------------------------------------------------------------
 -- Copy all the files within a Directory to a new directory --

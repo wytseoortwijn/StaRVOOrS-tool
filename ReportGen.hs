@@ -13,10 +13,12 @@ generateReport proofs output_addr =
  do info <- fmap report (return proofs)
     writeFile (output_addr ++ "report.txt") info
 
-generateReportFailure :: FilePath -> IO ()
-generateReportFailure output_addr = 
- do putStrLn "\nWarning: KeY execution has failed."
-    writeFile (output_addr ++ "report.txt") "Warning: KeY execution has failed.\n"
+generateReportFailure :: FilePath -> [Flag] -> IO ()
+generateReportFailure output_addr flags = 
+ if elem OnlyRV flags
+ then return ()
+ else do putStrLn "\nWarning: KeY execution has failed."
+         writeFile (output_addr ++ "report.txt") "Warning: KeY execution has failed.\n"
 
 
 
