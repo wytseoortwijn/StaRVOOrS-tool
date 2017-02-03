@@ -38,7 +38,7 @@ upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
                                                    then fail $ s ++ duplicateHT dcs
                                                    else fail s
                              Ok (global', env'') ->  
-                                          let trs = map (\(x,_,_,_) -> x) $ allTriggers env''
+                                          let trs = map (\(x,_,_,_,_) -> x) $ allTriggers env''
                                               noneTrs = [x | x <- triggersInTemps env'', not $ elem x trs] in
                                           if (not.null.trim.concat) noneTrs
                                           then fail $ "Error: The trigger(s) [" ++ addComma noneTrs ++ "] are used in the definition of a template, but do(es) not exist(s).\n"
@@ -79,7 +79,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
     trigs' <- getTriggers trigs
     env <- get
     let cns   = htsNames env
-    let prop' = getProperty prop (map (\(x,y,z,r) -> x) (allTriggers env)) env
+    let prop' = getProperty prop (map (\(x,y,z,r,t) -> x) (allTriggers env)) env
     let ies'  = getActEvents ies    
     case runWriter prop' of
          (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
@@ -176,7 +176,7 @@ getTrigger' :: Abs.Trigger -> UpgradePPD TriggerDef
 getTrigger' (Abs.Trigger id binds ce wc)      =
  do env  <- get
     let id'' = getIdAbs id
-    let err  = if (elem id'' (map (\(x,y,z,t) -> x) (allTriggers env))) then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") else ""
+    let err  = if (elem id'' (map (\(x,y,z,r,t) -> x) (allTriggers env))) then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") else ""
     do case runWriter (getBindsArgs binds) of
          (bs, s) ->
            let err0 = if (not.null) s then (err ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s ++ "].\n") else err
@@ -206,8 +206,8 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
                                                                   do let einfo = if null s''
                                                                                  then getTriggerClass bind
                                                                                  else s''
-                                                                     let env' = updateEntryTriggersInfo env (id'',einfo, (map bindToArgs bs)) bs mn bind s''
-                                                                     put env' { allTriggers = (id'',mn,EVEntry,(properBind bind) ++bs) : allTriggers env }
+                                                                     let (env',ci) = updateEntryTriggersInfo env (id'',einfo, (map bindToArgs bs)) bs mn bind s''
+                                                                     put env' { allTriggers = (id'',mn,ci,EVEntry,(properBind bind) ++bs) : allTriggers env }
                                                                      return TriggerDef { tName = id''
                                                                                        , args  = bs
                                                                                        , compTrigger = ce'
@@ -231,8 +231,8 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
                                                                      do let einfo = if null s''
                                                                                  then getTriggerClass bind
                                                                                  else s''
-                                                                        let env' = updateExitTriggersInfo env (id'',einfo, (map bindToArgs bs)) bs mn bind s''
-                                                                        put env' { allTriggers = (id'',mn,EVExit rs,(properBind bind) ++ bs) : allTriggers env }
+                                                                        let (env',ci) = updateExitTriggersInfo env (id'',einfo, (map bindToArgs bs)) bs mn bind s''
+                                                                        put env' { allTriggers = (id'',mn,ci,EVExit rs,(properBind bind) ++ bs) : allTriggers env }
                                                                         return TriggerDef { tName = id''
                                                                                           , args  = bs
                                                                                           , compTrigger = ce'
@@ -245,7 +245,7 @@ getTrigger' (Abs.Trigger id binds ce wc)      =
                                                                      , whereClause = getWhereClause wc
                                                                      }
                           _  -> if (not.null) err1 then fail err1 else
-                                do put env { allTriggers = (id'',"",EVNil,bs) : allTriggers env }
+                                do put env { allTriggers = (id'',"","",EVNil,bs) : allTriggers env }
                                    return TriggerDef { tName = id''
                                                      , args  = bs
                                                      , compTrigger = ce'
@@ -1101,7 +1101,7 @@ data Env = Env
  { forsVars            :: [Id] --foreach bounded variable names 
  , entryTriggersInfo   :: Map.Map ClassInfo MapTrigger
  , exitTriggersInfo    :: Map.Map ClassInfo MapTrigger
- , allTriggers         :: [(Id,MethodName,TriggerVariation,[Bind])]
+ , allTriggers         :: [(Id,MethodName,ClassInfo,TriggerVariation,[Bind])]
  , htsNames            :: [HTName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
  , varsInPPD           :: Variables
@@ -1135,22 +1135,22 @@ emptyEnv = Env { forsVars            = []
                , actes               = []
                }
 
-updateEntryTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> String -> Env
+updateEntryTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> String -> (Env,ClassInfo)
 updateEntryTriggersInfo env einfo args mn BindStar _        = 
  let t = "*" in
  case Map.lookup t (entryTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
-                 in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
+                 in (env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) },t)
       Just mapeinfo -> 
            let mapeinfo' = updateInfo mapeinfo mn einfo 
-           in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
+           in (env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) },"*")
 updateEntryTriggersInfo env einfo args mn (BindType t id) _ = 
  case Map.lookup t (entryTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
-                 in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
+                 in (env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) },t)
       Just mapeinfo -> 
            let mapeinfo' = updateInfo mapeinfo mn einfo 
-           in env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) }
+           in (env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) },t)
 updateEntryTriggersInfo env einfo args mn (BindId id) s     = 
  let ts' = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
      val = prepareValUpd mn s id s
@@ -1159,28 +1159,28 @@ updateEntryTriggersInfo env einfo args mn (BindId id) s     =
     then error $ "The trigger " ++ (\(x,y,z) -> x) einfo ++ " does not include a class variable declaration.\n"
     else case Map.lookup (head ts) (entryTriggersInfo env) of
               Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
-                         in env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) }
+                         in (env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) },(head ts))
               Just mapeinfo -> 
                    let mapeinfo' = updateInfo mapeinfo mn einfo 
-                   in env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) }
+                   in (env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) },(head ts))
 
 
-updateExitTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> String -> Env
+updateExitTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> String -> (Env,ClassInfo)
 updateExitTriggersInfo env einfo args mn BindStar _        = 
  let t = "*" in
  case Map.lookup t (exitTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
-                 in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
+                 in (env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) },t)
       Just mapeinfo -> 
            let mapeinfo' = updateInfo mapeinfo mn einfo 
-           in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
+           in (env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) },t)
 updateExitTriggersInfo env einfo args mn (BindType t id) _ = 
  case Map.lookup t (exitTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
-                 in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
+                 in (env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) },t)
       Just mapeinfo -> 
            let mapeinfo' = updateInfo mapeinfo mn einfo 
-           in env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) }
+           in (env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) },t)
 updateExitTriggersInfo env einfo args mn (BindId id) s     = 
  let ts' = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
      ts  = if (null ts') then prepareValUpd mn s id s else ts'
@@ -1188,10 +1188,10 @@ updateExitTriggersInfo env einfo args mn (BindId id) s     =
     then error $ "The trigger " ++ (\(x,y,z) -> x) einfo ++ " does not include a class variable declaration.\n" 
     else case Map.lookup (head ts) (exitTriggersInfo env) of
               Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
-                         in env { exitTriggersInfo = Map.insert (head ts) mapeinfo' (exitTriggersInfo env) }
+                         in (env { exitTriggersInfo = Map.insert (head ts) mapeinfo' (exitTriggersInfo env) },(head ts))
               Just mapeinfo -> 
                    let mapeinfo' = updateInfo mapeinfo mn einfo 
-                   in env { exitTriggersInfo = Map.insert (head ts) mapeinfo' (exitTriggersInfo env) }
+                   in (env { exitTriggersInfo = Map.insert (head ts) mapeinfo' (exitTriggersInfo env) },(head ts))
 
  
 prepareValUpd :: MethodName -> String -> String -> String -> [String]

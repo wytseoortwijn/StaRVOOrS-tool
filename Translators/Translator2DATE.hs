@@ -303,8 +303,9 @@ accumTransitions (cn:cns) ns consts ts es env pn =
 generateTransition :: HTName -> NameState -> HTriples -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
 generateTransition p ns cs ts es env pn = 
  let c             = lookForHT p cs
+     cl            = fst $ methodCN c
      mn            = snd $ methodCN c
-     entrs         = lookForEntryTrigger (allTriggers env) mn
+     entrs         = lookForEntryTrigger (allTriggers env) mn cl
      entrs'        = [tr | tr <- entrs, tr /= (mn++"_ppden")]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
  in if null entrs

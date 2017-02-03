@@ -24,7 +24,8 @@ makeReplicateAutomaton c n env =
 makeTransitions :: HT -> Int -> Env -> Transitions
 makeTransitions c n env =
    let mn      = snd $ methodCN c
-       trigs   = lookForExitTrigger (allTriggers env) mn
+       cl      = fst $ methodCN c
+       trigs   = lookForExitTrigger (allTriggers env) mn cl
        trig    = getGenTrEx trigs mn
        esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
        cn      = htName c

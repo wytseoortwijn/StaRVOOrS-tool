@@ -51,23 +51,23 @@ checkIfParseErrors es = let (ls, rs) = partitionEithers es
                            else Right rs
 
 
-lookForExitTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> [Trigger]
-lookForExitTrigger [] mn                = []
-lookForExitTrigger ((tr,mn',e,_):es) mn = 
+lookForExitTrigger :: [(Id,MethodName,ClassInfo,TriggerVariation,[Bind])] -> MethodName -> ClassInfo -> [Trigger]
+lookForExitTrigger [] _ _                      = []
+lookForExitTrigger ((tr,mn',ci',e,_):es) mn ci = 
     case e of
-        EVExit _ -> if (mn == mn')
-                    then tr:lookForExitTrigger es mn
-                    else lookForExitTrigger es mn
-        _        -> lookForExitTrigger es mn        
+        EVExit _ -> if (mn == mn' && ci == ci')
+                    then tr:lookForExitTrigger es mn ci
+                    else lookForExitTrigger es mn ci
+        _        -> lookForExitTrigger es mn ci
 
-lookForEntryTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> [Trigger]
-lookForEntryTrigger [] mn                = []
-lookForEntryTrigger ((tr,mn',e,_):es) mn = 
+lookForEntryTrigger :: [(Id,MethodName,ClassInfo,TriggerVariation,[Bind])] -> MethodName -> ClassInfo -> [Trigger]
+lookForEntryTrigger [] _ _                       = []
+lookForEntryTrigger ((tr,mn',ci',e,_):es) mn ci  = 
     case e of
-        EVEntry -> if (mn == mn')
-                   then tr:lookForEntryTrigger es mn
-                   else lookForEntryTrigger es mn
-        _       -> lookForEntryTrigger es mn  
+        EVEntry -> if (mn == mn' && ci == ci')
+                   then tr:lookForEntryTrigger es mn ci
+                   else lookForEntryTrigger es mn ci
+        _       -> lookForEntryTrigger es mn ci
 
 openingBracket :: String -> Bool
 openingBracket "" = False
@@ -143,8 +143,8 @@ getBindArgs' [BindType t id]        = t ++ " " ++ id
 getBindArgs' ((BindType t id):y:ys) = t ++ " " ++ id ++ "," ++ getBindArgs' (y:ys)
 getBindArgs' _                      = ""
 
-getInfoTrigger :: (Id,MethodName,TriggerVariation,[Bind]) -> Maybe (Trigger, [String])
-getInfoTrigger (tr,mn',e,bs) = 
+getInfoTrigger :: (Id,MethodName,ClassInfo,TriggerVariation,[Bind]) -> Maybe (Trigger, [String])
+getInfoTrigger (tr,mn',ci,e,bs) = 
  case e of
      EVExit _ -> Just (tr,splitOnIdentifier "," $ getBindArgs' bs)
      EVEntry  -> Just (tr,splitOnIdentifier "," $ getBindArgs' bs)
