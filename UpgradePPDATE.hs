@@ -28,25 +28,23 @@ upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
     case runStateT (genHTs consts imports') emptyEnv of
          Bad s             -> fail s
          Ok (consts', env) ->
-             let cns = htsNames env
-                 dcs = getDuplicate cns
-             in case runStateT (genTemplates temps) env of
-                     Bad s             -> fail s
-                     Ok (temps',env') ->
-                        case runStateT (genGlobal global) env' of
-                             Bad s              -> if (not.null) dcs
-                                                   then fail $ s ++ duplicateHT dcs
-                                                   else fail s
-                             Ok (global', env'') ->  
-                                          let trs = map (\(x,_,_,_,_) -> x) $ allTriggers env''
-                                              noneTrs = [x | x <- triggersInTemps env'', not $ elem x trs] in
-                                          if (not.null.trim.concat) noneTrs
-                                          then fail $ "Error: The trigger(s) [" ++ addComma noneTrs ++ "] are used in the definition of a template, but do(es) not exist(s).\n"
-                                          else case runStateT (genClassInvariants cinvs) env'' of
-                                                    Bad s             -> fail s
-                                                    Ok (cinvs',env'') -> 
-                                                          do put env''
-                                                             return (PPDATE imports' global' temps' cinvs' consts' methods')
+            let cns = htsNames env
+                dcs = getDuplicate cns
+            in case runStateT (genTemplates temps) env of
+                    Bad s             -> fail s
+                    Ok (temps',env') ->
+                       case runStateT (genGlobal global) env' of
+                            Bad s              -> fail $ s ++ duplicateHT dcs
+                            Ok (global', env'') ->  
+                               let trs     = map (\(x,_,_,_,_) -> x) $ allTriggers env''
+                                   noneTrs = [x | x <- triggersInTemps env'', not $ elem x trs] 
+                               in  if (not.null.trim.concat) noneTrs
+                                   then fail $ "Error: The trigger(s) [" ++ addComma noneTrs ++ "] are used in the definition of a template, but do(es) not exist(s).\n"
+                                   else case runStateT (genClassInvariants cinvs) env'' of
+                                             Bad s             -> fail s
+                                             Ok (cinvs',env''') -> 
+                                                do put env'''
+                                                   return (PPDATE imports' global' temps' cinvs' consts' methods')
 
    
 -------------
@@ -1020,43 +1018,43 @@ joinImport [ys]   = ys
 joinImport (xs:ys:iss) = xs ++ "." ++ joinImport (ys:iss)
 
 
-lookForAllEntryTriggerArgs :: Env -> ClassInfo -> MethodName -> (String, String)
+lookForAllEntryTriggerArgs :: Env -> ClassInfo -> MethodName -> UpgradePPD (String, String)
 lookForAllEntryTriggerArgs env cinf mn =
  case Map.lookup cinf (entryTriggersInfo env) of
       Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
-                      Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                      Nothing -> fail $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                       Just m' -> case Map.lookup mn m' of
-                                      Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                      Just _  -> error $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"                           
+                                      Nothing -> fail $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                      Just _  -> fail $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"                           
       Just m  -> case Map.lookup mn m of
                       Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
-                                      Nothing -> error $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                      Nothing -> fail $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                                       Just m' -> case Map.lookup mn m' of
-                                                 Nothing ->  error $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                                 Just _  -> error $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
+                                                 Nothing ->  fail $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                                 Just _  -> fail $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
                       Just xs -> let ys = filter (\(x,_,_) -> isSuffixOf "_ppden" x) xs
                                  in if null ys
-                                    then getArgsGenMethods (head xs)
-                                    else getArgsGenMethods (head ys) 
+                                    then return $ getArgsGenMethods (head xs)
+                                    else return $ getArgsGenMethods (head ys) 
 
-lookForAllExitTriggerArgs :: Env -> ClassInfo -> MethodName -> (String, String)
+lookForAllExitTriggerArgs :: Env -> ClassInfo -> MethodName -> UpgradePPD (String, String)
 lookForAllExitTriggerArgs env cinf mn =
  case Map.lookup cinf (exitTriggersInfo env) of
       Nothing -> case Map.lookup "*" (exitTriggersInfo env) of
-                      Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                      Nothing -> fail $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                       Just m' -> case Map.lookup mn m' of
-                                      Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                      Just _  -> error $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
+                                      Nothing -> fail $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                      Just _  -> fail $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
       Just m  -> case Map.lookup mn m of
                       Nothing -> case Map.lookup "*" (exitTriggersInfo env) of
-                                      Nothing -> error $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                      Nothing -> fail $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                                       Just m' -> case Map.lookup mn m' of
-                                                 Nothing ->  error $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                                 Just _  -> error $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
+                                                 Nothing ->  fail $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                                 Just _  -> fail $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
                       Just xs -> let ys = filter (\(x,_,_) -> isSuffixOf "_ppdex" x) xs
                                  in if null ys
-                                    then getArgsGenMethods (head xs)
-                                    else getArgsGenMethods (head ys) 
+                                    then return $ getArgsGenMethods (head xs)
+                                    else return $ getArgsGenMethods (head ys) 
                            
 
 getArgsGenMethods :: (Id, String, [Args]) -> (String,String)
@@ -1225,32 +1223,32 @@ getEnvVal uppd = snd . (\(Ok x) -> x) $ runStateT uppd emptyEnv
 
 getEntryTriggersEnv :: UpgradePPD a -> Map.Map ClassInfo MapTrigger
 getEntryTriggersEnv ppd = let env = CM.execStateT ppd emptyEnv
-                        in case env of
-                                Bad _ -> Map.empty
-                                Ok fs -> entryTriggersInfo fs
+                          in case env of
+                             Bad _ -> Map.empty
+                             Ok fs -> entryTriggersInfo fs
 
 getExitTriggersEnv :: UpgradePPD a -> Map.Map ClassInfo MapTrigger
 getExitTriggersEnv ppd = let env = CM.execStateT ppd emptyEnv
-                       in case env of
-                               Bad _ -> Map.empty
-                               Ok fs -> exitTriggersInfo fs
+                         in case env of
+                            Bad _ -> Map.empty
+                            Ok fs -> exitTriggersInfo fs
 
 getForeachVarsEnv :: UpgradePPD a -> [Id]
 getForeachVarsEnv ppd = let env = CM.execStateT ppd emptyEnv
                         in case env of
-                                Bad _ -> []
-                                Ok fs -> forsVars fs
+                           Bad _ -> []
+                           Ok fs -> forsVars fs
 
 getHTNamesEnv :: UpgradePPD a -> [HTName]
 getHTNamesEnv ppd = let env = CM.execStateT ppd emptyEnv
-                          in case env of
-                                Bad _ -> []
-                                Ok fs -> htsNames fs
+                    in case env of
+                       Bad _ -> []
+                       Ok fs -> htsNames fs
 
 getOldExpTypesEnv :: UpgradePPD a -> OldExprM
 getOldExpTypesEnv ppd = let env = CM.execStateT ppd emptyEnv
                         in case env of
-                                Bad _ -> Map.empty
-                                Ok fs -> oldExpTypes fs
+                           Bad _ -> Map.empty
+                           Ok fs -> oldExpTypes fs
 
 

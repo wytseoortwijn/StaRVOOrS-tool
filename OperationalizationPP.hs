@@ -10,6 +10,7 @@ import ErrM
 import Data.List
 import qualified Data.Map as Map
 import Data.Maybe
+import Data.List
 
 
 --TODO: Possible problem when operationalising nested properties
@@ -22,24 +23,27 @@ operationalizeOldResultBind ppd oldExprTypesM =
      methods  = map (\(x,y,z) -> (x,y,map (\(x,y,z) -> y) z)) mfiles
      es       = getAllTriggers global
      xs       = map (\ c -> operationalizePrePostORB c (varsInFiles env) es methods oldExprTypesM) consts
-     oldExpT  = Map.unions $ map snd xs
-     consts'  = map fst xs
+     xs'      = map (\(Bad s) -> s) $ filter isBad $ map (\x -> runStateT x env) xs
+     oldExpT  = Map.unions $ map (snd.goo env) xs
+     consts'  = map (fst.goo env) xs
      global'  = updateGlobal global (Ctxt (variables $ ctxtGet global) (actevents $ ctxtGet global) (triggers $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
- in ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ updateHTsPP (updateGlobalPP ppdate global') consts')
+ in if (not.null) xs'
+    then error $ unlines xs'
+    else ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ updateHTsPP (updateGlobalPP ppdate global') consts')
+                 where goo env = \ x -> fst $ (\(Ok x) -> x) $ runStateT x env
 
 
-
-operationalizePrePostORB :: HT -> [(String, ClassInfo, [(Type, Id)])] -> Triggers -> [(String, ClassInfo, [String])] -> Map.Map HTName [(String,Type)] -> (HT,OldExprM)
+operationalizePrePostORB :: HT -> [(String, ClassInfo, [(Type, Id)])] -> Triggers -> [(String, ClassInfo, [String])] -> Map.Map HTName [(String,Type)] -> UpgradePPD (HT,OldExprM)
 operationalizePrePostORB c vars trigs methods oldExprTypesM = 
- let cn                  = htName c
-     p                   = pre c
-     p'                  = post c
-     (xsPost, oldExprl)  = operationalizeOld p' cn
-     ysPost              = operationalizeResult xsPost
-     oldExprl'           = addType2NewVars cn oldExprTypesM oldExprl
-     c'                  = updatePost c ysPost
-     oldExprl''          = bindOldExp c vars trigs methods oldExprl'
- in (bindCV c' vars trigs methods, Map.singleton cn oldExprl'')
+ do let cn             = htName c
+    let p              = pre c
+    let p'             = post c
+    (xsPost, oldExprl) <- operationalizeOld p' cn
+    let ysPost         = operationalizeResult xsPost
+    let oldExprl'      = addType2NewVars cn oldExprTypesM oldExprl
+    let c'             = updatePost c ysPost
+    let oldExprl''     = bindOldExp c vars trigs methods oldExprl'
+    return (bindCV c' vars trigs methods, Map.singleton cn oldExprl'')
 
 
 --------------------------
@@ -135,28 +139,29 @@ getVarsToControl cl ((main, cl', vars):xs) = if (cl == cl')
 ----------
 
 -- returns the operationalized post and a map storing the expressions in old operators
-operationalizeOld :: String -> HTName -> (String, OldExprL)
+operationalizeOld :: String -> HTName -> UpgradePPD (String, OldExprL)
 operationalizeOld post cn = 
  let xs = splitOnIdentifier "\\old(" post
  in if (length xs == 1)
-    then (post, [])
+    then return (post, [])
     else let begin = head xs
              ys    = tail xs
              zs    = map ((\(x,y) -> (trim x, clean $ tail y)) . (splitAtClosingParen 0)) ys
              fszs  = foldr (\(x,y) xs -> (x,"","e" ++ show y):xs) [] $ zip (removeDuplicates (map fst zs)) [1..length zs]
-             s'    = begin ++ flattenOld zs cn fszs
-         in (s',fszs)
+         in do flat <- flattenOld zs cn fszs
+               return (begin ++ flat,fszs)
 
-flattenOld :: [(String, String)] -> HTName -> OldExprL -> String
-flattenOld [] cn _             = ""
+flattenOld :: [(String, String)] -> HTName -> OldExprL -> UpgradePPD String
+flattenOld [] cn _             = return ""
 flattenOld ((xs,ys):xss) cn zs = 
- let xs' = getExpName zs xs cn
- in xs' ++ " " ++ ys ++ flattenOld xss cn zs
+ do xs' <- getExpName zs xs cn
+    rec <- flattenOld xss cn zs
+    return $ xs' ++ " " ++ ys ++ rec
 
-getExpName :: OldExprL -> String -> HTName -> String
-getExpName [] exp _             = error "Error: Cannot get type to operationalise \\old expresion"
+getExpName :: OldExprL -> String -> HTName -> UpgradePPD String
+getExpName [] exp _             = fail "Error: Cannot get type to operationalise \\old expresion"
 getExpName ((a,_,c):xss) exp cn = if exp == a
-                                  then cn ++ "."  ++ c
+                                  then return $ cn ++ "."  ++ c
                                   else getExpName xss exp cn
 
 addType2NewVars :: HTName -> Map.Map HTName [(String,Type)] -> OldExprL -> OldExprL
@@ -191,20 +196,20 @@ operationalizeResult s =
 -- \forall --
 -------------
 
-operationalizeForall :: HT -> Env -> OldExprM -> ([Either (String, String) String], [Either (String, String) String])
+operationalizeForall :: HT -> Env -> OldExprM -> UpgradePPD ([Either (String, String) String], [Either (String, String) String])
 operationalizeForall c env oldExpM = 
- let mn                 = snd $ methodCN c
-     cinfo              = fst $ methodCN c
-     p                  = pre c
-     (enargs, enargswt) = lookForAllEntryTriggerArgs env cinfo mn
-     p'                 = post c 
-     (exargs, exargswt) = lookForAllExitTriggerArgs env cinfo mn
-     xs                 = splitInQuantifiedExpression p "\\forall"
-     ys                 = splitInQuantifiedExpression p' "\\forall"
-     tnewvars           = getConstTnv c oldExpM 
-     xs_pre             = applyGenMethodForall xs (htName c) 1 enargs enargswt "_pre" []
-     ys_post            = applyGenMethodForall ys (htName c) 1 exargs exargswt "_post" tnewvars
- in (xs_pre, ys_post)
+ do let mn             = snd $ methodCN c
+    let cinfo          = fst $ methodCN c
+    let p              = pre c
+    (enargs, enargswt) <- lookForAllEntryTriggerArgs env cinfo mn
+    let p'             = post c 
+    (exargs, exargswt) <- lookForAllExitTriggerArgs env cinfo mn
+    let xs             = splitInQuantifiedExpression p "\\forall"
+    let ys             = splitInQuantifiedExpression p' "\\forall"
+    let tnewvars       = getConstTnv c oldExpM 
+    let xs_pre         = applyGenMethodForall xs (htName c) 1 enargs enargswt "_pre" []
+    let ys_post        = applyGenMethodForall ys (htName c) 1 exargs exargswt "_post" tnewvars
+    return (xs_pre, ys_post)
 
 
 applyGenMethodForall :: [Either String String] -> HTName -> Int -> String -> String -> String -> Variables -> [Either (String, String) String]
@@ -317,20 +322,20 @@ lookforEnd n acum (x:xs) = if (x == ')')
 -- \exist --
 ------------
 
-operationalizeExists :: HT -> Env -> OldExprM -> ([Either (String, String) String], [Either (String, String) String])
+operationalizeExists :: HT -> Env -> OldExprM -> UpgradePPD ([Either (String, String) String], [Either (String, String) String])
 operationalizeExists c es oldExpM = 
- let mn                 = snd $ methodCN c
-     cinfo              = fst $ methodCN c
-     p                  = pre c
-     (enargs, enargswt) = lookForAllEntryTriggerArgs es cinfo mn
-     p'                 = post c 
-     (exargs, exargswt) = lookForAllExitTriggerArgs es cinfo mn
-     xs                 = splitInQuantifiedExpression p "\\exists"
-     ys                 = splitInQuantifiedExpression p' "\\exists"
-     tnewvars           = getConstTnv c oldExpM
-     xs_pre             = applyGenMethodExists xs (htName c) 1 enargs enargswt "_pre" []
-     ys_post            = applyGenMethodExists ys (htName c) 1 exargs exargswt "_post" tnewvars
- in (xs_pre, ys_post)
+ do let mn             = snd $ methodCN c
+    let cinfo          = fst $ methodCN c
+    let p              = pre c
+    (enargs, enargswt) <- lookForAllEntryTriggerArgs es cinfo mn
+    let p'             = post c 
+    (exargs, exargswt) <- lookForAllExitTriggerArgs es cinfo mn
+    let xs             = splitInQuantifiedExpression p "\\exists"
+    let ys             = splitInQuantifiedExpression p' "\\exists"
+    let tnewvars       = getConstTnv c oldExpM
+    let xs_pre         = applyGenMethodExists xs (htName c) 1 enargs enargswt "_pre" []
+    let ys_post        = applyGenMethodExists ys (htName c) 1 exargs exargswt "_post" tnewvars
+    return (xs_pre, ys_post)
 
 
 applyGenMethodExists :: [Either String String] -> HTName -> Int -> String -> String -> String -> Variables -> [Either (String, String) String]
