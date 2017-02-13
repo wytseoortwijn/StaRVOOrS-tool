@@ -76,9 +76,9 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
  do vars' <- getVars vars
     trigs' <- getTriggers trigs
     env <- get
-    let cns   = htsNames env
     let prop' = getProperty prop (map (\(x,y,z,r,t) -> x) (allTriggers env)) env
-    let ies'  = getActEvents ies    
+    let cns   = htsNames env
+    let ies'  = getActEvents ies   
     case runWriter prop' of
          (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
          (PINIT pname id xs props,s)           -> 
@@ -522,7 +522,7 @@ checkTempInCreate act env                     = return act
 
 getForeaches :: Abs.Foreaches -> Context -> UpgradePPD Context
 getForeaches Abs.ForeachesNil ctxt = 
- do env <- get
+ do env <- get    
     put env { actes = actes env ++ map show (actevents ctxt)} 
     return ctxt
 getForeaches (Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ (Abs.ForeachesDef args actxt fors)) afors) ctxt = 
@@ -530,9 +530,11 @@ getForeaches (Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ (Abs.ForeachesDef args actxt 
 getForeaches afors@(Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ Abs.ForeachesNil) _) ctxt = 
  let afors' = prepareForeaches afors
  in do env <- get
-       put env { actes = actes env ++ map show (actevents ctxt)} 
+       put env { actes = actes env ++ map show (actevents ctxt)}      
        fors <- sequence $ map getForeach afors'
-       return (updateCtxtFors ctxt fors)       
+       env' <- get 
+       return (updateCtxtFors ctxt fors)
+
 
 prepareForeaches :: Abs.Foreaches -> [Abs.Foreaches]
 prepareForeaches Abs.ForeachesNil                  = []
@@ -542,13 +544,13 @@ prepareForeaches (Abs.ForeachesDef args ctxt fors) =
 getForeach :: Abs.Foreaches -> UpgradePPD Foreach
 getForeach (Abs.ForeachesDef args ctxt Abs.ForeachesNil) = 
  do ctxt' <- getCtxt ctxt
+    env <- get    
     case foreaches ctxt' of
       [] -> do let args'     = map getArgs args
                let propn     = pName $ property ctxt'
-               let Args t cl = head $ args'
-               env <- get
+               let Args t cl = head $ args'               
                put env { forsVars = forsVars env ++ map getArgsId args'
-                       , propInForeach = (propn,t,cl):propInForeach env }
+                       , propInForeach = (propn,t,cl):propInForeach env }               
                return $ Foreach args' ctxt'
       _  -> fail $ "Error: StaRVOOrS does not support nested Foreaches.\n"
 
@@ -656,7 +658,7 @@ getCInv (Abs.CI cn jml) =
 
 genHTs :: Abs.HTriples -> Imports -> UpgradePPD HTriples
 genHTs Abs.HTempty _          = return []
-genHTs (Abs.HTriples cs) imps = sequence (map (getHT imps) cs)
+genHTs (Abs.HTriples cs) imps = sequence $ map (getHT imps) cs
 
 getHT :: Imports -> Abs.HT -> UpgradePPD HT
 getHT imps (Abs.HT id pre' method post' (Abs.Assignable ass)) =

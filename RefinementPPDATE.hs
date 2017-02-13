@@ -203,9 +203,9 @@ createTriggerEntry (cn,mn,(rt,mn',xs)) n =
  then let trnm = mn ++ "_ppden"
           nvar = "cv" ++ "_" ++ (show n)
           cn'  = cn ++ " " ++ nvar
-          cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) EVEntry
-          tr   = TriggerDef trnm (map ((\[x,y] -> BindType x y).words) xs) cpe ""
-      in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words) xs)),tr)
+          cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words.remGenerics') xs) EVEntry
+          tr   = TriggerDef trnm (map ((\[x,y] -> BindType x y).words.remGenerics') xs) cpe ""
+      in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words.remGenerics') xs)),tr)
  else error $ "Problem when creating an entry trigger. Mismatch between method names " ++ mn ++ " and " ++ mn' ++ ".\n"
 
 addNewTriggerEntry :: Env -> PPDATE -> Int -> [(ClassInfo,MethodName,(String,MethodName,[String]))] -> (Env,PPDATE)
@@ -238,9 +238,9 @@ createTriggerExit (cn,mn,(rt,mn',xs)) n =
  then if (rt == "void")
       then let cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [])
                tr   = TriggerDef trnm (map ((\[x,y] -> BindType x y).words) xs) cpe ""
-           in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words) xs)), tr)
+           in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words.remGenerics') xs)), tr)
       else let cpe = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [BindId ret]) 
-               tr  = TriggerDef trnm (map ((\[x,y] -> BindType x y).words) xs ++ [BindType rt ret]) cpe ""
+               tr  = TriggerDef trnm (map ((\[x,y] -> BindType x y).words.remGenerics') xs ++ [BindType rt ret]) cpe ""
            in ((cn,mn,(trnm, cn', (map ((\[x,y] -> Args x y).words) xs) ++ [Args rt ret])),tr)
  else error $ "Problem when creating an exit trigger. Mismatch between method names " ++ mn ++ " and " ++ mn' ++ ".\n"
 
@@ -283,3 +283,13 @@ makeBind :: String -> Bind
 makeBind [] = error "Cannot make bind\n."
 makeBind s  = (\[x,y] -> BindType x y) $ words s
 
+--Removes generics from the type of the arguments
+remGenerics' :: String -> String
+remGenerics' s = 
+ let ys = splitAtIdentifier '<' s
+ in if (not.null.snd) ys 
+    then let xs = (splitAtIdentifier '>'.reverse.tail.snd) ys in
+         if (not.null.snd) xs
+         then fst ys ++ (reverse $ fst xs)
+         else error "Problem with generics.\n"
+    else s
