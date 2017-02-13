@@ -95,7 +95,6 @@ staticAnalysis' jpath ppd output_add fn flags =
                messagesFileGen add (getEnvVal ppdate'')
                copyFiles jpath (output_addr ++ annotated_add)
                methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
-               error $ show ppdate''
                return ppdate''
        else do generateReportFailure output_addr flags
                let ppd'' = generateNewTriggers ppd (htsGet $ getValue ppd)    
