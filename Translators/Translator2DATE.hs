@@ -53,15 +53,14 @@ writeGlobal ppdate env =
      es     = triggers global
      prop   = property global
      fors   = foreaches global                      
- in case prop of
-    PNIL -> 
-       "GLOBAL {\n\n"
-       ++ writeVariables vars consts acts
-       ++ writeTriggers es consts acts
-       ++ writeProperties prop consts es env
-       ++ writeForeach fors consts env 0 (generateReplicatedAutomata consts (forsVars env) es env)
-       ++ "}\n"
-    _    ->
+ in if checkGlobalForeach vars acts es prop fors
+    then "GLOBAL {\n\n"
+         ++ writeVariables vars consts acts
+         ++ writeTriggers es consts acts
+         ++ writeProperties prop consts es env
+         ++ writeForeach fors consts env 0 (generateReplicatedAutomata consts (forsVars env) es env)
+         ++ "}\n"
+    else 
        case fors of
           [] -> "GLOBAL {\n\n"
                 ++ writeVariables vars consts acts
@@ -73,8 +72,12 @@ writeGlobal ppdate env =
                 ++ writeVariables vars consts acts
                 ++ writeTriggers es consts acts
                 ++ writeProperties prop consts es env
-                ++ writeForeach fors consts env 1 (generateReplicatedAutomata consts [] es env)
+                ++ writeForeach fors consts env 1 (generateReplicatedAutomata consts (forsVars env) es env)
                 ++ "}\n" 
+
+checkGlobalForeach :: Variables -> ActEvents -> Triggers -> Property -> Foreaches -> Bool
+checkGlobalForeach [] [] [] PNIL [x] = True
+checkGlobalForeach _ _ _ _ _         = False
 
 ---------------
 -- Variables --
