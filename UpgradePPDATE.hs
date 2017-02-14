@@ -62,17 +62,17 @@ genImports (Abs.Imports imps) =
 
 genGlobal :: Abs.Global -> UpgradePPD Global
 genGlobal (Abs.Global ctxt) =
- do ctxt' <- getCtxt ctxt
+ do ctxt' <- getCtxt ctxt TopLevel
     return (Global ctxt')
 
 -- Context --
 
-getCtxt :: Abs.Context -> UpgradePPD Context
-getCtxt (Abs.Ctxt _ _ _ Abs.PropertiesNil Abs.ForeachesNil) = fail $ "Error: No properties were defined in section GLOBAL\n."
-getCtxt (Abs.Ctxt Abs.VarNil Abs.ActEventsNil Abs.TriggersNil Abs.PropertiesNil foreaches@(Abs.ForeachesDef _ _ _)) = getForeaches foreaches (Ctxt [] [] [] PNIL [])
-getCtxt (Abs.Ctxt vars ies Abs.TriggersNil prop foreaches) =
- getCtxt (Abs.Ctxt vars ies (Abs.TriggersDef []) prop foreaches)
-getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
+getCtxt :: Abs.Context -> Scope -> UpgradePPD Context
+getCtxt (Abs.Ctxt _ _ _ Abs.PropertiesNil Abs.ForeachesNil) _ = fail $ "Error: No properties were defined in section GLOBAL\n."
+getCtxt (Abs.Ctxt Abs.VarNil Abs.ActEventsNil Abs.TriggersNil Abs.PropertiesNil foreaches@(Abs.ForeachesDef _ _ _)) TopLevel = getForeaches foreaches (Ctxt [] [] [] PNIL []) (InFor (ForId "TopLevel"))
+getCtxt (Abs.Ctxt vars ies Abs.TriggersNil prop foreaches) scope =
+ getCtxt (Abs.Ctxt vars ies (Abs.TriggersDef []) prop foreaches) scope
+getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
  do vars' <- getVars vars
     trigs' <- getTriggers trigs
     env <- get
@@ -80,7 +80,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
     let cns   = htsNames env
     let ies'  = getActEvents ies   
     case runWriter prop' of
-         (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL [])
+         (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL []) scope
          (PINIT pname id xs props,s)           -> 
                   let trs = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
                       s'  = if (not.null) trs
@@ -93,7 +93,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
                             else "Error: In the definition of property " ++ pname
                                  ++ ". The template " ++ id ++ " does not exist\n." 
                   in if (null (s'++s''))
-                     then getForeaches foreaches (Ctxt vars' ies' trigs' (PINIT pname id xs props) [])
+                     then getForeaches foreaches (Ctxt vars' ies' trigs' (PINIT pname id xs props) []) scope
                      else fail s'
          (Property pname states trans props,s) -> 
                   let accep  = checkAllHTsExist (getAccepting states) cns pname
@@ -107,7 +107,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) =
                                      ++ snd s ++ errs
                                else snd s ++ errs 
                   in if (null s')
-                     then getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) [])
+                     then getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) []) scope
                      else fail s'
 
 
@@ -520,19 +520,19 @@ checkTempInCreate act env                     = return act
 -- Foreaches --
 ---------------
 
-getForeaches :: Abs.Foreaches -> Context -> UpgradePPD Context
-getForeaches Abs.ForeachesNil ctxt = 
+getForeaches :: Abs.Foreaches -> Context -> Scope -> UpgradePPD Context
+getForeaches Abs.ForeachesNil ctxt _ = 
  do env <- get    
     put env { actes = actes env ++ map show (actevents ctxt)} 
     return ctxt
-getForeaches (Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ (Abs.ForeachesDef args actxt fors)) afors) ctxt = 
+getForeaches (Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ (Abs.ForeachesDef args actxt fors)) afors) _ _ = 
  fail "Error: StaRVOOrS does not support nested Foreaches.\n"
-getForeaches afors@(Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ Abs.ForeachesNil) _) ctxt = 
+getForeaches afors@(Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ Abs.ForeachesNil) _) ctxt scope = 
  let afors' = prepareForeaches afors
  in do env <- get
-       put env { actes = actes env ++ map show (actevents ctxt)}      
-       fors <- sequence $ map getForeach afors'
-       env' <- get 
+       put env { actes = actes env ++ map show (actevents ctxt)}
+       fors <- sequence $ map (uncurry getForeach) (zip afors' (createIds scope afors'))
+       env' <- get
        return (updateCtxtFors ctxt fors)
 
 
@@ -541,9 +541,16 @@ prepareForeaches Abs.ForeachesNil                  = []
 prepareForeaches (Abs.ForeachesDef args ctxt fors) = 
  (Abs.ForeachesDef args ctxt Abs.ForeachesNil):prepareForeaches fors
 
-getForeach :: Abs.Foreaches -> UpgradePPD Foreach
-getForeach (Abs.ForeachesDef args ctxt Abs.ForeachesNil) = 
- do ctxt' <- getCtxt ctxt
+createIds :: Scope -> [Abs.Foreaches] -> [ForId]
+createIds TopLevel afors          = map (ForId . show) [1..length afors]
+createIds (InFor (ForId s)) afors = 
+ if s == "TopLevel" 
+ then [ForId s]
+ else map (ForId . (s++) . show) [1..length afors]
+
+getForeach :: Abs.Foreaches -> ForId -> UpgradePPD Foreach
+getForeach (Abs.ForeachesDef args ctxt Abs.ForeachesNil) id = 
+ do ctxt' <- getCtxt ctxt (InFor id)
     env <- get    
     case foreaches ctxt' of
       [] -> do let args'     = map getArgs args
@@ -551,7 +558,7 @@ getForeach (Abs.ForeachesDef args ctxt Abs.ForeachesNil) =
                let Args t cl = head $ args'               
                put env { forsVars      = forsVars env ++ map getArgsId args'
                        , propInForeach = (propn,t,cl):propInForeach env }               
-               return $ Foreach args' ctxt' (ForId "")
+               return $ Foreach args' ctxt' id
       _  -> fail $ "Error: StaRVOOrS does not support nested Foreaches.\n"
 
 
