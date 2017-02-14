@@ -56,7 +56,7 @@ refineContext cn (Ctxt vars ies trigs prop fors) =
  in Ctxt vars ies trigs prop' (map (refineForeach cn) fors)
 
 refineForeach :: HTName -> Foreach -> Foreach
-refineForeach cn (Foreach args ctxt) = Foreach args (refineContext cn ctxt)
+refineForeach cn foreach = updCtxtForeach foreach (refineContext cn (getCtxtForeach foreach))
 
 removeStatesProp :: HTName -> Property -> Property
 removeStatesProp _ PNIL               = PNIL
@@ -263,6 +263,7 @@ addNewTriggerExit env ppdate n (x:xs) =
            in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
                                      , allTriggers = (tName tr,mn, cn,getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs
 
+
 addTrigger2ppDATE :: TriggerDef -> PPDATE -> PPDATE
 addTrigger2ppDATE tr (PPDATE imp (Global (Ctxt [] [] [] PNIL (f:fs))) temps ci consts ms) =
  PPDATE imp (Global (Ctxt [] [] [] PNIL (addTrigger2Foreach (f:fs) tr))) temps ci consts ms
@@ -270,8 +271,8 @@ addTrigger2ppDATE tr (PPDATE imp (Global (Ctxt vars ies trs p for)) temps ci con
  PPDATE imp (Global (Ctxt vars ies (tr:trs) p for)) temps ci consts ms
 
 addTrigger2Foreach :: Foreaches -> TriggerDef -> Foreaches
-addTrigger2Foreach [Foreach [Args t id] (Ctxt vars ies trs p for)] tr = 
- [Foreach [Args t id] (Ctxt vars ies (trs ++ [updateWhereTr tr (Args t id)]) p for)]
+addTrigger2Foreach [Foreach [Args t id] (Ctxt vars ies trs p for) id'] tr = 
+ [Foreach [Args t id] (Ctxt vars ies (trs ++ [updateWhereTr tr (Args t id)]) p for) id']
 
 updateWhereTr :: TriggerDef -> Args -> TriggerDef
 updateWhereTr (TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) w) (Args t id) = 

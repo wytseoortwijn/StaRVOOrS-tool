@@ -225,7 +225,7 @@ getAllTriggers (Global (Ctxt vars ies trigs prop fors)) = trigs ++ getTriggersFo
 
 getTriggersFors :: Foreaches -> Triggers
 getTriggersFors []     = []
-getTriggersFors (Foreach args ctxt:fs) = getTriggersCtxt ctxt ++ getTriggersFors fs
+getTriggersFors (f:fs) = getTriggersCtxt (getCtxtForeach f) ++ getTriggersFors fs
 
 getTriggersCtxt :: Context -> Triggers
 getTriggersCtxt (Ctxt vars ies trigs prop fors) = trigs ++ getTriggersFors fors

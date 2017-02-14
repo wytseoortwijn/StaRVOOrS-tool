@@ -549,9 +549,9 @@ getForeach (Abs.ForeachesDef args ctxt Abs.ForeachesNil) =
       [] -> do let args'     = map getArgs args
                let propn     = pName $ property ctxt'
                let Args t cl = head $ args'               
-               put env { forsVars = forsVars env ++ map getArgsId args'
+               put env { forsVars      = forsVars env ++ map getArgsId args'
                        , propInForeach = (propn,t,cl):propInForeach env }               
-               return $ Foreach args' ctxt'
+               return $ Foreach args' ctxt' (ForId "")
       _  -> fail $ "Error: StaRVOOrS does not support nested Foreaches.\n"
 
 
@@ -588,7 +588,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
          (PINIT pname id' xs props,s)  -> 
                   let temptrs = splitOnIdentifier "," $ fst s
                       s'      = snd s ++ if props /= PNIL 
-                                         then "Error: In template " ++ getIdAbs id ++ ", a template should describe eonly one property.\n"
+                                         then "Error: In template " ++ getIdAbs id ++ ", a template should describe only one property.\n"
                                          else "" 
                   in if ((not.null) s')
                      then fail s'
@@ -625,9 +625,22 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
 
 getExitTrsInfo :: Triggers -> [(ClassInfo,MethodName)]
 getExitTrsInfo [] = []
+getExitTrsInfo ((TriggerDef tr args (NormalEvent (BindingVar (BindId id)) id' _ (EVExit _)) _):ts) = 
+ case runStateT (getClassVarArgs args id) emptyEnv of
+      Bad s    -> error $ "Error: In trigger " ++ tr ++ ", " ++ s
+      Ok (t,_) -> (t,id'):getExitTrsInfo ts
 getExitTrsInfo ((TriggerDef _ _ (NormalEvent (BindingVar (BindType t _)) id _ (EVExit _)) _):ts) = 
  (t,id):getExitTrsInfo ts
 getExitTrsInfo (_:ts) = getExitTrsInfo ts
+
+
+getClassVarArgs :: [Bind] -> Id -> UpgradePPD ClassInfo
+getClassVarArgs [] id                    = fail $ id ++ " is not associated to any argument.\n" 
+getClassVarArgs (BindType t id':args) id = 
+ if id == id'
+ then return t
+ else getClassVarArgs args id
+getClassVarArgs (_:args) id              = getClassVarArgs args id
 
 -----------------
 -- CInvariants --
@@ -766,14 +779,15 @@ removePInit (Property name st trs props) = Property name st trs (removePInit pro
 
 
 checkPInitForeach :: Foreach -> Bool
-checkPInitForeach (Foreach _ (Ctxt _ _ _ props _)) = (not.null) $ getPInit props
+checkPInitForeach foreach = 
+ (not.null) $ getPInit $ property $ getCtxtForeach foreach
 
 pinit2foreach :: Property -> Templates -> Foreach
 pinit2foreach (PINIT id tempid bound PNIL) templates = 
  let temp = getTemplate templates tempid
      args = tempBinds temp
      ctxt = Ctxt (tempVars temp) (tempActEvents temp) (tempTriggers temp) (tempProp temp) []
- in Foreach args ctxt
+ in Foreach args ctxt (ForId "pinit")
 
 
 ------------------------------
@@ -877,9 +891,9 @@ writePPDForeaches []          = ""
 writePPDForeaches fors@(f:fs) = unlines (map writePPDForeach fors)
  
 writePPDForeach :: Foreach -> String
-writePPDForeach (Foreach args ctxt) = 
- "FOREACH (" ++ addComma (map show args) ++ ") {\n\n"
- ++ writePPDContext ctxt
+writePPDForeach foreach = 
+ "FOREACH (" ++ addComma (map show (getArgsForeach foreach)) ++ ") {\n\n"
+ ++ writePPDContext (getCtxtForeach foreach)
  ++ "}\n\n"
 
 writePPDTemps :: Templates -> String
@@ -1094,22 +1108,22 @@ getTriggerClass bn = case bn of
 -- Environment with variables, triggers and foreaches information --
 --------------------------------------------------------------------
 
-type MapTrigger = Map.Map MethodName [(Id, String, [Args])] --[(trigger_name,type class_variable,trigger_arguments)]
+type MapTrigger = Map.Map MethodName [(Trigger, String, [Args])] --[(trigger_name,type class_variable,trigger_arguments)]
 
 --Triggers associated to methods in Hoare triples should include: type class_variable
 data Env = Env
  { forsVars            :: [Id] --foreach bounded variable names 
  , entryTriggersInfo   :: Map.Map ClassInfo MapTrigger
  , exitTriggersInfo    :: Map.Map ClassInfo MapTrigger
- , allTriggers         :: [(Id,MethodName,ClassInfo,TriggerVariation,[Bind])]
+ , allTriggers         :: [(Trigger,MethodName,ClassInfo,TriggerVariation,[Bind])]
  , htsNames            :: [HTName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
  , varsInPPD           :: Variables
  , methodsInFiles      :: [(String, ClassInfo, [(Type,Id,[String])])] --[(path_to_class,class_name,[(returned_type,method_name,arguments)])]
  , oldExpTypes         :: OldExprM
  , tempsId             :: [Id]
- , triggersInTemps     :: [Trigger] --is used to check whether the trigger is already defined in 
-                                    --the triggers of the ppDATE instead of a template
+ , triggersInTemps     :: [Trigger] --is used to check whether the triggers in the transitions of the templates are  
+                                    --defined in the triggers of the ppDATE
  , exitTriggersInTemps :: [(ClassInfo,MethodName)]
  , propInForeach       :: [(PropertyName, ClassInfo, String)]-- is used to avoid ambigous reference to variable id in foreaches
  , actes               :: [Id] --list of all defined action events

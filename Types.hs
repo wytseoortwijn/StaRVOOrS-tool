@@ -142,23 +142,28 @@ type Methods = String
 
 type Foreaches = [Foreach]
 
-data Foreach = Foreach [Args] Context deriving (Eq,Show, Read)
+--ForId is introduced to keep track of the scope where a trigger is defined
+data Foreach = 
+ Foreach { getArgsForeach :: [Args]
+         , getCtxtForeach :: Context
+         , getIdForeach :: ForId 
+         } deriving (Eq,Show, Read)
 
-getArgsForeach :: Foreach -> [Args]
-getArgsForeach (Foreach args _) = args
+updCtxtForeach :: Foreach -> Context -> Foreach
+updCtxtForeach (Foreach args ctxt id) ctxt' = Foreach args ctxt' id
+
+data ForId = ForId Id deriving (Eq,Show,Read)
+
+--Type used to know where a trigger is defined
+data Scope = TopLevel | InFor ForId deriving (Eq,Show,Read)
 
 data Args =
-   Args Type Id
-  deriving (Eq,Ord,Read)
+ Args { getArgsType :: Type
+      , getArgsId :: Id
+      } deriving (Eq,Ord,Read)
 
 instance Show Args where
  show (Args t id) = t ++ " " ++ id
-
-getArgsId :: Args -> Id
-getArgsId (Args t id) = id
-
-getArgsType :: Args -> Type
-getArgsType (Args t id) = t
 
 makeArgs :: Type -> Id -> Args
 makeArgs t id = Args t id

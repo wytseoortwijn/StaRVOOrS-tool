@@ -422,9 +422,11 @@ lookForLeavingTransitions e ns (t@(Transition q (Arrow e' c act) q'):ts) =
 -------------
 
 writeForeach :: Foreaches -> HTriples -> Env -> Integer -> String -> String
-writeForeach [] _ _ _ _                               = ""
-writeForeach (Foreach args ctxt:fors) consts env n ra =
- let vars   = variables ctxt
+writeForeach [] _ _ _ _                     = ""
+writeForeach (foreach:fors) consts env n ra =
+ let ctxt   = getCtxtForeach foreach
+     args   = getArgsForeach foreach 
+     vars   = variables ctxt
      es     = triggers ctxt
      prop   = property ctxt
      acts   = actevents ctxt

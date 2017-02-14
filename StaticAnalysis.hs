@@ -181,9 +181,9 @@ removeGeneratedTriggers ppd =
     return $ remGeneratedTriggers ppdate
 
 remGeneratedTriggers :: PPDATE -> PPDATE
-remGeneratedTriggers ppdate@(PPDATE _ (Global ctxt@(Ctxt [] [] [] PNIL (Foreach args ctxt':fors))) _ _ _ _) = 
- let ctxt''  = removeFromTrsCtxt ctxt'
-     fors'   = Foreach args ctxt'':fors
+remGeneratedTriggers ppdate@(PPDATE _ (Global ctxt@(Ctxt [] [] [] PNIL (foreach:fors))) _ _ _ _) = 
+ let ctxt''  = removeFromTrsCtxt (getCtxtForeach foreach)
+     fors'   = (updCtxtForeach foreach ctxt''):fors
      ctxt''' = updateCtxtFors ctxt fors'
      global' = Global ctxt'''
  in updateGlobalPP ppdate global'
@@ -245,7 +245,7 @@ translateActInFors :: Foreaches -> Foreaches
 translateActInFors = map translateActInFor
 
 translateActInFor :: Foreach -> Foreach
-translateActInFor (Foreach args ctxt) = Foreach args (translateActInCtxt ctxt)
+translateActInFor foreach = updCtxtForeach foreach (translateActInCtxt (getCtxtForeach foreach))
 
 translateActInTrans :: Transitions -> Transitions
 translateActInTrans = map translateActInTran
