@@ -74,7 +74,7 @@ getCtxt (Abs.Ctxt vars ies Abs.TriggersNil prop foreaches) scope =
  getCtxt (Abs.Ctxt vars ies (Abs.TriggersDef []) prop foreaches) scope
 getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
  do vars' <- getVars vars
-    trigs' <- getTriggers trigs
+    trigs' <- getTriggers trigs scope
     env <- get
     let prop' = getProperty prop (map (\(x,y,z,r,t) -> x) (allTriggers env)) env
     let cns   = htsNames env
@@ -156,11 +156,11 @@ getActEvents (Abs.ActEventsDef ies) = map (\(Abs.ActEvent ie) -> ActEvent (getId
 
 -- Triggers --
 
-getTriggers :: Abs.Triggers -> UpgradePPD Triggers
-getTriggers Abs.TriggersNil      = return []
-getTriggers (Abs.TriggersDef es) =
+getTriggers :: Abs.Triggers -> Scope -> UpgradePPD Triggers
+getTriggers Abs.TriggersNil _          = return []
+getTriggers (Abs.TriggersDef es) scope =
  do env <- get
-    let xs = map getTrigger' es
+    let xs = map (getTrigger' scope) es
     let (ls, rs) = partitionErr (map (\e -> CM.evalStateT e env) xs)
     if (null ls)
     then sequence xs
@@ -170,8 +170,8 @@ joinBad :: Err a -> String -> String
 joinBad (Bad s1) s2 = s1 ++ s2
 joinBad _ _         = error "ppDATE refinement failure: joinBad \n"
 
-getTrigger' :: Abs.Trigger -> UpgradePPD TriggerDef
-getTrigger' (Abs.Trigger id binds ce wc)      =
+getTrigger' :: Scope -> Abs.Trigger -> UpgradePPD TriggerDef
+getTrigger' scope (Abs.Trigger id binds ce wc) =
  do env  <- get
     let id'' = getIdAbs id
     let err  = if (elem id'' (map (\(x,y,z,r,t) -> x) (allTriggers env))) then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") else ""
@@ -584,7 +584,7 @@ genTemplates (Abs.Temps xs) =
 
 genTemplate :: Abs.Template -> UpgradePPD Template
 genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) = 
- do trigs' <- getTriggers trs
+ do trigs' <- getTriggers trs (InTemp (getIdAbs id))
     env <- get
     let cns   = htsNames env
     let prop' = getProperty prop (map tName trigs') env

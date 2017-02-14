@@ -155,7 +155,7 @@ updCtxtForeach (Foreach args ctxt id) ctxt' = Foreach args ctxt' id
 data ForId = ForId Id deriving (Eq,Show,Read)
 
 --Type used to know where a trigger is defined
-data Scope = TopLevel | InFor ForId deriving (Eq,Show,Read)
+data Scope = TopLevel | InFor ForId | InTemp Id deriving (Eq,Show,Read)
 
 data Args =
  Args { getArgsType :: Type
