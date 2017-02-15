@@ -166,67 +166,81 @@ generateNewTriggers ppd consts =
      let ppdate  = getValue ppd     
      let mfiles  = methodsInFiles env
      let mns     = removeDuplicates [mn | mn <- map methodCN consts]
-     let entry   = filterDefinedTriggers (entryTriggersInfo env) env 0 mns
-     let exit    = filterDefinedTriggers (exitTriggersInfo env) env 1 mns
+     let entry   = filterDefinedTriggers (entryTriggersInfo env) env mns
+     let exit    = filterDefinedTriggers (exitTriggersInfo env) env mns
      let entry'  = [(x,y,head $ filter (\(a,b,c) -> y == b) z) | (x,y) <- entry, (_,d,z) <- mfiles,d==x]
      let exit'   = [(x,y,head $ filter (\(a,b,c) -> y == b) z) | (x,y) <- exit, (_,d,z) <- mfiles,d==x]
-     let (env',ppdate')   = addNewTriggerEntry env ppdate 0 entry'
-     let (env'',ppdate'') = addNewTriggerExit env' ppdate' (length entry') exit'
+     let scope   = properScope ppdate
+     let (env',ppdate')   = addNewTriggerEntry env ppdate 0 entry' scope
+     let (env'',ppdate'') = addNewTriggerExit env' ppdate' (length entry') exit' scope
      put env''
      return ppdate''
 
 --Filter methods associated to triggers defined at top-level
-filterDefinedTriggers :: Map.Map ClassInfo MapTrigger -> Env -> Integer -> [(ClassInfo,MethodName)] -> [(ClassInfo,MethodName)]
-filterDefinedTriggers _ _ _ []               = []
-filterDefinedTriggers mci env n ((ci,mn):xs) =
+filterDefinedTriggers :: Map.Map ClassInfo MapTrigger -> Env -> [(ClassInfo,MethodName)] -> [(ClassInfo,MethodName)]
+filterDefinedTriggers _ _ []               = []
+filterDefinedTriggers mci env ((ci,mn):xs) =
    case Map.lookup ci mci of
-        Nothing -> case Map.lookup "*" mci of
-                        Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
-                        Just m'  -> case Map.lookup mn m' of
-                                         Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
-                                         Just _  -> filterDefinedTriggers mci env n xs
-        Just m  -> case Map.lookup mn m of
-                        Nothing -> case Map.lookup "*" mci of
-                                        Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
-                                        Just m'  -> case Map.lookup mn m' of
-                                                         Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
-                                                         Just _  -> filterDefinedTriggers mci env n xs
-                        Just _  -> filterDefinedTriggers mci env n xs
+        Nothing -> 
+           case Map.lookup "*" mci of
+                Nothing -> (ci,mn):filterDefinedTriggers mci env xs
+                Just m' -> 
+                    case Map.lookup mn m' of
+                         Nothing              -> (ci,mn):filterDefinedTriggers mci env xs
+                         Just [(_,_,_,scope)] -> 
+                              case scope of 
+                                   TopLevel                 -> filterDefinedTriggers mci env xs
+                                   InFor (ForId "TopLevel") -> filterDefinedTriggers mci env xs
+                                   _                        -> (ci,mn):filterDefinedTriggers mci env xs
+        Just m  -> 
+           case Map.lookup mn m of
+                Nothing -> 
+                   case Map.lookup "*" mci of
+                        Nothing -> (ci,mn):filterDefinedTriggers mci env xs
+                        Just m' -> 
+                           case Map.lookup mn m' of
+                                Nothing -> (ci,mn):filterDefinedTriggers mci env xs
+                                Just _  -> filterDefinedTriggers mci env xs
+                Just [(_,_,_,scope)]  -> 
+                     case scope of 
+                          TopLevel                 -> filterDefinedTriggers mci env xs
+                          InFor (ForId "TopLevel") -> filterDefinedTriggers mci env xs
+                          _                        -> (ci,mn):filterDefinedTriggers mci env xs
 
 --Creates the info to be added in the environment and the ppDATE about the new entry trigger
-createTriggerEntry :: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> ((ClassInfo,MethodName,(Id, String, [Args])),TriggerDef)
-createTriggerEntry (cn,mn,(rt,mn',xs)) n = 
+createTriggerEntry :: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> Scope -> ((ClassInfo,MethodName,(Id, String, [Args],Scope)),TriggerDef)
+createTriggerEntry (cn,mn,(rt,mn',xs)) n scope = 
  if (mn == mn')
  then let trnm = mn ++ "_ppden"
           nvar = "cv" ++ "_" ++ (show n)
           cn'  = cn ++ " " ++ nvar
           cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words.remGenerics') xs) EVEntry
           tr   = TriggerDef trnm (map ((\[x,y] -> BindType x y).words.remGenerics') xs) cpe ""
-      in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words.remGenerics') xs)),tr)
+      in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words.remGenerics') xs,scope)),tr)
  else error $ "Problem when creating an entry trigger. Mismatch between method names " ++ mn ++ " and " ++ mn' ++ ".\n"
 
-addNewTriggerEntry :: Env -> PPDATE -> Int -> [(ClassInfo,MethodName,(String,MethodName,[String]))] -> (Env,PPDATE)
-addNewTriggerEntry env ppdate _ []     = (env,ppdate)
-addNewTriggerEntry env ppdate n (x:xs) =
- let (p,tr) = createTriggerEntry x n
+addNewTriggerEntry :: Env -> PPDATE -> Int -> [(ClassInfo,MethodName,(String,MethodName,[String]))] -> Scope -> (Env,PPDATE)
+addNewTriggerEntry env ppdate _ [] _         = (env,ppdate)
+addNewTriggerEntry env ppdate n (x:xs) scope =
+ let (p,tr) = createTriggerEntry x n scope
      cn     = (\(x,y,z) -> x) p 
      mn     = (\(x,y,z) -> y) p 
      v      = (\(x,y,z) -> z) p 
-     cl     = makeBind $ (\(x,y,z) -> y) v
+     cl     = makeBind $ (\(_,y,_,_) -> y) v
   in case Map.lookup cn (entryTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn [v] Map.empty
                      ppdate'   = addTrigger2ppDATE tr ppdate 
                  in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
-                                            , allTriggers = (tName tr,mn,cn,EVEntry,cl:args tr):allTriggers env}) ppdate' (n+1) xs
+                                            , allTriggers = (tName tr,mn,cn,EVEntry,cl:args tr):allTriggers env}) ppdate' (n+1) xs scope
       Just mapeinfo -> 
            let mapeinfo' = updateInfo mapeinfo mn v 
                ppdate'   = addTrigger2ppDATE tr ppdate 
            in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
-                                      , allTriggers = (tName tr,mn,cn,EVEntry, cl:args tr):allTriggers env}) ppdate' (n+1) xs
+                                      , allTriggers = (tName tr,mn,cn,EVEntry, cl:args tr):allTriggers env}) ppdate' (n+1) xs scope
 
 --Creates the info to be added in the environment and the ppDATE about the new exit trigger
-createTriggerExit:: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> ((ClassInfo,MethodName,(Id, String, [Args])), TriggerDef)
-createTriggerExit (cn,mn,(rt,mn',xs)) n = 
+createTriggerExit:: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> Scope -> ((ClassInfo,MethodName,(Id, String, [Args],Scope)), TriggerDef)
+createTriggerExit (cn,mn,(rt,mn',xs)) n scope = 
  let trnm = mn ++ "_ppdex" 
      nvar = "cv" ++ "_" ++ (show n)
      cn'  = cn ++ " " ++ nvar
@@ -235,30 +249,30 @@ createTriggerExit (cn,mn,(rt,mn',xs)) n =
  then if (rt == "void")
       then let cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [])
                tr   = TriggerDef trnm (map ((\[x,y] -> BindType x y).words) xs) cpe ""
-           in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words.remGenerics') xs)), tr)
+           in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words.remGenerics') xs,scope)), tr)
       else let cpe = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [BindId ret]) 
                tr  = TriggerDef trnm (map ((\[x,y] -> BindType x y).words.remGenerics') xs ++ [BindType rt ret]) cpe ""
-           in ((cn,mn,(trnm, cn', (map ((\[x,y] -> Args x y).words) xs) ++ [Args rt ret])),tr)
+           in ((cn,mn,(trnm, cn', (map ((\[x,y] -> Args x y).words) xs) ++ [Args rt ret],scope)),tr)
  else error $ "Problem when creating an exit trigger. Mismatch between method names " ++ mn ++ " and " ++ mn' ++ ".\n"
 
-addNewTriggerExit :: Env -> PPDATE -> Int -> [(ClassInfo,MethodName,(String,MethodName,[String]))] -> (Env, PPDATE)
-addNewTriggerExit env ppdate _ []     = (env,ppdate)
-addNewTriggerExit env ppdate n (x:xs) =
- let (p,tr) = createTriggerExit x n
+addNewTriggerExit :: Env -> PPDATE -> Int -> [(ClassInfo,MethodName,(String,MethodName,[String]))] -> Scope -> (Env, PPDATE)
+addNewTriggerExit env ppdate _ [] _         = (env,ppdate)
+addNewTriggerExit env ppdate n (x:xs) scope =
+ let (p,tr) = createTriggerExit x n scope
      cn     = (\(x,y,z) -> x) p 
      mn     = (\(x,y,z) -> y) p 
      v      = (\(x,y,z) -> z) p 
-     cl     = makeBind $ (\(x,y,z) -> y) v
+     cl     = makeBind $ (\(_,y,_,_) -> y) v
  in case Map.lookup cn (exitTriggersInfo env) of
       Nothing -> let mapeinfo' = Map.insert mn [v] Map.empty
                      ppdate'   = addTrigger2ppDATE tr ppdate 
                  in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
-                                           , allTriggers = (tName tr,mn, cn,getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs
+                                           , allTriggers = (tName tr,mn, cn,getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs scope
       Just mapeinfo -> 
            let mapeinfo' = updateInfo mapeinfo mn v 
                ppdate'   = addTrigger2ppDATE tr ppdate 
            in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
-                                     , allTriggers = (tName tr,mn, cn,getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs
+                                     , allTriggers = (tName tr,mn, cn,getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs scope
 
 
 addTrigger2ppDATE :: TriggerDef -> PPDATE -> PPDATE
@@ -291,3 +305,16 @@ remGenerics' s =
          then fst ys ++ (reverse $ fst xs)
          else error "Problem with generics.\n"
     else s
+
+--Returns the scope where the generated triggers should be placed
+properScope :: PPDATE -> Scope
+properScope ppd = 
+ let global = ctxtGet $ globalGet ppd
+     vars   = variables global
+     actes  = actevents global
+     trs    = triggers global
+     props  = property global
+ in if and [null vars,null actes,null trs,PNIL == props]
+    then InFor (ForId "TopLevel")
+    else TopLevel
+
