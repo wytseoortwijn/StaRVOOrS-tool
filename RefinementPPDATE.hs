@@ -175,13 +175,10 @@ generateNewTriggers ppd consts =
      put env''
      return ppdate''
 
-
+--Filter methods associated to triggers defined at top-level
 filterDefinedTriggers :: Map.Map ClassInfo MapTrigger -> Env -> Integer -> [(ClassInfo,MethodName)] -> [(ClassInfo,MethodName)]
 filterDefinedTriggers _ _ _ []               = []
 filterDefinedTriggers mci env n ((ci,mn):xs) =
- if elem (ci,mn) (exitTriggersInTemps env) && n == 1
- then (ci,mn):filterDefinedTriggers mci env n xs
- else 
    case Map.lookup ci mci of
         Nothing -> case Map.lookup "*" mci of
                         Nothing -> (ci,mn):filterDefinedTriggers mci env n xs

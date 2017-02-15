@@ -204,7 +204,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                   do let einfo = if null s''
                                                                                  then getTriggerClass bind
                                                                                  else s''
-                                                                     let (env',ci) = updateEntryTriggersInfo env (id'',einfo, (map bindToArgs bs)) bs mn bind s''
+                                                                     let (env',ci) = updateEntryTriggersInfo env (id'',einfo, (map bindToArgs bs),scope) bs mn bind s''
                                                                      put env' { allTriggers = (id'',mn,ci,EVEntry,(properBind bind) ++bs) : allTriggers env }
                                                                      return TriggerDef { tName = id''
                                                                                        , args  = bs
@@ -229,7 +229,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                      do let einfo = if null s''
                                                                                  then getTriggerClass bind
                                                                                  else s''
-                                                                        let (env',ci) = updateExitTriggersInfo env (id'',einfo, (map bindToArgs bs)) bs mn bind s''
+                                                                        let (env',ci) = updateExitTriggersInfo env (id'',einfo, (map bindToArgs bs),scope) bs mn bind s''
                                                                         put env' { allTriggers = (id'',mn,ci,EVExit rs,(properBind bind) ++ bs) : allTriggers env }
                                                                         return TriggerDef { tName = id''
                                                                                           , args  = bs
@@ -589,7 +589,6 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
     let cns   = htsNames env
     let prop' = getProperty prop (map tName trigs') env
     let extrs = getExitTrsInfo trigs'
-    let env' = env { exitTriggersInTemps = exitTriggersInTemps env ++ extrs }
     case runWriter prop' of
          (PNIL,_)                      -> fail $ "Error: The template " ++ getIdAbs id ++ " does not have a PROPERTY section.\n"
          (PINIT pname id' xs props,s)  -> 
@@ -599,7 +598,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                                          else "" 
                   in if ((not.null) s')
                      then fail s'
-                     else do put env' { triggersInTemps = triggersInTemps env ++ temptrs 
+                     else do put env { triggersInTemps = triggersInTemps env ++ temptrs 
                                       , actes           = actes env ++ map show (getActEvents ies)}
                              return $ Template { tempId        = getIdAbs id
                                                , tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
@@ -620,7 +619,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                       temptrs = splitOnIdentifier "," $ fst s
                   in if ((not.null) s')
                      then fail s'
-                     else do put env' { triggersInTemps = triggersInTemps env ++ temptrs 
+                     else do put env { triggersInTemps = triggersInTemps env ++ temptrs 
                                       , actes           = actes env ++ map show (getActEvents ies)}
                              return $ Template { tempId        = getIdAbs id
                                                , tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
@@ -1055,7 +1054,7 @@ lookForAllEntryTriggerArgs env cinf mn =
                                       Just m' -> case Map.lookup mn m' of
                                                  Nothing ->  fail $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                                                  Just _  -> fail $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
-                      Just xs -> let ys = filter (\(x,_,_) -> isSuffixOf "_ppden" x) xs
+                      Just xs -> let ys = filter (\(x,_,_,_) -> isSuffixOf "_ppden" x) xs
                                  in if null ys
                                     then return $ getArgsGenMethods (head xs)
                                     else return $ getArgsGenMethods (head ys) 
@@ -1074,14 +1073,14 @@ lookForAllExitTriggerArgs env cinf mn =
                                       Just m' -> case Map.lookup mn m' of
                                                  Nothing ->  fail $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                                                  Just _  -> fail $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
-                      Just xs -> let ys = filter (\(x,_,_) -> isSuffixOf "_ppdex" x) xs
+                      Just xs -> let ys = filter (\(x,_,_,_) -> isSuffixOf "_ppdex" x) xs
                                  in if null ys
                                     then return $ getArgsGenMethods (head xs)
                                     else return $ getArgsGenMethods (head ys) 
                            
 
-getArgsGenMethods :: (Id, String, [Args]) -> (String,String)
-getArgsGenMethods (trn, varClass', args) = 
+getArgsGenMethods :: (Id, String, [Args],Scope) -> (String,String)
+getArgsGenMethods (trn, varClass', args,_) = 
  let classPost = words $ varClass'
      varClass  = last classPost
      argswt    = map getArgsId args
@@ -1115,7 +1114,7 @@ getTriggerClass bn = case bn of
 -- Environment with variables, triggers and foreaches information --
 --------------------------------------------------------------------
 
-type MapTrigger = Map.Map MethodName [(Trigger, String, [Args])] --[(trigger_name,type class_variable,trigger_arguments)]
+type MapTrigger = Map.Map MethodName [(Trigger, String, [Args],Scope)] --[(trigger_name,type class_variable,trigger_arguments,scope)]
 
 --Triggers associated to methods in Hoare triples should include: type class_variable
 data Env = Env
@@ -1131,7 +1130,6 @@ data Env = Env
  , tempsId             :: [Id]
  , triggersInTemps     :: [Trigger] --is used to check whether the triggers in the transitions of the templates are  
                                     --defined in the triggers of the ppDATE
- , exitTriggersInTemps :: [(ClassInfo,MethodName)]
  , propInForeach       :: [(PropertyName, ClassInfo, String)]-- is used to avoid ambigous reference to variable id in foreaches
  , actes               :: [Id] --list of all defined action events
  }
@@ -1151,12 +1149,11 @@ emptyEnv = Env { forsVars            = []
                , oldExpTypes         = Map.empty
                , tempsId             = []
                , triggersInTemps     = []
-               , exitTriggersInTemps = []
                , propInForeach       = []
                , actes               = []
                }
 
-updateEntryTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> String -> (Env,ClassInfo)
+updateEntryTriggersInfo :: Env -> (Id, String, [Args],Scope) -> [Bind] -> [Char] -> Bind -> String -> (Env,ClassInfo)
 updateEntryTriggersInfo env einfo args mn BindStar _        = 
  let t = "*" in
  case Map.lookup t (entryTriggersInfo env) of
@@ -1177,7 +1174,7 @@ updateEntryTriggersInfo env einfo args mn (BindId id) s     =
      val = prepareValUpd mn s id s
      ts  = if (null ts') then val else ts'
  in if (length ts /= 1)
-    then error $ "The trigger " ++ (\(x,y,z) -> x) einfo ++ " does not include a class variable declaration.\n"
+    then error $ "The trigger " ++ (\(x,_,_,_) -> x) einfo ++ " does not include a class variable declaration.\n"
     else case Map.lookup (head ts) (entryTriggersInfo env) of
               Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
                          in (env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) },(head ts))
@@ -1186,7 +1183,7 @@ updateEntryTriggersInfo env einfo args mn (BindId id) s     =
                    in (env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) },(head ts))
 
 
-updateExitTriggersInfo :: Env -> (Id, String, [Args]) -> [Bind] -> [Char] -> Bind -> String -> (Env,ClassInfo)
+updateExitTriggersInfo :: Env -> (Id, String, [Args],Scope) -> [Bind] -> [Char] -> Bind -> String -> (Env,ClassInfo)
 updateExitTriggersInfo env einfo args mn BindStar _        = 
  let t = "*" in
  case Map.lookup t (exitTriggersInfo env) of
@@ -1206,7 +1203,7 @@ updateExitTriggersInfo env einfo args mn (BindId id) s     =
  let ts' = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
      ts  = if (null ts') then prepareValUpd mn s id s else ts'
  in if (length ts /= 1)
-    then error $ "The trigger " ++ (\(x,y,z) -> x) einfo ++ " does not include a class variable declaration.\n" 
+    then error $ "The trigger " ++ (\(x,_,_,_) -> x) einfo ++ " does not include a class variable declaration.\n" 
     else case Map.lookup (head ts) (exitTriggersInfo env) of
               Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
                          in (env { exitTriggersInfo = Map.insert (head ts) mapeinfo' (exitTriggersInfo env) },(head ts))
@@ -1223,7 +1220,7 @@ prepareValUpd mn s id chan =
       then []
       else [chan]
 
-updateInfo :: Map.Map MethodName [(Id, String, [Args])] -> MethodName -> (Id, String, [Args]) -> Map.Map MethodName [(Id, String, [Args])]
+updateInfo :: Map.Map MethodName [(Id, String, [Args],Scope)] -> MethodName -> (Id, String, [Args],Scope) -> Map.Map MethodName [(Id, String, [Args],Scope)]
 updateInfo m mn einfo = 
  case Map.lookup mn m of
       Nothing -> Map.insert mn [einfo] m
