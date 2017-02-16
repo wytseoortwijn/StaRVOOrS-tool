@@ -473,7 +473,7 @@ getTransition' id env (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) 
       (xs,s) -> do let err = "Error: Parsing error in an action of a transition from state " ++ getIdAbs q1 ++ " to state " 
                              ++ getIdAbs q2 ++ " in property " ++ id ++ ".\n"
                    let s' = if null s then "" else err
-                   tell s'
+                   tell s'                   
                    return (Transition { fromState = getIdAbs q1
                                       , arrow = xs
                                       , toState = getIdAbs q2

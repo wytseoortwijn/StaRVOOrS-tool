@@ -207,7 +207,7 @@ filterDefinedTriggers mci ((ci,mn):xs) =
                         then (ci,mn):filterDefinedTriggers mci xs 
                         else filterDefinedTriggers mci xs                             
 
---Creates the info to be added in the environment and the ppDATE about the new entry trigger
+--Creates the info to be added in the environment and the ppDATE associated tout the new entry trigger
 createTriggerEntry :: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> Scope -> ((ClassInfo,MethodName,(Id, String, [Args],Scope)),TriggerDef)
 createTriggerEntry (cn,mn,(rt,mn',xs)) n scope = 
  if (mn == mn')
@@ -238,7 +238,7 @@ addNewTriggerEntry env ppdate n (x:xs) scope =
            in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
                                       , allTriggers = (tName tr,mn,cn,EVEntry, cl:args tr):allTriggers env}) ppdate' (n+1) xs scope
 
---Creates the info to be added in the environment and the ppDATE about the new exit trigger
+--Creates the info to be added in the environment and the ppDATE associated to the new exit trigger
 createTriggerExit:: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> Scope -> ((ClassInfo,MethodName,(Id, String, [Args],Scope)), TriggerDef)
 createTriggerExit (cn,mn,(rt,mn',xs')) n scope = 
  let trnm = mn ++ "_ppdex" 

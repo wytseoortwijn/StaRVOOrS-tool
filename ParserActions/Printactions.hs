@@ -69,15 +69,15 @@ replicateS n f = concatS (replicate n f)
 -- the printer class does the job
 class Print a where
   prt :: Int -> a -> Doc
-  prtList :: [a] -> Doc
-  prtList = concatD . map (prt 0)
+  prtList :: Int -> [a] -> Doc
+  prtList i = concatD . map (prt i)
 
 instance Print a => Print [a] where
-  prt _ = prtList
+  prt = prtList
 
 instance Print Char where
   prt _ s = doc (showChar '\'' . mkEsc '\'' s . showChar '\'')
-  prtList s = doc (showChar '"' . concatS (map (mkEsc '"') s) . showChar '"')
+  prtList _ s = doc (showChar '"' . concatS (map (mkEsc '"') s) . showChar '"')
 
 mkEsc :: Char -> Char -> ShowS
 mkEsc q s = case s of
@@ -102,83 +102,65 @@ instance Print Double where
 
 instance Print IdAct where
   prt _ (IdAct i) = doc (showString ( i))
-  prtList es = case es of
-   [] -> (concatD [])
-   x:xs -> (concatD [prt 0 x , prt 0 xs])
-
+  prtList _ [] = (concatD [])
+  prtList _ (x:xs) = (concatD [prt 0 x, prt 0 xs])
 
 
 instance Print Actions where
   prt i e = case e of
-   Actions actions -> prPrec i 0 (concatD [prt 0 actions])
-
+    Actions actions -> prPrec i 0 (concatD [prt 0 actions])
 
 instance Print Action where
   prt i e = case e of
-   ActProg program -> prPrec i 0 (concatD [prt 0 program])
-   ActBlock actions -> prPrec i 0 (concatD [doc (showString "{") , prt 0 actions , doc (showString "}")])
-   ActCreate template args -> prPrec i 0 (concatD [doc (showString "\\create") , doc (showString "(") , prt 0 template , doc (showString ",") , prt 0 args , doc (showString ")")])
-   ActBang idact -> prPrec i 0 (concatD [doc (showString "\\gen") , doc (showString "(") , prt 0 idact , doc (showString ")")])
-   ActCond idacts action -> prPrec i 0 (concatD [doc (showString "IF") , doc (showString "(") , prt 0 idacts , doc (showString ")") , doc (showString "THEN") , prt 0 action])
-   ActSkip  -> prPrec i 0 (concatD [])
-   ActLog str params -> prPrec i 0 (concatD [doc (showString "\\log") , doc (showString "(") , prt 0 str , prt 0 params , doc (showString ")")])
-   ActAssig ass -> prPrec i 0 (concatD [prt 0 ass])
-
-  prtList es = case es of
-   [] -> (concatD [])
-   x:xs -> (concatD [prt 0 x , doc (showString ";") , prt 0 xs])
-
+    ActProg program -> prPrec i 0 (concatD [prt 0 program])
+    ActBlock actions -> prPrec i 0 (concatD [doc (showString "{"), prt 0 actions, doc (showString "}")])
+    ActCreate template args -> prPrec i 0 (concatD [doc (showString "\\create"), doc (showString "("), prt 0 template, doc (showString ","), prt 0 args, doc (showString ")")])
+    ActBang idact -> prPrec i 0 (concatD [doc (showString "\\gen"), doc (showString "("), prt 0 idact, doc (showString ")")])
+    ActCond idacts action -> prPrec i 0 (concatD [doc (showString "IF"), doc (showString "("), prt 0 idacts, doc (showString ")"), doc (showString "THEN"), prt 0 action])
+    ActSkip -> prPrec i 0 (concatD [])
+    ActLog str params -> prPrec i 0 (concatD [doc (showString "\\log"), doc (showString "("), prt 0 str, prt 0 params, doc (showString ")")])
+    ActAssig ass -> prPrec i 0 (concatD [prt 0 ass])
+  prtList _ [] = (concatD [])
+  prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ";"), prt 0 xs])
 instance Print Program where
   prt i e = case e of
-   Prog idact argss -> prPrec i 0 (concatD [prt 0 idact , doc (showString "(") , prt 0 argss , doc (showString ")")])
-
+    Prog idact argss -> prPrec i 0 (concatD [prt 0 idact, doc (showString "("), prt 0 argss, doc (showString ")")])
 
 instance Print Ass where
   prt i e = case e of
-   Ass idact val -> prPrec i 0 (concatD [prt 0 idact , doc (showString "=") , prt 0 val])
-
+    Ass idact val -> prPrec i 0 (concatD [prt 0 idact, doc (showString "="), prt 0 val])
 
 instance Print Val where
   prt i e = case e of
-   ValMC program -> prPrec i 0 (concatD [prt 0 program])
-   ValV idact val -> prPrec i 0 (concatD [prt 0 idact , prt 0 val])
-   ValS str -> prPrec i 0 (concatD [prt 0 str])
-   ValNil  -> prPrec i 0 (concatD [])
-
+    ValMC program -> prPrec i 0 (concatD [prt 0 program])
+    ValV idact val -> prPrec i 0 (concatD [prt 0 idact, prt 0 val])
+    ValS str -> prPrec i 0 (concatD [prt 0 str])
+    ValNil -> prPrec i 0 (concatD [])
 
 instance Print Type where
   prt i e = case e of
-   TypeNil  -> prPrec i 0 (concatD [])
-   Type idact -> prPrec i 0 (concatD [prt 0 idact])
-
+    TypeNil -> prPrec i 0 (concatD [])
+    Type idact -> prPrec i 0 (concatD [prt 0 idact])
 
 instance Print Template where
   prt i e = case e of
-   Temp idact -> prPrec i 0 (concatD [prt 0 idact])
-
+    Temp idact -> prPrec i 0 (concatD [prt 0 idact])
 
 instance Print Args where
   prt i e = case e of
-   ArgsId idact -> prPrec i 0 (concatD [prt 0 idact])
-   ArgsS str -> prPrec i 0 (concatD [prt 0 str])
-
-  prtList es = case es of
-   [] -> (concatD [])
-   [x] -> (concatD [prt 0 x])
-   x:xs -> (concatD [prt 0 x , doc (showString ",") , prt 0 xs])
-
+    ArgsId idact -> prPrec i 0 (concatD [prt 0 idact])
+    ArgsS str -> prPrec i 0 (concatD [prt 0 str])
+  prtList _ [] = (concatD [])
+  prtList _ [x] = (concatD [prt 0 x])
+  prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])
 instance Print Params where
   prt i e = case e of
-   ParamsNil  -> prPrec i 0 (concatD [])
-   Params params -> prPrec i 0 (concatD [doc (showString ",") , prt 0 params])
-
+    ParamsNil -> prPrec i 0 (concatD [])
+    Params params -> prPrec i 0 (concatD [doc (showString ","), prt 0 params])
 
 instance Print Param where
   prt i e = case e of
-   Param idact -> prPrec i 0 (concatD [prt 0 idact])
-
-  prtList es = case es of
-   [x] -> (concatD [prt 0 x])
-   x:xs -> (concatD [prt 0 x , doc (showString ",") , prt 0 xs])
-
+    Param idact -> prPrec i 0 (concatD [prt 0 idact])
+  prtList _ [x] = (concatD [prt 0 x])
+  prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])
 
