@@ -72,7 +72,7 @@ writeGlobal ppdate env =
                 ++ writeVariables vars consts acts
                 ++ writeTriggers es consts acts
                 ++ writeProperties prop consts es env
-                ++ writeForeach fors consts env 1 (generateReplicatedAutomata consts (forsVars env) es env)
+                ++ writeForeach fors consts env 1 (generateReplicatedAutomata consts [] es env)
                 ++ "}\n" 
 
 checkGlobalForeach :: Variables -> ActEvents -> Triggers -> Property -> Foreaches -> Bool
@@ -440,7 +440,7 @@ writeForeach (foreach:fors) consts env n ra =
     ++ "}\n\n"
     ++ writeForeach fors consts env 2 ra
     ++ if (n == 1) then ra else ""
- 
+
 getForeachArgs :: [Args] -> String
 getForeachArgs []               = ""
 getForeachArgs [Args t id]      = t ++ " " ++ id
@@ -478,7 +478,7 @@ generateProp ((es,ps):eps)  env =
      zs       = getOldExpr oldExpM cn
      nvar     = if null zs then "" else "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n" 
  in "FOREACH (Integer idPPD) {\n\n"
-    ++ "VARIABLES {\n" ++ " Integer idAux = new Integer(0);\n " ++ nvar ++ "}\n\n"
+    ++ "VARIABLES {\n" ++ " Integer idAuxPPD = new Integer(0);\n " ++ nvar ++ "}\n\n"
     ++ "EVENTS {\n" ++ es ++ "}\n\n"
     ++ fst ps
     ++ "}\n\n"
@@ -496,7 +496,7 @@ generateTriggerRA fs env cn n =
  let oldExpM  = oldExpTypes env
      zs       = getOldExpr oldExpM cn
      nvar     = if null zs then "PPD" else "Old_" ++ cn
- in "rh" ++ show n ++ "(Messages" ++ nvar ++ " msg) = {h"++ show n ++ ".receive(msg)} where {idPPD=msg.id;"
+ in "rh" ++ show n ++ "(Messages" ++ nvar ++ " msgPPD) = {h"++ show n ++ ".receive(msgPPD)} where {idPPD=msgPPD.id;"
     ++ fs ++  "}\n"
 
 generateRAString :: [(Trigger, [String])] -> Triggers -> Env -> HT -> Int -> (String,HTName)
