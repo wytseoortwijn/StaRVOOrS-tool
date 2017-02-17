@@ -22,6 +22,7 @@ doc = (:)
 -- Modify to remove white space after '\\' and '!'
 -- Modify to remove white space in "> =", "< =" , "! =" "& &" and "| |"
 -- Modify to remove white space after openning \" and before closing \"
+-- Modify to remove white spaces around and between ::
 render :: Doc -> String
 render d = rend 0 (map ($ "") $ d []) "" where
   rend i ss = case ss of
