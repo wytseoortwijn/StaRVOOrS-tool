@@ -56,7 +56,7 @@ writeGlobal ppdate env =
  in if checkGlobalForeach vars acts es prop fors
     then "GLOBAL {\n\n"
          ++ writeVariables vars consts acts
-         ++ writeTriggers es consts acts
+         ++ writeTriggers es consts acts env
          ++ writeProperties prop consts es env
          ++ writeForeach fors consts env 0 (generateReplicatedAutomata consts (forsVars env) es env)
          ++ "}\n"
@@ -64,13 +64,13 @@ writeGlobal ppdate env =
        case fors of
           [] -> "GLOBAL {\n\n"
                 ++ writeVariables vars consts acts
-                ++ writeTriggers es consts acts
+                ++ writeTriggers es consts acts env
                 ++ writeProperties prop consts es env
                 ++ generateReplicatedAutomata consts [] es env  
                 ++ "}\n" 
           _  -> "GLOBAL {\n\n"
                 ++ writeVariables vars consts acts
-                ++ writeTriggers es consts acts
+                ++ writeTriggers es consts acts env
                 ++ writeProperties prop consts es env
                 ++ writeForeach fors consts env 1 (generateReplicatedAutomata consts [] es env)
                 ++ "}\n" 
@@ -129,12 +129,12 @@ makeChannelsAct s = " Channel " ++ s ++ " = new Channel();\n"
 -- Triggers --
 --------------
 
-writeTriggers :: Triggers -> HTriples -> ActEvents -> String
-writeTriggers [] _ _         = ""
-writeTriggers es consts acts = 
+writeTriggers :: Triggers -> HTriples -> ActEvents -> Env -> String
+writeTriggers [] _ _ _           = ""
+writeTriggers es consts acts env = 
  "EVENTS {\n"
  ++ writeTriggersActs acts
- ++ writeAllTriggers (instrumentTriggers es consts)
+ ++ writeAllTriggers (instrumentTriggers es consts env)
  ++ "}\n\n"
 
 writeTriggersActs :: ActEvents -> String
@@ -201,22 +201,28 @@ auxGetTriggerVariation' [BindId ret] = ret
 
 
 -- Checks if the trigger to control has to be the auxiliary one (in case of optimization by key)
-instrumentTriggers :: Triggers -> HTriples -> Triggers
-instrumentTriggers [] cs     = []
-instrumentTriggers (e:es) cs = let (b,mn,bs) = lookupHTForTrigger e cs in
-                             if b
-                             then let e'  = updateMethodCallName e (mn++"Aux")
-                                      e'' = updateTriggerArgs e' ((args e') ++ [BindType "Integer" "id"])
-                                  in updateMethodCallBody e'' (bs++[BindId "id"]):instrumentTriggers es cs
-                             else e:instrumentTriggers es cs
+instrumentTriggers :: Triggers -> HTriples -> Env -> Triggers
+instrumentTriggers [] cs _       = []
+instrumentTriggers (e:es) cs env = 
+ let (b,mn,bs) = lookupHTForTrigger e (getClassInfo e env) cs 
+ in if b
+    then let e'  = updateMethodCallName e (mn++"Aux")
+             e'' = updateTriggerArgs e' ((args e') ++ [BindType "Integer" "id"])
+         in updateMethodCallBody e'' (bs++[BindId "id"]):instrumentTriggers es cs env
+    else e:instrumentTriggers es cs env
 
-lookupHTForTrigger :: TriggerDef -> HTriples -> (Bool, MethodName, [Bind])
-lookupHTForTrigger e []     = (False,"", [])
-lookupHTForTrigger e (c:cs) = case compTrigger e of
-                                       NormalEvent _ id bs _ -> if (id == snd (methodCN c))
-                                                                then (True, id, bs)
-                                                                else lookupHTForTrigger e cs
-                                       otherwise             -> lookupHTForTrigger e cs
+lookupHTForTrigger :: TriggerDef -> ClassInfo -> HTriples -> (Bool, MethodName, [Bind])
+lookupHTForTrigger _ _ []      = (False,"", [])
+lookupHTForTrigger e ci (c:cs) = case compTrigger e of
+                                      NormalEvent _ id bs _ -> if (id == snd (methodCN c) && fst (methodCN c) == ci)
+                                                               then (True, id, bs)
+                                                               else lookupHTForTrigger e ci cs
+                                      _                     -> lookupHTForTrigger e ci cs
+
+getClassInfo :: TriggerDef -> Env -> ClassInfo
+getClassInfo e env = 
+ let trs = [tr | tr <- allTriggers env, ((\(x,_,_,_,_) -> x) tr) == tName e]
+ in head $ map (\(_,_,x,_,_) -> x) trs
 
 ----------------
 -- Properties --
@@ -433,7 +439,7 @@ writeForeach (foreach:fors) consts env n ra =
      fors'  = foreaches ctxt
  in "FOREACH (" ++ getForeachArgs args ++ ") {\n\n"
     ++ writeVariables vars [] []
-    ++ writeTriggers es consts []
+    ++ writeTriggers es consts [] env
     ++ writeProperties prop consts es env
     ++ writeForeach fors' consts env 2 ra
     ++ if (n == 0) then ra ++ "}\n"  else ""

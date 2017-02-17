@@ -23,7 +23,7 @@ import Data.Maybe
 -------------
 
 version :: String
-version = "StaRVOOrS 1.35.5"
+version = "StaRVOOrS 1.4"
 
 ----------
 -- Main --

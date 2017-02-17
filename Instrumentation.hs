@@ -32,7 +32,7 @@ methodsInstrumentation' ppd jpath output_add =
               ]
      putStrLn "Java files generation completed."
 
--- if same class name in different files, fix this method
+-- if same class name in different folder, fix this method
 instrumentFile :: T.Import -> T.HTriples -> FilePath -> FilePath -> IO ()
 instrumentFile i consts jpath output_add =
  do (main, cl) <- makeAddFile i
