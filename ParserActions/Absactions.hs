@@ -19,13 +19,17 @@ data Action
     | ActCond [IdAct] Action
     | ActSkip
     | ActLog String Params
+    | ActArith Arith
     | ActAssig Ass
   deriving (Eq, Ord, Show, Read)
 
 data Program = Prog IdAct [Args]
   deriving (Eq, Ord, Show, Read)
 
-data Ass = Ass IdAct Val
+data Ass = Ass IdAct Val | AssInc IdAct Val | AssDec IdAct Val
+  deriving (Eq, Ord, Show, Read)
+
+data Arith = Arith IdAct
   deriving (Eq, Ord, Show, Read)
 
 data Val = ValMC Program | ValV IdAct Val | ValS String | ValNil

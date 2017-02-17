@@ -119,6 +119,7 @@ instance Print Action where
     ActCond idacts action -> prPrec i 0 (concatD [doc (showString "IF"), doc (showString "("), prt 0 idacts, doc (showString ")"), doc (showString "THEN"), prt 0 action])
     ActSkip -> prPrec i 0 (concatD [])
     ActLog str params -> prPrec i 0 (concatD [doc (showString "\\log"), doc (showString "("), prt 0 str, prt 0 params, doc (showString ")")])
+    ActArith arith -> prPrec i 0 (concatD [prt 0 arith])
     ActAssig ass -> prPrec i 0 (concatD [prt 0 ass])
   prtList _ [] = (concatD [])
   prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ";"), prt 0 xs])
@@ -129,6 +130,12 @@ instance Print Program where
 instance Print Ass where
   prt i e = case e of
     Ass idact val -> prPrec i 0 (concatD [prt 0 idact, doc (showString "="), prt 0 val])
+    AssInc idact val -> prPrec i 0 (concatD [prt 0 idact, doc (showString "+="), prt 0 val])
+    AssDec idact val -> prPrec i 0 (concatD [prt 0 idact, doc (showString "-="), prt 0 val])
+
+instance Print Arith where
+  prt i e = case e of
+    Arith idact -> prPrec i 0 (concatD [prt 0 idact])
 
 instance Print Val where
   prt i e = case e of

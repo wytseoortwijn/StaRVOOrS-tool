@@ -8,6 +8,7 @@ import Data.Char
 import UpgradePPDATE
 import ErrM
 import JavaLanguage
+import System.IO
 
 -------------------------------------------------
 -- Injecting JML annotations for Hoare triples --
@@ -198,7 +199,7 @@ generateDummyBoolVars ppd output_add jpath =
      xs            = splitClassHT consts
      join_xs       = joinClassHT xs []
      imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
-  in sequence $ map (\ i -> generateDBMFile i output_add jpath join_xs) imports'
+ in sequence $ map (\ i -> generateDBMFile i output_add jpath join_xs) imports'
 
 
 generateDBMFile :: Import -> FilePath -> FilePath -> [(ClassInfo, [HTName])] -> IO ()
@@ -213,6 +214,7 @@ generateDBMFile i output_add jpath xs =
      let dummy_vars = map genDummyVarJava $ lookForConstsNames cl xs
      let (ys, zs) = lookForClassBeginning cl (lines r)
      writeFile tmp ((unlines ys) ++ concat dummy_vars ++ (unlines zs)) 
+
 
 genDummyVarJava :: HTName -> String
 genDummyVarJava cn = "  public static final boolean " ++ cn ++ " = true;\n"

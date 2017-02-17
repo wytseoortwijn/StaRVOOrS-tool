@@ -24,6 +24,7 @@ transAction x = case x of
   ActCond idacts action -> failure x
   ActSkip -> failure x
   ActLog string params -> failure x
+  ActArith arith -> failure x
   ActAssig ass -> failure x
 transProgram :: Program -> Result
 transProgram x = case x of
@@ -31,6 +32,11 @@ transProgram x = case x of
 transAss :: Ass -> Result
 transAss x = case x of
   Ass idact val -> failure x
+  AssInc idact val -> failure x
+  AssDec idact val -> failure x
+transArith :: Arith -> Result
+transArith x = case x of
+  Arith idact -> failure x
 transVal :: Val -> Result
 transVal x = case x of
   ValMC program -> failure x

@@ -26,7 +26,7 @@ import qualified Printactions as PrintAct
 import qualified ParserAct as ParAct
 import TranslatorActions
 import System.Exit
-
+import qualified System.IO
 
 -------------------------------
 -- Static Analysis using KeY --
