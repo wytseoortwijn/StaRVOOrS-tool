@@ -111,6 +111,7 @@ staticAnalysis' jpath ppd output_add fn flags =
                cloningFileGen add
                oldExprFileGen add ppdate''
                messagesFileGen add (getEnvVal ppdate'')
+               copyFiles jpath (output_addr ++ annotated_add)
                methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
                return ppdate''
 
