@@ -111,7 +111,7 @@ eitherResIdent tv s = treeFind resWords
                               | s == a = t
 
 resWords :: BTree
-resWords = b "IF" 8 (b "," 4 (b ")" 2 (b "(" 1 N N) (b "+=" 3 N N)) (b ";" 6 (b "-=" 5 N N) (b "=" 7 N N))) (b "\\log" 12 (b "\\create" 10 (b "THEN" 9 N N) (b "\\gen" 11 N N)) (b "}" 14 (b "{" 13 N N) N))
+resWords = b "IF" 8 (b "," 4 (b ")" 2 (b "(" 1 N N) (b "+=" 3 N N)) (b ";" 6 (b "-=" 5 N N) (b "=" 7 N N))) (b "\\log" 12 (b "\\create" 10 (b "THEN" 9 N N) (b "\\gen" 11 N N)) (b "{" 14 (b "new" 13 N N) (b "}" 15 N N)))
    where b s n = let bs = id s
                   in B bs (TS bs n)
 

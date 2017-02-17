@@ -142,6 +142,7 @@ instance Print Val where
     ValMC program -> prPrec i 0 (concatD [prt 0 program])
     ValV idact val -> prPrec i 0 (concatD [prt 0 idact, prt 0 val])
     ValS str -> prPrec i 0 (concatD [prt 0 str])
+    ValNew val -> prPrec i 0 (concatD [doc (showString "new"), prt 0 val])
     ValNil -> prPrec i 0 (concatD [])
 
 instance Print Type where
@@ -157,6 +158,7 @@ instance Print Args where
   prt i e = case e of
     ArgsId idact -> prPrec i 0 (concatD [prt 0 idact])
     ArgsS str -> prPrec i 0 (concatD [prt 0 str])
+    ArgsNew program -> prPrec i 0 (concatD [doc (showString "new"), prt 0 program])
   prtList _ [] = (concatD [])
   prtList _ [x] = (concatD [prt 0 x])
   prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])

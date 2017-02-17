@@ -42,6 +42,7 @@ transVal x = case x of
   ValMC program -> failure x
   ValV idact val -> failure x
   ValS string -> failure x
+  ValNew val -> failure x
   ValNil -> failure x
 transType :: Type -> Result
 transType x = case x of
@@ -54,6 +55,7 @@ transArgs :: Args -> Result
 transArgs x = case x of
   ArgsId idact -> failure x
   ArgsS string -> failure x
+  ArgsNew program -> failure x
 transParams :: Params -> Result
 transParams x = case x of
   ParamsNil -> failure x

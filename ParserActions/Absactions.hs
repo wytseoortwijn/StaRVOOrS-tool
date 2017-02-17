@@ -32,7 +32,12 @@ data Ass = Ass IdAct Val | AssInc IdAct Val | AssDec IdAct Val
 data Arith = Arith IdAct
   deriving (Eq, Ord, Show, Read)
 
-data Val = ValMC Program | ValV IdAct Val | ValS String | ValNil
+data Val
+    = ValMC Program
+    | ValV IdAct Val
+    | ValS String
+    | ValNew Val
+    | ValNil
   deriving (Eq, Ord, Show, Read)
 
 data Type = TypeNil | Type IdAct
@@ -41,7 +46,7 @@ data Type = TypeNil | Type IdAct
 data Template = Temp IdAct
   deriving (Eq, Ord, Show, Read)
 
-data Args = ArgsId IdAct | ArgsS String
+data Args = ArgsId IdAct | ArgsS String | ArgsNew Program
   deriving (Eq, Ord, Show, Read)
 
 data Params = ParamsNil | Params [Param]
