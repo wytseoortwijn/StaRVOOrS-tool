@@ -59,10 +59,10 @@ main =
              then do ppdate_txt <- readFile ppdate_fn
                      putStrLn $ "\nWelcome to StaRVOOrS\n"
                      case parse ppdate_txt of
-                          Bad s        -> putStrLn $ "The parsing has failed: " ++ s ++ "\n"
+                          Bad s        -> putStrLn $ "The parsing has failed.\n\n" ++ s ++ "\n"
                           Ok absppdate -> let ppd = upgradePPD absppdate in
                                           case runStateT ppd emptyEnv of
-                                               Bad s -> putStrLn $ "The parsing has failed: " ++ s ++ "\n"
+                                               Bad s -> putStrLn $ "The parsing has failed.\n\n" ++ s ++ "\n"
                                                Ok _  -> putStrLn "The parsing was successful.\n"
              else putStrLn s
       (flags,[java_fn_add, ppdate_fn, output_add],[]) -> 
