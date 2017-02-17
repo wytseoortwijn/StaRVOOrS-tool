@@ -199,7 +199,10 @@ data VarDecl = VarDecl Id VariableInitializer
 data VariableInitializer = VarInit VarExp | VarInitNil
   deriving (Eq, Ord, Show, Read)
 
-data Type = Type Id
+data Type = Type TypeDef
+  deriving (Eq, Ord, Show, Read)
+
+data TypeDef = TypeDef Id | TypeGen Id Symbols Id Symbols
   deriving (Eq, Ord, Show, Read)
 
 data Args = Args Type Id

@@ -405,7 +405,12 @@ instance Print VariableInitializer where
 
 instance Print Type where
   prt i e = case e of
-    Type id -> prPrec i 0 (concatD [prt 0 id])
+    Type typedef -> prPrec i 0 (concatD [prt 0 typedef])
+
+instance Print TypeDef where
+  prt i e = case e of
+    TypeDef id -> prPrec i 0 (concatD [prt 0 id])
+    TypeGen id1 symbols1 id2 symbols2 -> prPrec i 0 (concatD [prt 0 id1, prt 0 symbols1, prt 0 id2, prt 0 symbols2])
 
 instance Print Args where
   prt i e = case e of

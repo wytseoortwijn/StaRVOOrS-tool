@@ -174,10 +174,15 @@ getTrigger' :: Scope -> Abs.Trigger -> UpgradePPD TriggerDef
 getTrigger' scope (Abs.Trigger id binds ce wc) =
  do env  <- get
     let id'' = getIdAbs id
-    let err  = if (elem id'' (map (\(x,y,z,r,t) -> x) (allTriggers env))) then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") else ""
+    let xs   = [ x | (x,_,_,_,_) <- allTriggers env, id'' == x ]    
+    let err  = if (not.null) xs
+               then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") 
+               else ""
     do case runWriter (getBindsArgs binds) of
          (bs, s) ->
-           let err0 = if (not.null) s then (err ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s ++ "].\n") else err
+           let err0 = if (not.null) s 
+                      then (err ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s ++ "].\n")
+                      else err
            in case runWriter (getCompTriggers ce) of
                  (ce',s') ->
                    let err1 = if (not.null) s'
@@ -975,7 +980,8 @@ getIdAbs :: Abs.Id -> String
 getIdAbs (Abs.Id s) = s
 
 getTypeAbs :: Abs.Type -> String
-getTypeAbs (Abs.Type (Abs.Id id)) = id
+getTypeAbs (Abs.Type (Abs.TypeDef (Abs.Id id))) = id
+getTypeAbs (Abs.Type (Abs.TypeGen (Abs.Id id) (Abs.Symbols s1) (Abs.Id id') (Abs.Symbols s2))) = id ++ s1 ++ id' ++ s2
 
 getJFAbs :: Abs.JavaFiles -> Abs.Id
 getJFAbs (Abs.JavaFiles id) = id
@@ -998,7 +1004,7 @@ getJML jml str =
  let jml' = printTree jml in
  case ParJML.parse jml' of
       Bad s -> do tell $ "Parse error on the " ++ str
-                  return "parse error"
+                  return "Parse error"
       Ok _  -> return jml' 
 
 getJava :: Abs.Java -> Java

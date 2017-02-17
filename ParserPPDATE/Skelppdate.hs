@@ -228,7 +228,11 @@ transVariableInitializer x = case x of
   VarInitNil -> failure x
 transType :: Type -> Result
 transType x = case x of
-  Type id -> failure x
+  Type typedef -> failure x
+transTypeDef :: TypeDef -> Result
+transTypeDef x = case x of
+  TypeDef id -> failure x
+  TypeGen id1 symbols1 id2 symbols2 -> failure x
 transArgs :: Args -> Result
 transArgs x = case x of
   Args type_ id -> failure x

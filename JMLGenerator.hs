@@ -58,46 +58,6 @@ fromHT2JML' (HT cn _ precon postcon assig _ _ _) =
 requires' :: Pre -> HTName -> String
 requires' p cn = "requires " ++ cn ++ " && " ++ p ++ ";\n"
 
-
-----------------------------------------------------------
--- For one by one analysis of the Hoare triples version --
-----------------------------------------------------------
-
-getHT :: HT -> String
-getHT (HT _ _ precon postcon assig _ _ _) =
-  "  /*@ public normal_behaviour\n"
-  ++ "    @ " ++ requires precon 
-  ++ "    @ " ++ ensures postcon
-  ++ "    @ " ++ assign assig
-  ++ "    @ diverges true;\n" -- partial correctness  
-  ++ "    @*/\n"
-
-getHTs :: HTriples -> [(MethodName, String)]
-getHTs = genJMLConstsAll
-
-genJMLConstsAll :: HTriples -> [(MethodName, String)]
-genJMLConstsAll cs = map (\(x,y) -> (x, "  /*@ public normal_behaviour\n" ++ y ++ "    @*/\n")) $ genJMLConsts cs []
-
-
-genJMLConsts :: HTriples -> [(MethodName, String)] -> [(MethodName, String)]
-genJMLConsts [] xs     = xs
-genJMLConsts (c:cs) xs = let mn = snd $ methodCN c                         
-                         in genJMLConsts cs (updateJMLForM c mn xs)
-
-updateJMLForM :: HT -> MethodName -> [(MethodName, String)] -> [(MethodName, String)]
-updateJMLForM c mn []              = [(mn, fromHT2JML c)]
-updateJMLForM c mn ((mn', jml):xs) = if (mn == mn')
-                                     then (mn', jml ++ "    @\n  @ also\n" ++ fromHT2JML c):xs
-                                     else (mn', jml):updateJMLForM c mn xs
-
-fromHT2JML :: HT -> String
-fromHT2JML (HT _ _ precon postcon assig _ _ _) =  
-  "    @ " ++ requires precon 
-  ++ "    @ " ++ ensures postcon
-  ++ "    @ " ++ assign assig
-  ++ "    @ diverges true;\n" -- partial correctness
-
-
 requires :: Pre -> String
 requires p = "requires " ++ p ++ ";\n"
 
