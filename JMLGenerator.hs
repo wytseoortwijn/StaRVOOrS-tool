@@ -35,8 +35,8 @@ genJMLConstsAll' ppd =
 
 genJMLConsts' :: HTriples -> [(MethodName, ClassInfo, String)] -> [(MethodName, ClassInfo, String)]
 genJMLConsts' [] xs     = xs
-genJMLConsts' (c:cs) xs = let mn = snd $ methodCN c
-                              cl = fst $ methodCN c  
+genJMLConsts' (c:cs) xs = let mn = mname $ methodCN c
+                              cl = clinf $ methodCN c  
                           in genJMLConsts' cs (updateJMLForM' c mn cl xs)
 
 updateJMLForM' :: HT -> MethodName -> ClassInfo -> [(MethodName, ClassInfo, String)] -> [(MethodName, ClassInfo, String)]

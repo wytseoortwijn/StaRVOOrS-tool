@@ -55,8 +55,8 @@ bindCV :: HT -> [(String, ClassInfo, [(String, String)])] -> Triggers -> [(Strin
 bindCV c vars es methods =
  let bindEntry = getClassVar c es EVEntry
      bindExit  = getClassVar c es (EVExit [])
-     varsc  = getVarsToControl (fst $ methodCN c) vars
-     mnames = getMethodsToControl (fst $ methodCN c) methods
+     varsc  = getVarsToControl (clinf $ methodCN c) vars
+     mnames = getMethodsToControl (clinf $ methodCN c) methods
      pre'   = concat $ bindVars bindEntry varsc (pre c)
      post'  = concat $ bindVars bindExit varsc (post c)
      pre''  = concat $ bindMethods bindEntry mnames pre'
@@ -68,9 +68,9 @@ bindOldExp :: HT -> [(String, ClassInfo, [(String, String)])] -> Triggers -> [(S
 bindOldExp c vars es _ []             = []
 bindOldExp c vars es ms ((x,y,z):xss) = 
  let bindEntry = getClassVar c es (EVEntry)
-     varsc     = getVarsToControl (fst $ methodCN c) vars
+     varsc     = getVarsToControl (clinf $ methodCN c) vars
      x'        = concat $ bindVars bindEntry varsc x
-     ms'       = getMethodsToControl (fst $ methodCN c) ms
+     ms'       = getMethodsToControl (clinf $ methodCN c) ms
      x''       = concat $ bindMethods bindEntry ms' x'
  in (x'',y,z):bindOldExp c vars es ms xss
 
@@ -198,8 +198,8 @@ operationalizeResult s =
 
 operationalizeForall :: HT -> Env -> OldExprM -> UpgradePPD ([Either (String, String) String], [Either (String, String) String])
 operationalizeForall c env oldExpM = 
- do let mn             = snd $ methodCN c
-    let cinfo          = fst $ methodCN c
+ do let mn             = mname $ methodCN c
+    let cinfo          = clinf $ methodCN c
     let p              = pre c
     (enargs, enargswt) <- lookForAllEntryTriggerArgs env cinfo mn
     let p'             = post c 
@@ -324,8 +324,8 @@ lookforEnd n acum (x:xs) = if (x == ')')
 
 operationalizeExists :: HT -> Env -> OldExprM -> UpgradePPD ([Either (String, String) String], [Either (String, String) String])
 operationalizeExists c es oldExpM = 
- do let mn             = snd $ methodCN c
-    let cinfo          = fst $ methodCN c
+ do let mn             = mname $ methodCN c
+    let cinfo          = clinf $ methodCN c
     let p              = pre c
     (enargs, enargswt) <- lookForAllEntryTriggerArgs es cinfo mn
     let p'             = post c 

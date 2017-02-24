@@ -91,7 +91,7 @@ updateHTs (x:xs) consts es = updateHTs xs (updateHT x consts es) es
 updateHT :: (MethodName, HTName, [Pre],String) -> HTriples -> Triggers -> HTriples
 updateHT (mn,cn,pres,path) [] _      = []
 updateHT (mn,cn,pres,path) (c:cs) es = 
- if (htName c == cn && (snd.methodCN) c == mn)
+ if (htName c == cn && (mname.methodCN) c == mn)
  then if (null pres)
       then c:updateHT (mn,cn,pres,path) cs es
       else let pres' = removeDuplicates pres
@@ -119,7 +119,7 @@ filterTriggers [] _ _      = []
 filterTriggers (e:es) c ev = 
  case (compTrigger e) of
       NormalEvent (BindingVar b) id _ ev' -> 
-                  if (id == snd (methodCN c) && compareEV ev ev')
+                  if (id == mname (methodCN c) && compareEV ev ev')
                   then e:filterTriggers es c ev
                   else filterTriggers es c ev
       _                                   -> filterTriggers es c ev
@@ -141,7 +141,7 @@ getExTr [] _ _      = ""
 getExTr (e:es) c ev = 
  case (compTrigger e) of
       NormalEvent (BindingVar b) id _ ev' -> 
-                  if (id == snd (methodCN c) && compareEV ev ev')
+                  if (id == mname (methodCN c) && compareEV ev ev')
                   then case b of
                             BindStar      -> ""
                             BindType _ id -> id
@@ -165,7 +165,7 @@ generateNewTriggers ppd consts =
   do let env     = getEnvVal ppd
      let ppdate  = getValue ppd     
      let mfiles  = methodsInFiles env
-     let mns     = removeDuplicates [mn | mn <- map methodCN consts]
+     let mns     = removeDuplicates [(clinf mn,mname mn) | mn <- map methodCN consts]
      let entry   = filterDefinedTriggers (entryTriggersInfo env) mns 
      let exit    = filterDefinedTriggers (exitTriggersInfo env) mns 
      let entry'  = [(x,y,head $ filter (\(a,b,c) -> y == b) z) | (x,y) <- entry, (_,d,z) <- mfiles,d==x]

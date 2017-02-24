@@ -52,8 +52,14 @@ type MethodName = String
 type Pre        = JMLExp
 type Post       = JMLExp
 type Assignable = String
-type MethodCN   = (ClassInfo, MethodName)
+data MethodCN   = 
+ MCN { clinf :: ClassInfo
+     , mname :: MethodName
+     , overl :: Overloading
+     } deriving (Show,Eq)
 
+data Overloading = Over [Type] | OverNil
+  deriving (Eq, Ord, Show, Read)
 
 data HT = HT
   { htName :: HTName

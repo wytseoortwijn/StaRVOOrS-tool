@@ -6,10 +6,10 @@ import Control.Monad
 import Control.Monad.Writer
 import qualified Control.Monad.State as CM
 import qualified Data.Map as Map
-import qualified Absppdate as Abs
+import qualified AbsPpdate as Abs
 import qualified Absactions as Act
 import ErrM
-import Printppdate
+import PrintPpdate
 import qualified Printactions as PrintAct
 import qualified Printjml as PrintJML
 import Parser
@@ -686,12 +686,12 @@ genHTs (Abs.HTriples cs) imps = sequence $ map (getHT imps) cs
 
 getHT :: Imports -> Abs.HT -> UpgradePPD HT
 getHT imps (Abs.HT id pre' method post' (Abs.Assignable ass)) =
- do let mCN = (getMethodClassInfo method, getMethodMethodName method)    
+ do let mCN = MCN { clinf = getMethodClassInfo method, mname = getMethodMethodName method, overl = getMethodOverloading method }
     env <- get
-    case checkImports (fst mCN) imps of
-         []     -> fail $ "Error: Hoare triple " ++ getIdAbs id ++ " is associated to class " ++ fst mCN ++ ", but the class is not imported.\n"
+    case checkImports (clinf mCN) imps of
+         []     -> fail $ "Error: Hoare triple " ++ getIdAbs id ++ " is associated to class " ++ clinf mCN ++ ", but the class is not imported.\n"
          (x:xs) -> if (not.null) xs 
-                   then fail $ "Error: Multiple imports for class " ++ fst mCN
+                   then fail $ "Error: Multiple imports for class " ++ clinf mCN
                    else do let cns = htsNames env
                            let ys  = map checkJML $ [getPre pre',getPost post'] ++ (map assig ass)
                            joinErrorJML ys (getIdAbs id)
@@ -949,7 +949,7 @@ writePPDHts' []      = ""
 writePPDHts' (h:hts) = 
  "HT " ++ htName h ++ " {\n"
  ++ "PRE { " ++ pre h ++" }\n"
- ++ "METHOD { " ++ fst (methodCN h) ++ "." ++ snd (methodCN h) ++" }\n"
+ ++ "METHOD { " ++ clinf (methodCN h) ++ "." ++ mname (methodCN h) ++" }\n"
  ++ "POST { " ++ post h ++" }\n"
  ++ "ASSIGNABLE { " ++ assignable h ++" }\n"
  ++ "}\n\n"
@@ -982,6 +982,7 @@ getIdAbs (Abs.Id s) = s
 getTypeAbs :: Abs.Type -> String
 getTypeAbs (Abs.Type (Abs.TypeDef (Abs.Id id))) = id
 getTypeAbs (Abs.Type (Abs.TypeGen (Abs.Id id) (Abs.Symbols s1) (Abs.Id id') (Abs.Symbols s2))) = id ++ s1 ++ id' ++ s2
+getTypeAbs (Abs.Type (Abs.TypeArray (Abs.Id id))) = id
 
 getJFAbs :: Abs.JavaFiles -> Abs.Id
 getJFAbs (Abs.JavaFiles id) = id
@@ -1011,10 +1012,17 @@ getJava :: Abs.Java -> Java
 getJava java = printTree java
 
 getMethodClassInfo :: Abs.Method -> ClassInfo
-getMethodClassInfo (Abs.Method ci _) = getIdAbs ci
+getMethodClassInfo (Abs.Method ci _ _) = getIdAbs ci
 
 getMethodMethodName :: Abs.Method -> MethodName
-getMethodMethodName (Abs.Method _ mn) = getIdAbs mn
+getMethodMethodName (Abs.Method _ mn _) = getIdAbs mn
+
+getMethodOverloading :: Abs.Method -> Overloading
+getMethodOverloading (Abs.Method _ _ over) = getOverloading over
+
+getOverloading :: Abs.Overloading -> Overloading 
+getOverloading Abs.OverNil = OverNil
+getOverloading (Abs.Over xs) = Over $ map getTypeAbs xs
 
 getAssig :: Abs.Assig -> Abs.JML
 getAssig (Abs.AssigJML jml) = jml

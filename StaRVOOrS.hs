@@ -7,7 +7,7 @@ import Types
 import CommonFunctions
 import Parser
 import ErrM
-import Absppdate
+import AbsPpdate
 import UpgradePPDATE
 import qualified Data.Map as MAP
 import StaticAnalysis

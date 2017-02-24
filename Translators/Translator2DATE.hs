@@ -214,7 +214,7 @@ instrumentTriggers (e:es) cs env =
 lookupHTForTrigger :: TriggerDef -> ClassInfo -> HTriples -> (Bool, MethodName, [Bind])
 lookupHTForTrigger _ _ []      = (False,"", [])
 lookupHTForTrigger e ci (c:cs) = case compTrigger e of
-                                      NormalEvent _ id bs _ -> if (id == snd (methodCN c) && fst (methodCN c) == ci)
+                                      NormalEvent _ id bs _ -> if (id == mname (methodCN c) && clinf (methodCN c) == ci)
                                                                then (True, id, bs)
                                                                else lookupHTForTrigger e ci cs
                                       _                     -> lookupHTForTrigger e ci cs
@@ -312,8 +312,8 @@ accumTransitions (cn:cns) ns consts ts es env pn =
 generateTransition :: HTName -> NameState -> HTriples -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
 generateTransition p ns cs ts es env pn = 
  let c             = lookForHT p cs
-     cl            = fst $ methodCN c
-     mn            = snd $ methodCN c
+     cl            = clinf $ methodCN c
+     mn            = mname $ methodCN c
      entrs         = lookForEntryTrigger (allTriggers env) mn cl
      entrs'        = [tr | tr <- entrs, tr /= (mn++"_ppden")]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'

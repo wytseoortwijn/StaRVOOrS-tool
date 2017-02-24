@@ -144,10 +144,10 @@ generateOldExpr [] _         = []
 generateOldExpr (c:cs) jpath = 
  let cn     = htName c
      p      = post c
-     classI = fst $ methodCN c
+     classI = clinf $ methodCN c
      path   = jpath
      tar    = path2it c
-     mn     = snd $ methodCN c
+     mn     = mname $ methodCN c
      xs     = splitOnIdentifier "\\old(" p
  in if (length xs == 1)
     then generateOldExpr cs jpath

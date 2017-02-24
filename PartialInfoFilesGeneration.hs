@@ -99,7 +99,7 @@ auxNewVars (Var _ t [VarDecl id _]:xs) = (t ++ " " ++ id):auxNewVars xs
 
 methodForPost :: HT -> Env -> OldExprM -> UpgradePPD String
 methodForPost c env oldExpM =
- do (argsPost, argsPostwt) <- lookForAllExitTriggerArgs env (fst $ methodCN c) (snd $ methodCN c)
+ do (argsPost, argsPostwt) <- lookForAllExitTriggerArgs env (clinf $ methodCN c) (mname $ methodCN c)
     let tnvs      = getConstTnv c oldExpM
     let tnvs'     = auxNewVars tnvs
     let newargs   = addComma tnvs'
@@ -113,7 +113,7 @@ methodForPost c env oldExpM =
 --check opt for new predicates for the precondition due to partial proof
 methodForPre :: HT -> Env -> UpgradePPD String
 methodForPre c env =
- do (argsPre, _) <- lookForAllEntryTriggerArgs env (fst $ methodCN c) (snd $ methodCN c)     
+ do (argsPre, _) <- lookForAllEntryTriggerArgs env (clinf $ methodCN c) (mname $ methodCN c)     
     return $ "  // " ++ (htName c) ++ "\n"
              ++ "  public static boolean " ++ (htName c) ++ "_pre(" ++ argsPre ++ ") {\n" 
              ++ "    return " ++ pre c ++ addNewPre c ++ ";\n"

@@ -99,8 +99,8 @@ splitV type' (v:vs) = (type',v):splitV type' vs
 
 getMethodsNames :: T.ClassInfo -> T.HTriples -> [T.MethodName]
 getMethodsNames _ []      = []
-getMethodsNames cl (c:cs) = if ((fst $ T.methodCN c) == cl)  
-                            then (snd $ T.methodCN c):getMethodsNames cl cs
+getMethodsNames cl (c:cs) = if ((T.clinf $ T.methodCN c) == cl)  
+                            then (T.mname $ T.methodCN c):getMethodsNames cl cs
                             else getMethodsNames cl cs
 
 instrumentMethodMemberDecl :: [Decl] -> [T.MethodName] -> [Decl]

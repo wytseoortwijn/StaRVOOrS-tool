@@ -227,7 +227,7 @@ lookForConstsNames cn ((cn', cs):xs) = if (cn == cn')
 
 splitClassHT :: HTriples -> [(ClassInfo, HTName)]
 splitClassHT []     = []
-splitClassHT (c:cs) = (fst $ methodCN c, htName c) : splitClassHT cs
+splitClassHT (c:cs) = (clinf $ methodCN c, htName c) : splitClassHT cs
 
 joinClassHT :: [(ClassInfo, HTName)] -> [(ClassInfo, [HTName])] -> [(ClassInfo, [HTName])]
 joinClassHT [] jcc     = jcc
