@@ -23,27 +23,27 @@ fromCInvariant2JML (CI _ body) =
 -------------------
 
 -- For analysis of all the Hoare triples at once version
+getHTs :: UpgradePPD PPDATE -> HTjml
+getHTs = genJMLConstsAll'
 
-getHTs' :: UpgradePPD PPDATE -> [(MethodName, ClassInfo, String)]
-getHTs' = genJMLConstsAll'
-
-genJMLConstsAll' :: UpgradePPD PPDATE -> [(MethodName, ClassInfo, String)]
+genJMLConstsAll' :: UpgradePPD PPDATE -> HTjml
 genJMLConstsAll' ppd = 
  let ppdate = getValue ppd
      cs     = htsGet ppdate
- in map (\(x,z,y) -> (x, z,"  /*@ \n" ++ y ++ "    @*/\n")) $ genJMLConsts' cs []
+ in map (\(x,z,ov,y) -> (x, z,ov,"  /*@ \n" ++ y ++ "    @*/\n")) $ genJMLConsts' cs []
 
-genJMLConsts' :: HTriples -> [(MethodName, ClassInfo, String)] -> [(MethodName, ClassInfo, String)]
+genJMLConsts' :: HTriples -> HTjml -> HTjml
 genJMLConsts' [] xs     = xs
 genJMLConsts' (c:cs) xs = let mn = mname $ methodCN c
-                              cl = clinf $ methodCN c  
-                          in genJMLConsts' cs (updateJMLForM' c mn cl xs)
+                              cl = clinf $ methodCN c
+                              ov = overl $ methodCN c  
+                          in genJMLConsts' cs (updateJMLForM' c mn cl ov xs)
 
-updateJMLForM' :: HT -> MethodName -> ClassInfo -> [(MethodName, ClassInfo, String)] -> [(MethodName, ClassInfo, String)]
-updateJMLForM' c mn cl []                   = [(mn, cl, fromHT2JML' c)]
-updateJMLForM' c mn cl ((mn', cl', jml):xs) = if (mn == mn' && cl == cl')
-                                              then (mn', cl', jml ++ "    @\n    @ also\n    @\n" ++ fromHT2JML' c):xs
-                                              else (mn', cl', jml):updateJMLForM' c mn cl xs
+updateJMLForM' :: HT -> MethodName -> ClassInfo -> Overloading -> HTjml -> HTjml
+updateJMLForM' c mn cl ov []                       = [(mn, cl, ov,fromHT2JML' c)]
+updateJMLForM' c mn cl ov ((mn', cl', ov',jml):xs) = if (mn == mn' && cl == cl' && ov == ov')
+                                                     then (mn', cl', ov', jml ++ "    @\n    @ also\n    @\n" ++ fromHT2JML' c):xs
+                                                     else (mn', cl', ov', jml):updateJMLForM' c mn cl ov xs
 
 fromHT2JML' :: HT -> String
 fromHT2JML' (HT cn _ precon postcon assig _ _ _) =  

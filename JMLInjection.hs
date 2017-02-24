@@ -14,7 +14,7 @@ import System.IO
 -- Injecting JML annotations for Hoare triples --
 -------------------------------------------------
 
-generateTmpFilesAllConsts :: UpgradePPD PPDATE -> [(MethodName, ClassInfo, String)] -> FilePath -> FilePath -> IO ()
+generateTmpFilesAllConsts :: UpgradePPD PPDATE -> HTjml -> FilePath -> FilePath -> IO ()
 generateTmpFilesAllConsts ppd consts_jml output_add jpath =
  do let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
     let imports       = importsGet ppdate
@@ -29,9 +29,9 @@ generateTmpFilesAllConsts ppd consts_jml output_add jpath =
              ]
     return ()
 
-genTmpFilesConst :: (String, ClassInfo) -> FilePath -> [(MethodName, ClassInfo, String)] -> String -> IO ()
-genTmpFilesConst (main, cl) output_add [] r                   = writeFile (output_add ++ "/" ++ main ++ "/" ++ (cl ++ ".java")) r
-genTmpFilesConst (main, cl) output_add ((mn, cl', jml):xs)  r = 
+genTmpFilesConst :: (String, ClassInfo) -> FilePath -> HTjml -> String -> IO ()
+genTmpFilesConst (main, cl) output_add [] r                      = writeFile (output_add ++ "/" ++ main ++ "/" ++ (cl ++ ".java")) r
+genTmpFilesConst (main, cl) output_add ((mn, cl', ov,jml):xs)  r = 
  do 
     if (cl == cl') 
     then do 

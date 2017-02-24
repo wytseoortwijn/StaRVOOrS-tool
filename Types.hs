@@ -251,6 +251,8 @@ type ErrorMsg = String
 
 type JMLExp = String
 
+type HTjml = [(MethodName, ClassInfo, Overloading, String)]
+
 --------------
 -- PROPERTY --
 --------------
