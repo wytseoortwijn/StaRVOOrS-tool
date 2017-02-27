@@ -11,7 +11,7 @@ import qualified Absactions as Act
 import ErrM
 import PrintPpdate
 import qualified Printactions as PrintAct
-import qualified Printjml as PrintJML
+import qualified PrintJml as PrintJML
 import Parser
 import qualified ParserAct as ParAct
 import qualified ParserJML as ParJML
