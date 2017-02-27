@@ -411,6 +411,7 @@ instance Print VariableInitializer where
 instance Print Type where
   prt i e = case e of
     Type typedef -> prPrec i 0 (concatD [prt 0 typedef])
+  prtList _ [] = (concatD [])
   prtList _ [x] = (concatD [prt 0 x])
   prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])
 instance Print TypeDef where

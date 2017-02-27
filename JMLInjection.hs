@@ -40,30 +40,41 @@ genTmpFilesConst (main, cl) output_add ((mn, cl', ov,jml):xs)  r =
             let tmp  = output_add'' ++ "/" ++ (cl ++ ".java")
             let (ys, zs) = if (mn == cl)
                            then lookForConstructorDef mn (lines r)
-                           else lookForMethodDef mn (lines r)
+                           else lookForMethodDef mn ov (lines r)
             let r' = ((unlines ys) ++ jml ++ (unlines zs))
             genTmpFilesConst (main, cl') output_add xs r'
     else genTmpFilesConst (main, cl) output_add xs  r
 
 
-lookForMethodDef :: MethodName -> [String] -> ([String], [String])
-lookForMethodDef mn []       = error $ "Something went wrong when checking the method " ++ mn ++ ".\n"
-lookForMethodDef mn (xs:xss) = 
+lookForMethodDef :: MethodName -> Overloading -> [String] -> ([String], [String])
+lookForMethodDef mn _ []        = error $ "Something went wrong when annotating the method " ++ mn ++ ".\n"
+lookForMethodDef mn ov (xs:xss) = 
  let ys = splitOnIdentifier mn xs
  in if (length ys == 1)
-    then (xs:a, b)
+    then (xs:a, b) --method name does not appear in the line
     else let zs     = (clean.head.tail) ys 
              beginl = (words.head) ys 
          in if ((head zs) == '(')
             then if (length beginl == 1)
-                 then (xs:a, b)
+                 then (xs:a, b) --not a method definition (does not have modifier or type)
                  else let ws = (clean.head) beginl
                       in if (elem ws javaModifiers)
-                         then ([], xs:xss)
-                         else (xs:a, b)
-            else (xs:a, b)
-                where (a, b) = lookForMethodDef mn xss
-  
+                         then let ts = splitOnIdentifier "," $ fst $ splitAtClosingParen 0 $ tail zs in
+                              if checkArguments ov ts
+                              then ([], xs:xss)
+                              else (xs:a, b) --not the intended method (overloading)
+                         else (xs:a, b) --not a method definition (does not start with modifier)
+            else (xs:a, b) --not referring to a method
+                where (a, b) = lookForMethodDef mn ov xss
+
+checkArguments :: Overloading -> [String] -> Bool
+checkArguments _ []           = False
+checkArguments OverNil _      = True
+checkArguments (Over []) [[]] = True
+checkArguments (Over []) _    = False
+checkArguments (Over ts) ts'  = 
+ let types = map (head.words) ts 
+ in ts == types
 
 lookForConstructorDef :: MethodName -> [String] -> ([String], [String])
 lookForConstructorDef mn []       = error $ "Something went wrong when checking the constructor " ++ mn ++ ".\n"
