@@ -73,7 +73,7 @@ checkArguments OverNil _      = True
 checkArguments (Over []) [[]] = True
 checkArguments (Over []) _    = False
 checkArguments (Over ts) ts'  = 
- let types = map (head.words) ts 
+ let types = map (head.words) ts'
  in ts == types
 
 lookForConstructorDef :: MethodName -> [String] -> ([String], [String])
