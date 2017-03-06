@@ -35,7 +35,17 @@ splitAccording2Proof xs ys zs (p:ps) = let pres = (\(x,y,z) -> z) p
                                           then splitAccording2Proof (p:xs) ys zs ps
                                           else if (elem "true" pres) 
                                                then splitAccording2Proof xs ys (p:zs) ps -- KeY has nothing to say about the proof
-                                               else splitAccording2Proof xs (p:ys) zs ps
+                                               else if checkMiddleExcluded pres
+                                                    then splitAccording2Proof xs ys (p:zs) ps
+                                                    else splitAccording2Proof xs (p:ys) zs ps
+
+--If middle excluded, then verify original precondition
+checkMiddleExcluded :: [String] -> Bool
+checkMiddleExcluded [xs,ys] = 
+ let xs' = "!" ++ xs
+     ys' = "!" ++ ys
+ in ys == xs' || xs == ys'    
+checkMiddleExcluded xss     = False
 
 makeReport :: ([PProof], [PProof], [PProof]) -> String
 makeReport (ps, pps, nps) = "Results of the Static Verification of Hoare triple(s)\n\n"

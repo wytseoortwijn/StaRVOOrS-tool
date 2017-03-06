@@ -95,7 +95,7 @@ updateHT (mn,cn,pres,path) (c:cs) es =
  then if (null pres)
       then c:updateHT (mn,cn,pres,path) cs es
       else let pres' = removeDuplicates pres
-               opt'  = map (addParenthesisNot.removeDLstrContent) pres'
+               opt'  = simplify $ map (addParenthesisNot.removeDLstrContent) pres'
                opt'' = '(':introduceOr opt' ++ [')']
                c'    = updatePath (updateOpt c [opt'']) path
                c''   = updatePre c' $ removeDLstrContent (pre c)
@@ -105,6 +105,20 @@ updateHT (mn,cn,pres,path) (c:cs) es =
 
 getClassVar :: HT -> Triggers -> TriggerVariation -> String
 getClassVar c es ev = lookupClassVar es c ev
+
+--Optimise generated preconditions
+simplify :: [String] -> [String]
+simplify = checkMiddleExcluded 
+
+--If middle excluded, then verify original precondition
+checkMiddleExcluded :: [String] -> [String]
+checkMiddleExcluded [xs,ys] = 
+ let xs' = "!(" ++ xs ++ ")"
+     ys' = "!(" ++ ys ++ ")"
+ in if ys == xs' || xs == ys'
+    then ["true"]
+    else [xs,ys]
+checkMiddleExcluded xss     = xss
 
 -- returns variable name used to instantiate the class in the ppDATE
 lookupClassVar :: Triggers -> HT -> TriggerVariation -> String
