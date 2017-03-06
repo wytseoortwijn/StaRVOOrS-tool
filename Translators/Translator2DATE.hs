@@ -311,7 +311,7 @@ accumTransitions (cn:cns) ns consts ts es env pn =
 
 generateTransition :: HTName -> NameState -> HTriples -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
 generateTransition p ns cs ts es env pn = 
- let c             = lookForHT p cs
+ let c             = lookForHT p cs ns
      cl            = clinf $ methodCN c
      mn            = mname $ methodCN c
      entrs         = lookForEntryTrigger (allTriggers env) mn cl
@@ -320,10 +320,24 @@ generateTransition p ns cs ts es env pn =
  in if null entrs
     then error $ "Translation: Missing entry trigger for method " ++ mn ++ ".\n"
     else if (null lts)
-         then ts ++ map (\e -> makeTransitionAlg1Cond ns e c env pn) entrs
-         else let ext = map (\e -> makeExtraTransitionAlg2 lts c e ns env pn) entrs'
-                  xs  = concat [map (\x -> instrumentTransitionAlg2 c x tr env pn) lts | tr <- entrs']
+         then ts ++ makeTransitionAlg1 ns c env pn mn entrs
+         else let lts' = avoidTriviallyFalseCond lts
+                  ext  = map (\e -> makeExtraTransitionAlg2 lts' c e ns env pn) entrs'
+                  xs   = concat [map (\x -> instrumentTransitionAlg2 c x tr env pn) lts | tr <- entrs']
               in nonlts ++ xs ++ ext
+
+--Method used to avoid generating transitions with conditions trivially false
+avoidTriviallyFalseCond :: Transitions -> Transitions
+avoidTriviallyFalseCond = filter (\t -> (trim.cond.arrow) t == "true")
+
+-- Implementation of Algorithm 1 --
+
+makeTransitionAlg1 :: NameState -> HT -> Env -> PropertyName -> MethodName -> [Trigger] -> Transitions
+makeTransitionAlg1 ns c env pn mn entrs = 
+ let entrs' = [tr | tr <- entrs, tr /= (mn++"_ppden")]
+ in if null entrs'
+    then map (\e -> makeTransitionAlg1Cond ns e c env pn) entrs
+    else map (\e -> makeTransitionAlg1Cond ns e c env pn) entrs'
 
 
 makeTransitionAlg1Cond :: NameState -> Trigger -> HT -> Env -> PropertyName -> Transition
@@ -358,14 +372,7 @@ initOldExpr oel cn =
  "new Old_" ++ cn ++ "(" ++ addComma (map (\(x,_,_) -> x) oel) ++ ")"
 
 
-
-makeExtraTransitionAlg2Cond :: Transitions -> PropertyName -> String
-makeExtraTransitionAlg2Cond [] _      = ""
-makeExtraTransitionAlg2Cond (t:ts) pn =
- let cond'  = cond $ arrow t
-     cond'' = if (null $ clean cond') then "true" else cond'
- in
- "!("++ cond'' ++ ") && " ++ makeExtraTransitionAlg2Cond ts pn
+-- Implementation of Algorithm 2 --
 
 makeExtraTransitionAlg2 :: Transitions -> HT -> Trigger -> NameState -> Env -> PropertyName -> Transition
 makeExtraTransitionAlg2 ts c e ns env pn = 
@@ -387,6 +394,14 @@ makeExtraTransitionAlg2 ts c e ns env pn =
      c'      = makeExtraTransitionAlg2Cond ts pn ++ pre'
  in Transition ns (Arrow e c' act) ns
 
+makeExtraTransitionAlg2Cond :: Transitions -> PropertyName -> String
+makeExtraTransitionAlg2Cond [] _      = ""
+makeExtraTransitionAlg2Cond (t:ts) pn =
+ let cond'  = cond $ arrow t
+     cond'' = if (null $ clean cond') then "true" else cond'
+ in
+ "!("++ cond'' ++ ") && " ++ makeExtraTransitionAlg2Cond ts pn
+
 
 instrumentTransitionAlg2 :: HT -> Transition -> Trigger -> Env -> PropertyName -> Transition
 instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env pn =
@@ -397,7 +412,6 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env pn =
      arg     = if null esinf' 
                then ""
                else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
-     semicol = if (act == "") then "" else ";"     
      zs      = getExpForOld oldExpM cn
      type_   = if null zs then "PPD" else "Old_" ++ cn
      old     = if null zs then "" else "," ++ zs
@@ -405,13 +419,15 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env pn =
      ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
      msg     = "new Messages" ++ type_ ++ ident' ++ old ++ ")"
      act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "}"
- in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
+ in Transition q (Arrow e' c' (act ++ act')) q'
 
-lookForHT :: PropertyName -> HTriples -> HT
-lookForHT p []     = error $ "Wow! The impossible happened when checking the property "++ p ++ " on a state.\n"
-lookForHT p (c:cs) = if (htName c == p)
-                     then c
-                     else lookForHT p cs
+
+lookForHT :: PropertyName -> HTriples -> NameState -> HT
+lookForHT p []     ns = error $ "Error: Could not find property "++ p ++ " on state " ++ ns ++ ".\n"
+lookForHT p (c:cs) ns =
+ if (htName c == p)
+ then c
+ else lookForHT p cs ns
 
 lookForLeavingTransitions :: Trigger -> NameState -> Transitions -> (Transitions, Transitions)
 lookForLeavingTransitions e ns []                                        = ([],[])
