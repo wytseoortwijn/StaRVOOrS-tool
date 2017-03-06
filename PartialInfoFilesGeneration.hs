@@ -121,9 +121,12 @@ methodForPre c env =
 
 
 addNewPre :: HT -> String
-addNewPre c = if (null (optimized c))
-              then ""
-              else " && " ++ (head.optimized) c
+addNewPre c = 
+ if (null (optimized c))
+ then ""
+ else if (head.optimized) c == "(true)"
+      then ""
+      else " && " ++ (head.optimized) c
 
 extracMethodDefinitions :: [Either (String,String) String] -> [String]
 extracMethodDefinitions []             = []
