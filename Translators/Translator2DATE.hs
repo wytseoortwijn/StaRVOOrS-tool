@@ -328,7 +328,8 @@ generateTransition p ns cs ts es env pn =
 
 --Method used to avoid generating transitions with conditions trivially false
 avoidTriviallyFalseCond :: Transitions -> Transitions
-avoidTriviallyFalseCond = filter (\t -> (trim.cond.arrow) t == "true")
+avoidTriviallyFalseCond = filter (check.trim.cond.arrow)
+                                    where check t = t /= "true"  && (not.null) t
 
 -- Implementation of Algorithm 1 --
 
