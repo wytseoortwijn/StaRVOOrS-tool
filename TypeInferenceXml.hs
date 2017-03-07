@@ -48,12 +48,12 @@ inferTypesOldExprs ppd jpath output_add =
 javaExprReader xml_add out_add = rawSystem "java" ["-jar","jer.jar",xml_add, out_add]
 
 
-addType :: OldExpr -> [(ClassInfo,[(Type,String)])] -> [(String, ClassInfo, [(Type,Id,[String])])] -> OldExpr
+addType :: OldExpr -> [(ClassInfo,[(Type,String)])] -> [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])] -> OldExpr
 addType oexpr ts minfs = 
  let xs = map (\(OExpr e t) -> OExpr e (checkType ts minfs oexpr e)) (oldExprs oexpr)
  in updateOldExprs oexpr xs
 
-checkType :: [(ClassInfo,[(Type,String)])] -> [(String, ClassInfo, [(Type,Id,[String])])] -> OldExpr -> String -> String
+checkType :: [(ClassInfo,[(Type,String)])] -> [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])] -> OldExpr -> String -> String
 checkType xs ys oexpr s = 
  let cinf = classInf oexpr
  in if (checkTypeArgs ys oexpr s == "") 
@@ -61,7 +61,7 @@ checkType xs ys oexpr s =
     else checkTypeArgs ys oexpr s
 
 --TODO: Fix if classes with the same name in different folders is allowed
-checkTypeArgs :: [(String, ClassInfo, [(Type,Id,[String])])] -> OldExpr -> String -> String
+checkTypeArgs :: [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])] -> OldExpr -> String -> String
 checkTypeArgs [] _ s                   = ""
 checkTypeArgs ((_,cinf,ys):xs) oexpr s = 
  let cinf' = classInf oexpr

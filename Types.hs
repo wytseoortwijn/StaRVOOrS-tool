@@ -4,6 +4,7 @@ import qualified Data.Map as Map
 import System.FilePath
 import System.Console.GetOpt
 import Data.Maybe ( fromMaybe )
+import Language.Java.Syntax hiding(Type,VarDecl)
 
 ------------
 -- ppDATE --
@@ -252,6 +253,8 @@ type ErrorMsg = String
 type JMLExp = String
 
 type HTjml = [(MethodName, ClassInfo, Overloading, String)]
+
+type MethodInvocations = [Exp]
 
 --------------
 -- PROPERTY --

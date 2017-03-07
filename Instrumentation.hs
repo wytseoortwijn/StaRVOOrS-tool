@@ -9,6 +9,7 @@ import UpgradePPDATE
 import ErrM
 import JavaLanguage
 
+
 --------------------------
 -- Code Instrumentation --
 --------------------------
@@ -103,7 +104,6 @@ addMethodInFile (id,methodaux,method) (xs:xss) =
                       else xs:addMethodInFile (id,methodaux,method) xss
             else xs:addMethodInFile (id,methodaux,method) xss
 
-
 --Adds to the upgraded ppDATE's env the variables of all the java files involved in the verification process
 programVariables :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
 programVariables ppd jpath = 
@@ -136,10 +136,10 @@ programMethods ppd jpath =
                    ]
     return $ updateMethodsEnv ppd ms
 
-updateMethodsEnv :: UpgradePPD T.PPDATE -> [(String, T.ClassInfo, [(T.Id,String,[String])])] -> UpgradePPD T.PPDATE
+updateMethodsEnv :: UpgradePPD T.PPDATE -> [(String, T.ClassInfo, [(T.Id,String,[String],T.MethodInvocations)])] -> UpgradePPD T.PPDATE
 updateMethodsEnv ppd ms = ppd >>= (\x -> do env <- get; put (env { methodsInFiles = ms }); return x)                     
 
-getMethods :: T.Import -> FilePath -> IO (String, T.ClassInfo, [(T.Id,String,[String])])
+getMethods :: T.Import -> FilePath -> IO (String, T.ClassInfo, [(T.Id,String,[String],T.MethodInvocations)])
 getMethods i jpath =
   do (main, cl) <- makeAddFile i
      let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")
