@@ -1,4 +1,4 @@
-module ReplicatedAutomataGenerator(generateRA, lookfor) where
+module ReplicatedAutomataGenerator(generateRA) where
 
 import Types
 import CommonFunctions
