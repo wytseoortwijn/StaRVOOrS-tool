@@ -492,10 +492,7 @@ generateReplicatedAutomata cs fs es env =
 generateProp :: [(Trigger, [String])] -> String -> Triggers -> [(HT,Int)] -> Env -> [(MethodCN,Bool)] -> String
 generateProp _ _ _ [] _ _                     = ""
 generateProp esinf fors es ((c,n):ys) env acc = 
- let mn        = mname $ methodCN c
-     ci        = clinf $ methodCN c
-     ov        = overl $ methodCN c
-     (ra,acc') = genRA c n esinf fors es env acc
+ let (ra,acc') = genRA c n esinf fors es env acc
  in ra ++ generateProp esinf fors es ys env acc'
 
 genRA :: HT -> Int -> [(Trigger, [String])] -> String -> Triggers -> Env -> [(MethodCN,Bool)] -> (String,[(MethodCN,Bool)])
@@ -509,7 +506,12 @@ checkIfRec :: MethodCN -> Env -> [(MethodCN,Bool)] -> (Bool,[(MethodCN,Bool)])
 checkIfRec mcn env acc = (True,acc)
 
 getInvocationsInMethodBody :: MethodCN -> Env -> MethodInvocations
-getInvocationsInMethodBody mcn env = undefined
+getInvocationsInMethodBody mcn env = 
+ let mns = methodsInFiles env
+     mn  = mname $ methodCN c
+     ci  = clinf $ methodCN c
+     ov  = overl $ methodCN c
+ in undefined
 
 generatePropNonRec :: Env -> String
 generatePropNonRec = undefined
