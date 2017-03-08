@@ -106,6 +106,24 @@ getListOfTypesAndMethods cl ((main, cl',ts):xs) = if (cl == cl')
                                                   then [(x,y) | (x,y,_,_) <- ts]
                                                   else getListOfTypesAndMethods cl xs
 
+getMethodInvocations :: MethodCN -> [(String, ClassInfo, [(Type, Id,[String],MethodInvocations)])] -> MethodInvocations
+getMethodInvocations _ []                    = []
+getMethodInvocations mcn ((main, cl',ts):xs) = 
+ let mn  = mname mcn
+     cl  = clinf mcn
+     ov  = overl mcn
+ in if (cl == cl') 
+    then let ys = [ (t,id,args,minvs) | (t,id,args,minvs) <- ts, id==mn]
+         in if (not.null) ys
+            then case ov of 
+                 OverNil  -> (\(_,_,_,x) -> x) $ head ys 
+                 Over ovs -> let zs = [ minvs | (_,_,args,minvs) <- ys, map (head.words) args == ovs]
+                             in if null zs
+                                then getMethodInvocations mcn xs
+                                else head zs
+            else getMethodInvocations mcn xs
+    else getMethodInvocations mcn xs
+
 getListOfArgs :: MethodName -> [(Type, Id,[String],MethodInvocations)] -> [String]
 getListOfArgs mn []                = []
 getListOfArgs mn ((t,mn',ts,_):xs) = if (mn == mn') 

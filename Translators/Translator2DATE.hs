@@ -500,21 +500,20 @@ genRA c n esinf fors es env acc =
  let (b,acc') = checkIfRec (methodCN c) env acc
  in if b 
     then (generatePropRec c n esinf fors es env, acc')
-    else (generatePropNonRec env, acc')
+    else (generatePropNonRec c n env, acc')
 
 checkIfRec :: MethodCN -> Env -> [(MethodCN,Bool)] -> (Bool,[(MethodCN,Bool)])
-checkIfRec mcn env acc = (True,acc)
+checkIfRec mcn env acc = 
+ (True,acc)
+--getInvocationsInMethodBody (methodCN c) env
 
 getInvocationsInMethodBody :: MethodCN -> Env -> MethodInvocations
 getInvocationsInMethodBody mcn env = 
- let mns = methodsInFiles env
-     mn  = mname mcn
-     ci  = clinf mcn
-     ov  = overl mcn
- in undefined
+ let mns = methodsInFiles env    
+ in getMethodInvocations mcn mns
 
-generatePropNonRec :: Env -> String
-generatePropNonRec = undefined
+generatePropNonRec :: HT -> Int -> Env -> String
+generatePropNonRec c n env = undefined
 
 generatePropRec :: HT -> Int -> [(Trigger, [String])] -> String -> Triggers -> Env -> String
 generatePropRec c n esinf fors es env = 
