@@ -508,9 +508,9 @@ checkIfRec mcn env acc = (True,acc)
 getInvocationsInMethodBody :: MethodCN -> Env -> MethodInvocations
 getInvocationsInMethodBody mcn env = 
  let mns = methodsInFiles env
-     mn  = mname $ methodCN c
-     ci  = clinf $ methodCN c
-     ov  = overl $ methodCN c
+     mn  = mname mcn
+     ci  = clinf mcn
+     ov  = overl mcn
  in undefined
 
 generatePropNonRec :: Env -> String
