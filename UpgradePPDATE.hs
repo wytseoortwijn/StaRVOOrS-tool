@@ -1139,7 +1139,7 @@ data Env = Env
  , htsNames            :: [HTName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
  , varsInPPD           :: Variables
- , methodsInFiles      :: [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])] --[(path_to_class,class_name,[(returned_type,method_name,arguments,methodIsRecursiveOrNot)])]
+ , methodsInFiles      :: [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])] --[(path_to_class,class_name,[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body)])]
  , oldExpTypes         :: OldExprM
  , tempsId             :: [Id]
  , triggersInTemps     :: [Trigger] --is used to check whether the triggers in the transitions of the templates are  

@@ -50,29 +50,29 @@ writeGlobal ppdate env =
      consts = htsGet ppdate
      vars   = variables global
      acts   = actevents global
-     es     = triggers global
+     trs    = triggers global
      prop   = property global
      fors   = foreaches global                      
- in if checkGlobalForeach vars acts es prop fors
+ in if checkGlobalForeach vars acts trs prop fors
     then "GLOBAL {\n\n"
          ++ writeVariables vars consts acts
-         ++ writeTriggers es consts acts env
-         ++ writeProperties prop consts es env
-         ++ writeForeach fors consts env 0 (generateReplicatedAutomata consts (forsVars env) es env)
+         ++ writeTriggers trs consts acts env
+         ++ writeProperties prop consts trs env
+         ++ writeForeach fors consts env 0 (generateReplicatedAutomata consts (forsVars env) trs env)
          ++ "}\n"
     else 
        case fors of
           [] -> "GLOBAL {\n\n"
                 ++ writeVariables vars consts acts
-                ++ writeTriggers es consts acts env
-                ++ writeProperties prop consts es env
-                ++ generateReplicatedAutomata consts [] es env  
+                ++ writeTriggers trs consts acts env
+                ++ writeProperties prop consts trs env
+                ++ generateReplicatedAutomata consts [] trs env  
                 ++ "}\n" 
           _  -> "GLOBAL {\n\n"
                 ++ writeVariables vars consts acts
-                ++ writeTriggers es consts acts env
-                ++ writeProperties prop consts es env
-                ++ writeForeach fors consts env 1 (generateReplicatedAutomata consts [] es env)
+                ++ writeTriggers trs consts acts env
+                ++ writeProperties prop consts trs env
+                ++ writeForeach fors consts env 1 (generateReplicatedAutomata consts [] trs env)
                 ++ "}\n" 
 
 checkGlobalForeach :: Variables -> ActEvents -> Triggers -> Property -> Foreaches -> Bool
@@ -483,36 +483,54 @@ writeMethods methods = "\n" ++  methods
 
 generateReplicatedAutomata :: HTriples -> [Id] -> Triggers -> Env -> String
 generateReplicatedAutomata cs fs es env = 
- let n      = length cs
-     ys     = zip cs [1..n]
-     esinf  = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
-     props  = map (uncurry (generateRAString esinf es env)) ys
-     fors   = generateWhereInfo fs
-     triggers = generateTriggersRA fors (map (\(x,y) -> (htName x,y)) ys) env
-     eps      = zip triggers props
- in generateProp eps env
+ let n        = length cs
+     ys       = zip cs [1..n]
+     esinf    = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
+ in generateProp esinf (generateWhereInfo fs) es ys env []
 
 
-generateProp :: [(String,(String,HTName))] -> Env -> String
-generateProp [] _               = ""
-generateProp ((es,ps):eps)  env = 
- let cn       = snd ps
-     oldExpM  = oldExpTypes env
-     zs       = getOldExpr oldExpM cn
-     nvar     = if null zs then "" else "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n" 
+generateProp :: [(Trigger, [String])] -> String -> Triggers -> [(HT,Int)] -> Env -> [(MethodCN,Bool)] -> String
+generateProp _ _ _ [] _ _                     = ""
+generateProp esinf fors es ((c,n):ys) env acc = 
+ let mn        = mname $ methodCN c
+     ci        = clinf $ methodCN c
+     ov        = overl $ methodCN c
+     (ra,acc') = genRA c n esinf fors es env acc
+ in ra ++ generateProp esinf fors es ys env acc'
+
+genRA :: HT -> Int -> [(Trigger, [String])] -> String -> Triggers -> Env -> [(MethodCN,Bool)] -> (String,[(MethodCN,Bool)])
+genRA c n esinf fors es env acc = 
+ let (b,acc') = checkIfRec (methodCN c) env acc
+ in if b 
+    then (generatePropRec c n esinf fors es env, acc')
+    else (generatePropNonRec env, acc')
+
+checkIfRec :: MethodCN -> Env -> [(MethodCN,Bool)] -> (Bool,[(MethodCN,Bool)])
+checkIfRec mcn env acc = (True,acc)
+
+getInvocationsInMethodBody :: MethodCN -> Env -> MethodInvocations
+getInvocationsInMethodBody mcn env = undefined
+
+generatePropNonRec :: Env -> String
+generatePropNonRec = undefined
+
+generatePropRec :: HT -> Int -> [(Trigger, [String])] -> String -> Triggers -> Env -> String
+generatePropRec c n esinf fors es env = 
+ let tr      = generateTriggerRA fors env (htName c) n
+     prop    = generateRAString esinf es env c n
+     cn      = snd prop
+     oldExpM = oldExpTypes env
+     zs      = getOldExpr oldExpM cn
+     nvar    = if null zs then "" else "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n" 
  in "FOREACH (Integer idPPD) {\n\n"
     ++ "VARIABLES {\n" ++ " Integer idAuxPPD = new Integer(0);\n " ++ nvar ++ "}\n\n"
-    ++ "EVENTS {\n" ++ es ++ "}\n\n"
-    ++ fst ps
+    ++ "EVENTS {\n" ++ tr ++ "}\n\n"
+    ++ fst prop
     ++ "}\n\n"
-    ++ generateProp eps env
 
 generateWhereInfo :: [Id] -> String
 generateWhereInfo []     = ""
 generateWhereInfo (f:fs) = f ++ "=null;" ++ generateWhereInfo fs
-
-generateTriggersRA :: String -> [(HTName,Int)] -> Env -> [String]
-generateTriggersRA fs ns env = map (uncurry (generateTriggerRA fs env)) ns
 
 generateTriggerRA :: String -> Env -> HTName -> Int -> String
 generateTriggerRA fs env cn n =
