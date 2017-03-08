@@ -504,8 +504,12 @@ genRA c n esinf fors es env acc =
 
 checkIfRec :: MethodCN -> Env -> [(MethodCN,Bool)] -> (Bool,[(MethodCN,Bool)])
 checkIfRec mcn env acc = 
- (True,acc)
---getInvocationsInMethodBody (methodCN c) env
+ let xs = [b | (mcn',b) <- acc , mcn == mcn']
+ in if null xs
+    then let minvs = getInvocationsInMethodBody mcn env
+             rec   = True
+         in (rec,(mcn,rec):acc)
+    else (head xs,acc)
 
 getInvocationsInMethodBody :: MethodCN -> Env -> MethodInvocations
 getInvocationsInMethodBody mcn env = 
