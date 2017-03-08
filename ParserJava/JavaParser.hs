@@ -227,13 +227,6 @@ getMIExp (InstanceCreation _ _ args _)         = concatMap getMIExp args
 getMIExp (QualInstanceCreation exp _ _ args _) = getMIExp exp ++ concatMap getMIExp args
 getMIExp (ArrayCreateInit _ _ (ArrayInit arr)) = concatMap getMIVarInitRec arr
 getMIExp (MethodInv minv)    = [MethodInv minv]
-{- case minv of
-      MethodCall name args                    -> undefined
-      PrimaryMethodCall exp _ (Ident id) args -> undefined
-      SuperMethodCall _ (Ident id) args       -> undefined
-      ClassMethodCall _ _ (Ident id) args     -> undefined
-      TypeMethodCall _ _ (Ident id) args      -> undefined
--}
 getMIExp (PostIncrement exp) = getMIExp exp
 getMIExp (PostDecrement exp) = getMIExp exp
 getMIExp (PreIncrement exp)  = getMIExp exp

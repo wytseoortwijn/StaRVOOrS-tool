@@ -8,6 +8,7 @@ import UpgradePPDATE
 import ErrM
 import qualified Data.Map as Map
 import Data.Maybe
+import Language.Java.Syntax hiding(VarDecl)
 
 
 translate :: UpgradePPD PPDATE -> FilePath -> IO ()
@@ -508,14 +509,35 @@ checkIfRec mcn env acc =
  in if null xs
     then let minvs = getInvocationsInMethodBody mcn env
              rec   = True
-         in (rec,(mcn,rec):acc)
+         in if null minvs 
+            then (False,(mcn,False):acc)
+            else if directRec (mname mcn) minvs
+                 then (True,(mcn,True):acc)
+                 else (rec,(mcn,rec):acc)
     else (head xs,acc)
+
+directRec :: MethodName -> [Exp] -> Bool
+directRec mn []           = False
+directRec mn (minv:minvs) = 
+ case minv of
+      MethodInv (MethodCall (Name [Ident id]) _)        -> id == mn
+      MethodInv (PrimaryMethodCall This _ (Ident id) _) -> id == mn
+      _                                                 -> directRec mn minvs
+
+{- case minv of
+      MethodCall name args                    -> undefined
+      PrimaryMethodCall exp _ (Ident id) args -> undefined
+      SuperMethodCall _ (Ident id) args       -> undefined
+      ClassMethodCall _ _ (Ident id) args     -> undefined
+      TypeMethodCall _ _ (Ident id) args      -> undefined
+-}
 
 getInvocationsInMethodBody :: MethodCN -> Env -> MethodInvocations
 getInvocationsInMethodBody mcn env = 
  let mns = methodsInFiles env    
  in getMethodInvocations mcn mns
 
+--Optimisation: If the method is not recursive, then use optimise automaton
 generatePropNonRec :: HT -> Int -> Env -> String
 generatePropNonRec c n env = undefined
 
