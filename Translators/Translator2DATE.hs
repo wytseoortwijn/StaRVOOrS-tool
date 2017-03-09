@@ -501,14 +501,29 @@ genRA c n esinf fors es env acc =
  let (b,acc') = checkIfRec (methodCN c) env acc
  in if b 
     then (generatePropRec c n esinf fors es env, acc')
-    else (generatePropNonRec c n env, acc')
+    else (generatePropNonRec c n esinf fors es env, acc')
+
+--Generates automaton to control a postcondition
+generatePropRec :: HT -> Int -> [(Trigger, [String])] -> String -> Triggers -> Env -> String
+generatePropRec c n esinf fors es env = 
+ let tr      = generateTriggerRA fors env (htName c) n ("msgPPD.id;")
+     prop    = generateRAString esinf es env c n Nothing
+     cn      = snd prop
+     oldExpM = oldExpTypes env
+     zs      = getOldExpr oldExpM cn
+     nvar    = if null zs then "" else "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n" 
+ in "FOREACH (Integer idPPD) {\n\n"
+    ++ "VARIABLES {\n" ++ " Integer idAuxPPD = new Integer(0);\n " ++ nvar ++ "}\n\n"
+    ++ "EVENTS {\n" ++ tr ++ "}\n\n"
+    ++ fst prop
+    ++ "}\n\n"
 
 checkIfRec :: MethodCN -> Env -> [(MethodCN,Bool)] -> (Bool,[(MethodCN,Bool)])
 checkIfRec mcn env acc = 
  let xs = [b | (mcn',b) <- acc , mcn == mcn']
  in if null xs
     then let minvs = getInvocationsInMethodBody mcn env
-             rec   = True
+             rec   = False
          in if null minvs 
             then (False,(mcn,False):acc)
             else if directRec (mname mcn) minvs
@@ -537,42 +552,44 @@ getInvocationsInMethodBody mcn env =
  let mns = methodsInFiles env    
  in getMethodInvocations mcn mns
 
---Optimisation: If the method is not recursive, then use optimise automaton
-generatePropNonRec :: HT -> Int -> Env -> String
-generatePropNonRec c n env = undefined
-
-generatePropRec :: HT -> Int -> [(Trigger, [String])] -> String -> Triggers -> Env -> String
-generatePropRec c n esinf fors es env = 
- let tr      = generateTriggerRA fors env (htName c) n
-     prop    = generateRAString esinf es env c n
-     cn      = snd prop
-     oldExpM = oldExpTypes env
-     zs      = getOldExpr oldExpM cn
-     nvar    = if null zs then "" else "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n" 
- in "FOREACH (Integer idPPD) {\n\n"
-    ++ "VARIABLES {\n" ++ " Integer idAuxPPD = new Integer(0);\n " ++ nvar ++ "}\n\n"
-    ++ "EVENTS {\n" ++ tr ++ "}\n\n"
-    ++ fst prop
-    ++ "}\n\n"
-
 generateWhereInfo :: [Id] -> String
 generateWhereInfo []     = ""
 generateWhereInfo (f:fs) = f ++ "=null;" ++ generateWhereInfo fs
 
-generateTriggerRA :: String -> Env -> HTName -> Int -> String
-generateTriggerRA fs env cn n =
+generateTriggerRA :: String -> Env -> HTName -> Int -> String -> String
+generateTriggerRA fs env cn n w =
  let oldExpM  = oldExpTypes env
      zs       = getOldExpr oldExpM cn
      nvar     = if null zs then "PPD" else "Old_" ++ cn
- in "rh" ++ show n ++ "(Messages" ++ nvar ++ " msgPPD) = {h"++ show n ++ ".receive(msgPPD)} where {idPPD=msgPPD.id;"
+ in "rh" ++ show n ++ "(Messages" ++ nvar  
+    ++ " msgPPD) = {h"++ show n ++ ".receive(msgPPD)} where {idPPD=" ++ w
     ++ fs ++  "}\n"
 
-generateRAString :: [(Trigger, [String])] -> Triggers -> Env -> HT -> Int -> (String,HTName)
-generateRAString esinf es env c n =
-  let ra = generateRA c n env
+generateRAString :: [(Trigger, [String])] -> Triggers -> Env -> HT -> Int -> Maybe () -> (String,HTName)
+generateRAString esinf es env c n rec =
+  let ra = if rec == Nothing then generateRA c n env else generateRAOptimised c n env
       cn = pName ra
   in ("PROPERTY " ++ cn ++ "\n{\n\n"
      ++ writeStates (pStates ra)
      ++ writeTransitions cn (pTransitions ra) [] (States [] [] [] []) [] emptyEnv
      ++ "}\n\n",cn)
+
+--Optimisation: If the method is not recursive, then use optimised automaton
+generatePropNonRec :: HT -> Int -> [(Trigger, [String])] -> String -> Triggers -> Env -> String
+generatePropNonRec c n esinf fors es env = 
+ let tr      = generateTriggerRA fors env (htName c) n ("null;")
+     prop    = generateRAString esinf es env c n (Just ())
+     cn      = snd prop
+     oldExpM = oldExpTypes env
+     zs      = getOldExpr oldExpM cn
+     nvar    = "VARIABLES {\n"
+     nvar'   = if null zs 
+               then "" 
+               else nvar ++ "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n }\n\n"
+ in "FOREACH (Integer idPPD) {\n\n"
+    ++ nvar'
+    ++ "EVENTS {\n" ++ tr ++ "}\n\n"
+    ++ fst prop
+    ++ "}\n\n"
+
 
