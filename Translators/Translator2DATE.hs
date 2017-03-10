@@ -58,7 +58,7 @@ writeGlobal ppdate env =
     then "GLOBAL {\n\n"
          ++ writeVariables vars consts acts
          ++ writeTriggers trs consts acts env
-         ++ writeProperties prop consts trs env
+         ++ writeProperties prop consts env
          ++ writeForeach fors consts env 0 (generateReplicatedAutomata consts (forsVars env) trs env)
          ++ "}\n"
     else 
@@ -66,13 +66,13 @@ writeGlobal ppdate env =
           [] -> "GLOBAL {\n\n"
                 ++ writeVariables vars consts acts
                 ++ writeTriggers trs consts acts env
-                ++ writeProperties prop consts trs env
+                ++ writeProperties prop consts env
                 ++ generateReplicatedAutomata consts [] trs env  
                 ++ "}\n" 
           _  -> "GLOBAL {\n\n"
                 ++ writeVariables vars consts acts
                 ++ writeTriggers trs consts acts env
-                ++ writeProperties prop consts trs env
+                ++ writeProperties prop consts env
                 ++ writeForeach fors consts env 1 (generateReplicatedAutomata consts [] trs env)
                 ++ "}\n" 
 
@@ -229,21 +229,21 @@ getClassInfo e env =
 -- Properties --
 ----------------
 
-writeProperties :: Property -> HTriples -> Triggers -> Env -> String
-writeProperties PNIL _ _ _         = ""
-writeProperties prop consts es env = getProperties prop consts es env
+writeProperties :: Property -> HTriples -> Env -> String
+writeProperties PNIL _ _        = ""
+writeProperties prop consts env = getProperties prop consts env
 
-getProperties :: Property -> HTriples -> Triggers -> Env -> String
+getProperties :: Property -> HTriples -> Env -> String
 getProperties = writeProperty
 
-writeProperty :: Property -> HTriples -> Triggers -> Env -> String
-writeProperty PNIL _ _ _                                   = ""
-writeProperty (Property name states trans props) cs es env =
+writeProperty :: Property -> HTriples -> Env -> String
+writeProperty PNIL _ _                                   = ""
+writeProperty (Property name states trans props) cs  env =
   "PROPERTY " ++ name ++ " \n{\n\n"
   ++ writeStates states
-  ++ writeTransitions name trans cs states es env
+  ++ writeTransitions name trans cs states env
   ++ "}\n\n"
-  ++ writeProperty props cs es env
+  ++ writeProperty props cs env
 
 writeStates :: States -> String
 writeStates (States start acc bad normal) =
@@ -273,14 +273,14 @@ getInitCode' (InitProg java) = "{" ++ init java ++ "}"
 
 --HTriples [] -> Replicated Automata
 --HTriples non-empty -> Property transitions instrumentation
-writeTransitions :: PropertyName -> Transitions -> HTriples -> States -> Triggers -> Env -> String
-writeTransitions _ ts [] _ _ env =
+writeTransitions :: PropertyName -> Transitions -> HTriples -> States -> Env -> String
+writeTransitions _ ts [] _ env =
  "TRANSITIONS \n{ \n"
  ++ concat (map (getTransition env) ts)
  ++ "}\n\n"
-writeTransitions pn ts (c:cs) states es env =
+writeTransitions pn ts (c:cs) states env =
  "TRANSITIONS \n{ \n"
-  ++ (concat (map (getTransition env) (getTransitionsGeneral (c:cs) states ts es env pn)))
+  ++ (concat (map (getTransition env) (getTransitionsGeneral (c:cs) states ts env pn)))
   ++ "}\n\n"
 
 getTransition :: Env -> Transition -> String
@@ -290,28 +290,33 @@ getTransition env (Transition q (Arrow e c act) q') =
           else e
  in q ++ " -> " ++ q' ++ " [" ++ e' ++ " \\ "  ++ c ++ " \\ " ++ (concat.lines) act ++ "]\n"
 
-getTransitionsGeneral :: HTriples -> States -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
-getTransitionsGeneral cs (States star acc bad nor) ts es env pn =
- let ts1 = generateTransitions star cs ts es env pn
-     ts2 = generateTransitions acc cs ts1 es env pn
-     ts3 = generateTransitions bad cs ts2 es env pn
-     ts4 = generateTransitions nor cs ts3 es env pn
+getTransitionsGeneral :: HTriples -> States -> Transitions -> Env -> PropertyName -> Transitions
+getTransitionsGeneral cs (States star acc bad nor) ts env pn =
+ let ts1 = generateAllTransitions star cs ts env pn
+     ts2 = generateAllTransitions acc cs ts1 env pn
+     ts3 = generateAllTransitions bad cs ts2 env pn
+     ts4 = generateAllTransitions nor cs ts3 env pn
  in ts4
 
-generateTransitions :: [State] -> HTriples -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
-generateTransitions [] _ ts _ _ _                              = ts
-generateTransitions ((State ns ic []):xs) cs ts es env pn      = generateTransitions xs cs ts es env pn
-generateTransitions ((State ns ic l@(_:_)):xs) cs ts es env pn = let ts' = accumTransitions l ns cs ts es env pn
-                                                                 in generateTransitions xs cs ts' es env pn
+generateAllTransitions :: [State] -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
+generateAllTransitions [] _ ts _ _                             = ts
+generateAllTransitions ((State ns ic []):xs) cs ts env pn      = generateAllTransitions xs cs ts env pn
+generateAllTransitions ((State ns ic l@(_:_)):xs) cs ts env pn = 
+ let ts' = accumTransitions' l ns cs ts env pn
+ in generateAllTransitions xs cs ts' env pn
 
-accumTransitions :: [HTName] -> NameState -> HTriples -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
-accumTransitions [] _ _ ts _ _ _                 = ts
-accumTransitions (cn:cns) ns consts ts es env pn =
- let ts' = generateTransition cn ns consts ts es env pn
- in accumTransitions cns ns consts ts' es env pn
+accumTransitions :: [HTName] -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
+accumTransitions [] _ _ ts _ _                = ts
+accumTransitions (cn:cns) ns consts ts env pn =
+ let nts = generateTransitions cn ns consts ts env pn
+ in accumTransitions cns ns consts nts env pn
 
-generateTransition :: HTName -> NameState -> HTriples -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
-generateTransition p ns cs ts es env pn = 
+accumTransitions' :: [HTName] -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
+accumTransitions' cns ns consts ts env pn = removeDuplicates $ concatMap (\cn -> generateTransitions cn ns consts ts env pn) cns
+
+
+generateTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
+generateTransitions p ns cs ts env pn = 
  let c             = lookForHT p cs ns
      cl            = clinf $ methodCN c
      mn            = mname $ methodCN c
@@ -458,7 +463,7 @@ writeForeach (foreach:fors) consts env n ra =
  in "FOREACH (" ++ getForeachArgs args ++ ") {\n\n"
     ++ writeVariables vars [] []
     ++ writeTriggers es consts [] env
-    ++ writeProperties prop consts es env
+    ++ writeProperties prop consts env
     ++ writeForeach fors' consts env 2 ra
     ++ if (n == 0) then ra ++ "}\n"  else ""
     ++ "}\n\n"
@@ -506,7 +511,7 @@ genRA c n esinf fors es env acc =
 --Generates automaton to control a postcondition
 generatePropRec :: HT -> Int -> [(Trigger, [String])] -> String -> Triggers -> Env -> String
 generatePropRec c n esinf fors es env = 
- let tr      = generateTriggerRA fors env (htName c) n ("msgPPD.id;")
+ let tr      = generateTriggerRA fors env (htName c) n ("idPPD = msgPPD.id;")
      prop    = generateRAString esinf es env c n Nothing
      cn      = snd prop
      oldExpM = oldExpTypes env
@@ -523,7 +528,7 @@ checkIfRec mcn env acc =
  let xs = [b | (mcn',b) <- acc , mcn == mcn']
  in if null xs
     then let minvs = getInvocationsInMethodBody mcn env
-             rec   = False
+             rec   = True
          in if null minvs 
             then (False,(mcn,False):acc)
             else if directRec (mname mcn) minvs
@@ -562,7 +567,7 @@ generateTriggerRA fs env cn n w =
      zs       = getOldExpr oldExpM cn
      nvar     = if null zs then "PPD" else "Old_" ++ cn
  in "rh" ++ show n ++ "(Messages" ++ nvar  
-    ++ " msgPPD) = {h"++ show n ++ ".receive(msgPPD)} where {idPPD=" ++ w
+    ++ " msgPPD) = {h"++ show n ++ ".receive(msgPPD)} where {" ++ w
     ++ fs ++  "}\n"
 
 generateRAString :: [(Trigger, [String])] -> Triggers -> Env -> HT -> Int -> Maybe () -> (String,HTName)
@@ -571,13 +576,13 @@ generateRAString esinf es env c n rec =
       cn = pName ra
   in ("PROPERTY " ++ cn ++ "\n{\n\n"
      ++ writeStates (pStates ra)
-     ++ writeTransitions cn (pTransitions ra) [] (States [] [] [] []) [] emptyEnv
+     ++ writeTransitions cn (pTransitions ra) [] (States [] [] [] []) emptyEnv
      ++ "}\n\n",cn)
 
 --Optimisation: If the method is not recursive, then use optimised automaton
 generatePropNonRec :: HT -> Int -> [(Trigger, [String])] -> String -> Triggers -> Env -> String
 generatePropNonRec c n esinf fors es env = 
- let tr      = generateTriggerRA fors env (htName c) n ("null;")
+ let tr      = generateTriggerRA fors env (htName c) n ("idPPD"++ show n ++ " = null;")
      prop    = generateRAString esinf es env c n (Just ())
      cn      = snd prop
      oldExpM = oldExpTypes env
@@ -586,7 +591,7 @@ generatePropNonRec c n esinf fors es env =
      nvar'   = if null zs 
                then "" 
                else nvar ++ "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n }\n\n"
- in "FOREACH (Integer idPPD) {\n\n"
+ in "FOREACH (Integer idPPD" ++ show n ++ ") {\n\n"
     ++ nvar'
     ++ "EVENTS {\n" ++ tr ++ "}\n\n"
     ++ fst prop
