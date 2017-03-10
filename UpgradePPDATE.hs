@@ -36,7 +36,7 @@ upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
                        case runStateT (genGlobal global) env' of
                             Bad s              -> fail $ s ++ duplicateHT dcs
                             Ok (global', env'') ->  
-                               let trs     = map (\(x,_,_,_,_) -> x) $ allTriggers env''
+                               let trs     = map (\(x,_,_,_,_,_) -> x) $ allTriggers env''
                                    noneTrs = [x | x <- triggersInTemps env'', not $ elem x trs] 
                                in  if (not.null.trim.concat) noneTrs
                                    then fail $ "Error: The trigger(s) [" ++ addComma noneTrs ++ "] are used in the definition of a template, but do(es) not exist(s).\n"
@@ -76,7 +76,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
  do vars' <- getVars vars
     trigs' <- getTriggers trigs scope
     env <- get
-    let prop' = getProperty prop (map (\(x,y,z,r,t) -> x) (allTriggers env)) env
+    let prop' = getProperty prop (map (\(x,_,_,_,_,_) -> x) (allTriggers env)) env
     let cns   = htsNames env
     let ies'  = getActEvents ies   
     case runWriter prop' of
@@ -174,7 +174,7 @@ getTrigger' :: Scope -> Abs.Trigger -> UpgradePPD TriggerDef
 getTrigger' scope (Abs.Trigger id binds ce wc) =
  do env  <- get
     let id'' = getIdAbs id
-    let xs   = [ x | (x,_,_,_,_) <- allTriggers env, id'' == x ]    
+    let xs   = [ x | (x,_,_,_,_,_) <- allTriggers env, id'' == x ]    
     let err  = if (not.null) xs
                then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") 
                else ""
@@ -210,12 +210,13 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                                  then getTriggerClass bind
                                                                                  else s''
                                                                      let (env',ci) = updateEntryTriggersInfo env (id'',einfo, (map bindToArgs bs),scope) bs mn bind s''
-                                                                     put env' { allTriggers = (id'',mn,ci,EVEntry,(properBind bind) ++bs) : allTriggers env }
-                                                                     return TriggerDef { tName = id''
+                                                                     let tr = TriggerDef { tName = id''
                                                                                        , args  = bs
                                                                                        , compTrigger = ce'
                                                                                        , whereClause = getWhereClause wc
                                                                                      }
+                                                                     put env' { allTriggers = (id'',mn,ci,EVEntry,(properBind bind) ++bs,Just tr) : allTriggers env }
+                                                                     return tr
                                                                 else fail (err1 ++ s'')
                                        EVExit rs -> let id  = getIdBind bind
                                                         wc' = getWhereClause wc
@@ -235,12 +236,13 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                                  then getTriggerClass bind
                                                                                  else s''
                                                                         let (env',ci) = updateExitTriggersInfo env (id'',einfo, (map bindToArgs bs),scope) bs mn bind s''
-                                                                        put env' { allTriggers = (id'',mn,ci,EVExit rs,(properBind bind) ++ bs) : allTriggers env }
-                                                                        return TriggerDef { tName = id''
+                                                                        let tr = TriggerDef { tName = id''
                                                                                           , args  = bs
                                                                                           , compTrigger = ce'
                                                                                           , whereClause = wc'
                                                                                           }
+                                                                        put env' { allTriggers = (id'',mn,ci,EVExit rs,(properBind bind) ++ bs, Just tr) : allTriggers env }
+                                                                        return tr
                                                                 else fail (err1 ++ s'')
                                        _        -> return TriggerDef { tName = id''
                                                                      , args  = bs
@@ -248,7 +250,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                      , whereClause = getWhereClause wc
                                                                      }
                           _  -> if (not.null) err1 then fail err1 else
-                                do put env { allTriggers = (id'',"","",EVNil,bs) : allTriggers env }
+                                do put env { allTriggers = (id'',"","",EVNil,bs, Nothing) : allTriggers env }
                                    return TriggerDef { tName = id''
                                                      , args  = bs
                                                      , compTrigger = ce'
@@ -1087,7 +1089,7 @@ lookForAllExitTriggerArgs env cinf mn =
                                       Just m' -> case Map.lookup mn m' of
                                                  Nothing ->  fail $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
                                                  Just _  -> fail $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
-                      Just xs -> let ys = filter (\(x,_,_,_) -> isSuffixOf "_ppdex" x) xs
+                      Just xs -> let ys = filter (\(x,_,_,_) -> isInfixOf "_ppdex" x) xs
                                  in if null ys
                                     then return $ getArgsGenMethods (head xs)
                                     else return $ getArgsGenMethods (head ys) 
@@ -1135,7 +1137,7 @@ data Env = Env
  { forsVars            :: [Id] --foreach bounded variable names 
  , entryTriggersInfo   :: Map.Map ClassInfo MapTrigger
  , exitTriggersInfo    :: Map.Map ClassInfo MapTrigger
- , allTriggers         :: [(Trigger,MethodName,ClassInfo,TriggerVariation,[Bind])]
+ , allTriggers         :: [(Trigger,MethodName,ClassInfo,TriggerVariation,[Bind],Maybe TriggerDef)]
  , htsNames            :: [HTName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
  , varsInPPD           :: Variables

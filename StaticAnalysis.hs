@@ -16,7 +16,7 @@ import OperationalizationPP
 import Instrumentation
 import PartialInfoFilesGeneration
 import Data.Functor ((<$>))
-import Data.List ((\\),isSuffixOf)
+import Data.List ((\\),isInfixOf)
 import Data.Maybe
 import System.FilePath
 import qualified Data.Map as Map
@@ -199,7 +199,7 @@ removeFromTrsCtxt ctxt@(Ctxt _ _ trs _ _) = updateCtxtTrs ctxt (removeFromTrigge
 removeFromTriggers :: Triggers -> Triggers
 removeFromTriggers []       = []
 removeFromTriggers (tr:trs) = 
- if isSuffixOf "_ppden" (tName tr) || isSuffixOf "_ppdex" (tName tr)
+ if isInfixOf "_ppden" (tName tr) || isInfixOf "_ppdex" (tName tr)
  then removeFromTriggers trs
  else tr:removeFromTriggers trs
 

@@ -51,18 +51,18 @@ checkIfParseErrors es = let (ls, rs) = partitionEithers es
                            else Right rs
 
 
-lookForExitTrigger :: [(Id,MethodName,ClassInfo,TriggerVariation,[Bind])] -> MethodName -> ClassInfo -> [Trigger]
+lookForExitTrigger :: [(Id,MethodName,ClassInfo,TriggerVariation,[Bind],Maybe TriggerDef)] -> MethodName -> ClassInfo -> [Trigger]
 lookForExitTrigger [] _ _                      = []
-lookForExitTrigger ((tr,mn',ci',e,_):es) mn ci = 
+lookForExitTrigger ((tr,mn',ci',e,_,_):es) mn ci = 
     case e of
         EVExit _ -> if (mn == mn' && ci == ci')
                     then tr:lookForExitTrigger es mn ci
                     else lookForExitTrigger es mn ci
         _        -> lookForExitTrigger es mn ci
 
-lookForEntryTrigger :: [(Id,MethodName,ClassInfo,TriggerVariation,[Bind])] -> MethodName -> ClassInfo -> [Trigger]
+lookForEntryTrigger :: [(Id,MethodName,ClassInfo,TriggerVariation,[Bind],Maybe TriggerDef)] -> MethodName -> ClassInfo -> [Trigger]
 lookForEntryTrigger [] _ _                       = []
-lookForEntryTrigger ((tr,mn',ci',e,_):es) mn ci  = 
+lookForEntryTrigger ((tr,mn',ci',e,_,_):es) mn ci  = 
     case e of
         EVEntry -> if (mn == mn' && ci == ci')
                    then tr:lookForEntryTrigger es mn ci
@@ -161,8 +161,8 @@ getBindArgs' [BindType t id]        = t ++ " " ++ id
 getBindArgs' ((BindType t id):y:ys) = t ++ " " ++ id ++ "," ++ getBindArgs' (y:ys)
 getBindArgs' _                      = ""
 
-getInfoTrigger :: (Id,MethodName,ClassInfo,TriggerVariation,[Bind]) -> Maybe (Trigger, [String])
-getInfoTrigger (tr,mn',ci,e,bs) = 
+getInfoTrigger :: (Id,MethodName,ClassInfo,TriggerVariation,[Bind],Maybe TriggerDef) -> Maybe (Trigger, [String])
+getInfoTrigger (tr,mn',ci,e,bs,_) = 
  case e of
      EVExit _ -> Just (tr,splitOnIdentifier "," $ getBindArgs' bs)
      EVEntry  -> Just (tr,splitOnIdentifier "," $ getBindArgs' bs)

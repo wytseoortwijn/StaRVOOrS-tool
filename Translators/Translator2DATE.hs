@@ -8,6 +8,7 @@ import UpgradePPDATE
 import ErrM
 import qualified Data.Map as Map
 import Data.Maybe
+import Data.List
 import Language.Java.Syntax hiding(VarDecl)
 
 
@@ -54,31 +55,13 @@ writeGlobal ppdate env =
      trs    = triggers global
      prop   = property global
      fors   = foreaches global                      
- in if checkGlobalForeach vars acts trs prop fors
-    then "GLOBAL {\n\n"
-         ++ writeVariables vars consts acts
-         ++ writeTriggers trs consts acts env
-         ++ writeProperties prop consts env
-         ++ writeForeach fors consts env 0 (generateReplicatedAutomata consts (forsVars env) trs env)
-         ++ "}\n"
-    else 
-       case fors of
-          [] -> "GLOBAL {\n\n"
-                ++ writeVariables vars consts acts
-                ++ writeTriggers trs consts acts env
-                ++ writeProperties prop consts env
-                ++ generateReplicatedAutomata consts [] trs env  
-                ++ "}\n" 
-          _  -> "GLOBAL {\n\n"
-                ++ writeVariables vars consts acts
-                ++ writeTriggers trs consts acts env
-                ++ writeProperties prop consts env
-                ++ writeForeach fors consts env 1 (generateReplicatedAutomata consts [] trs env)
-                ++ "}\n" 
-
-checkGlobalForeach :: Variables -> ActEvents -> Triggers -> Property -> Foreaches -> Bool
-checkGlobalForeach [] [] [] PNIL [x] = True
-checkGlobalForeach _ _ _ _ _         = False
+ in "GLOBAL {\n\n"
+    ++ writeVariables vars consts acts
+    ++ writeTriggers trs consts acts env
+    ++ writeProperties prop consts env
+    ++ writeForeach fors consts env
+    ++ generateReplicatedAutomata consts trs env  
+    ++ "}\n" 
 
 ---------------
 -- Variables --
@@ -201,7 +184,7 @@ auxGetTriggerVariation' [BindId ret] = ret
 
 
 
--- Checks if the trigger to control has to be the auxiliary one (in case of optimization by key)
+-- Checks if the trigger to control has to be the auxiliary one (in case of optimisation by key)
 instrumentTriggers :: Triggers -> HTriples -> Env -> Triggers
 instrumentTriggers [] cs _       = []
 instrumentTriggers (e:es) cs env = 
@@ -222,8 +205,8 @@ lookupHTForTrigger e ci (c:cs) = case compTrigger e of
 
 getClassInfo :: TriggerDef -> Env -> ClassInfo
 getClassInfo e env = 
- let trs = [tr | tr <- allTriggers env, ((\(x,_,_,_,_) -> x) tr) == tName e]
- in head $ map (\(_,_,x,_,_) -> x) trs
+ let trs = [tr | tr <- allTriggers env, ((\(x,_,_,_,_,_) -> x) tr) == tName e]
+ in head $ map (\(_,_,x,_,_,_) -> x) trs
 
 ----------------
 -- Properties --
@@ -321,7 +304,7 @@ generateTransitions p ns cs ts env pn =
      cl            = clinf $ methodCN c
      mn            = mname $ methodCN c
      entrs         = lookForEntryTrigger (allTriggers env) mn cl
-     entrs'        = [tr | tr <- entrs, tr /= (mn++"_ppden")]
+     entrs'        = [tr | tr <- entrs, isInfixOf (mn++"_ppden") tr]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
  in if null entrs
     then error $ "Translation: Missing entry trigger for method " ++ mn ++ ".\n"
@@ -341,7 +324,7 @@ avoidTriviallyFalseCond = filter (check.trim.cond.arrow)
 
 makeTransitionAlg1 :: NameState -> HT -> Env -> PropertyName -> MethodName -> [Trigger] -> Transitions
 makeTransitionAlg1 ns c env pn mn entrs = 
- let entrs' = [tr | tr <- entrs, tr /= (mn++"_ppden")]
+ let entrs' = [tr | tr <- entrs, isInfixOf (mn++"_ppden") tr]
  in if null entrs'
     then map (\e -> makeTransitionAlg1Cond ns e c env pn) entrs
     else map (\e -> makeTransitionAlg1Cond ns e c env pn) entrs'
@@ -450,9 +433,9 @@ lookForLeavingTransitions e ns (t@(Transition q (Arrow e' c act) q'):ts) =
 -- Foreach --
 -------------
 
-writeForeach :: Foreaches -> HTriples -> Env -> Integer -> String -> String
-writeForeach [] _ _ _ _                     = ""
-writeForeach (foreach:fors) consts env n ra =
+writeForeach :: Foreaches -> HTriples -> Env -> String
+writeForeach [] _ _                    = ""
+writeForeach (foreach:fors) consts env =
  let ctxt   = getCtxtForeach foreach
      args   = getArgsForeach foreach 
      vars   = variables ctxt
@@ -464,11 +447,9 @@ writeForeach (foreach:fors) consts env n ra =
     ++ writeVariables vars [] []
     ++ writeTriggers es consts [] env
     ++ writeProperties prop consts env
-    ++ writeForeach fors' consts env 2 ra
-    ++ if (n == 0) then ra ++ "}\n"  else ""
+    ++ writeForeach fors' consts env
     ++ "}\n\n"
-    ++ writeForeach fors consts env 2 ra
-    ++ if (n == 1) then ra else ""
+    ++ writeForeach fors consts env
 
 getForeachArgs :: [Args] -> String
 getForeachArgs []               = ""
@@ -487,31 +468,31 @@ writeMethods methods = "\n" ++  methods
 -- Replicated Automata --
 -------------------------
 
-generateReplicatedAutomata :: HTriples -> [Id] -> Triggers -> Env -> String
-generateReplicatedAutomata cs fs es env = 
+generateReplicatedAutomata :: HTriples -> Triggers -> Env -> String
+generateReplicatedAutomata cs es env = 
  let n        = length cs
      ys       = zip cs [1..n]
      esinf    = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
- in generateProp esinf (generateWhereInfo fs) es ys env []
+ in generateProp esinf es ys env []
 
 
-generateProp :: [(Trigger, [String])] -> String -> Triggers -> [(HT,Int)] -> Env -> [(MethodCN,Bool)] -> String
-generateProp _ _ _ [] _ _                     = ""
-generateProp esinf fors es ((c,n):ys) env acc = 
- let (ra,acc') = genRA c n esinf fors es env acc
- in ra ++ generateProp esinf fors es ys env acc'
+generateProp :: [(Trigger, [String])] -> Triggers -> [(HT,Int)] -> Env -> [(MethodCN,Bool)] -> String
+generateProp _ _ [] _ _                  = ""
+generateProp esinf es ((c,n):ys) env acc = 
+ let (ra,acc') = genRA c n esinf es env acc
+ in ra ++ generateProp esinf es ys env acc'
 
-genRA :: HT -> Int -> [(Trigger, [String])] -> String -> Triggers -> Env -> [(MethodCN,Bool)] -> (String,[(MethodCN,Bool)])
-genRA c n esinf fors es env acc = 
+genRA :: HT -> Int -> [(Trigger, [String])] -> Triggers -> Env -> [(MethodCN,Bool)] -> (String,[(MethodCN,Bool)])
+genRA c n esinf es env acc = 
  let (b,acc') = checkIfRec (methodCN c) env acc
  in if b 
-    then (generatePropRec c n esinf fors es env, acc')
-    else (generatePropNonRec c n esinf fors es env, acc')
+    then (generatePropRec c n esinf es env, acc')
+    else (generatePropNonRec c n esinf es env, acc')
 
 --Generates automaton to control a postcondition
-generatePropRec :: HT -> Int -> [(Trigger, [String])] -> String -> Triggers -> Env -> String
-generatePropRec c n esinf fors es env = 
- let tr      = generateTriggerRA fors env (htName c) n ("idPPD = msgPPD.id;")
+generatePropRec :: HT -> Int -> [(Trigger, [String])] -> Triggers -> Env -> String
+generatePropRec c n esinf es env = 
+ let tr      = generateTriggerRA env c n ("idPPD = msgPPD.id;")
      prop    = generateRAString esinf es env c n Nothing
      cn      = snd prop
      oldExpM = oldExpTypes env
@@ -554,21 +535,36 @@ directRec mn (minv:minvs) =
 
 getInvocationsInMethodBody :: MethodCN -> Env -> MethodInvocations
 getInvocationsInMethodBody mcn env = 
- let mns = methodsInFiles env    
+ let mns = methodsInFiles env
  in getMethodInvocations mcn mns
 
-generateWhereInfo :: [Id] -> String
-generateWhereInfo []     = ""
-generateWhereInfo (f:fs) = f ++ "=null;" ++ generateWhereInfo fs
 
-generateTriggerRA :: String -> Env -> HTName -> Int -> String -> String
-generateTriggerRA fs env cn n w =
- let oldExpM  = oldExpTypes env
+generateTriggerRA :: Env -> HT -> Int -> String -> String
+generateTriggerRA env c n w =
+ let cn       = htName c
+     mnc      = methodCN c
+     mn       = mname mnc
+     ci       = clinf mnc
+     ov       = overl mnc
+     oldExpM  = oldExpTypes env
      zs       = getOldExpr oldExpM cn
-     nvar     = if null zs then "PPD" else "Old_" ++ cn
+     nvar     = if null zs then "PPD" else "Old_" ++ cn     
  in "rh" ++ show n ++ "(Messages" ++ nvar  
-    ++ " msgPPD) = {h"++ show n ++ ".receive(msgPPD)} where {" ++ w
-    ++ fs ++  "}\n"
+    ++ " msgPPD) = {h"++ show n ++ ".receive(msgPPD)} where {" ++ w ++  "}\n"
+    ++ getTrigger (generateExitTrigger ov c env)
+
+
+generateExitTrigger :: Overloading -> HT -> Env -> TriggerDef
+generateExitTrigger OverNil c env = 
+ let mnc = methodCN c
+     cl  = clinf mnc
+     tr  = mn ++ "_ppdex"
+     mn  = mname mnc
+ in case head [ tdef | (tr',_,cl',_,_,tdef) <- allTriggers env, isInfixOf tr tr',cl == cl'] of
+         Nothing   -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ "\n."
+         Just tdef -> tdef
+generateExitTrigger (Over ts) c env = undefined
+
 
 generateRAString :: [(Trigger, [String])] -> Triggers -> Env -> HT -> Int -> Maybe () -> (String,HTName)
 generateRAString esinf es env c n rec =
@@ -580,9 +576,9 @@ generateRAString esinf es env c n rec =
      ++ "}\n\n",cn)
 
 --Optimisation: If the method is not recursive, then use optimised automaton
-generatePropNonRec :: HT -> Int -> [(Trigger, [String])] -> String -> Triggers -> Env -> String
-generatePropNonRec c n esinf fors es env = 
- let tr      = generateTriggerRA fors env (htName c) n ("idPPD"++ show n ++ " = null;")
+generatePropNonRec :: HT -> Int -> [(Trigger, [String])] -> Triggers -> Env -> String
+generatePropNonRec c n esinf es env = 
+ let tr      = generateTriggerRA env c n ("idPPD"++ show n ++ " = null;")
      prop    = generateRAString esinf es env c n (Just ())
      cn      = snd prop
      oldExpM = oldExpTypes env

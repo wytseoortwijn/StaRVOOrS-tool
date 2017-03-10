@@ -143,7 +143,7 @@ getGeneratedExTr []       = []
 getGeneratedExTr (tr:trs) = 
   case (compTrigger tr) of
       NormalEvent (BindingVar b) id _ ev' -> 
-                  if (isSuffixOf "_ppdex" (tName tr))
+                  if (isInfixOf "_ppdex" (tName tr))
                   then case b of
                             BindStar      -> []
                             BindType _ id -> [id]
@@ -245,17 +245,17 @@ addNewTriggerEntry env ppdate n (x:xs) scope =
       Nothing -> let mapeinfo' =  Map.insert mn [v] Map.empty
                      ppdate'   = addTrigger2ppDATE tr ppdate 
                  in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
-                                            , allTriggers = (tName tr,mn,cn,EVEntry,cl:args tr):allTriggers env}) ppdate' (n+1) xs scope
+                                            , allTriggers = (tName tr,mn,cn,EVEntry,cl:args tr,Just tr):allTriggers env}) ppdate' (n+1) xs scope
       Just mapeinfo -> 
            let mapeinfo' = updateInfo mapeinfo mn v 
                ppdate'   = addTrigger2ppDATE tr ppdate 
            in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
-                                      , allTriggers = (tName tr,mn,cn,EVEntry, cl:args tr):allTriggers env}) ppdate' (n+1) xs scope
+                                      , allTriggers = (tName tr,mn,cn,EVEntry, cl:args tr, Just tr):allTriggers env}) ppdate' (n+1) xs scope
 
 --Creates the info to be added in the environment and the ppDATE associated to the new exit trigger
 createTriggerExit:: (ClassInfo,MethodName,(String,MethodName,[String],MethodInvocations)) -> Int -> Scope -> ((ClassInfo,MethodName,(Id, String, [Args],Scope)), TriggerDef)
 createTriggerExit (cn,mn,(rt,mn',xs',_)) n scope = 
- let trnm = mn ++ "_ppdex" 
+ let trnm = mn ++ "_ppdex" ++ show n
      nvar = "cv" ++ "_" ++ (show n)
      cn'  = cn ++ " " ++ nvar
      ret  = "ret_ppd" ++ (show n)
@@ -279,15 +279,13 @@ addNewTriggerExit env ppdate n (x:xs) scope =
      v      = (\(x,y,z) -> z) p 
      cl     = makeBind $ (\(_,y,_,_) -> y) v
  in case Map.lookup cn (exitTriggersInfo env) of
-      Nothing -> let mapeinfo' = Map.insert mn [v] Map.empty
-                     ppdate'   = addTrigger2ppDATE tr ppdate 
+      Nothing -> let mapeinfo' = Map.insert mn [v] Map.empty                     
                  in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
-                                           , allTriggers = (tName tr,mn, cn,getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs scope
+                                           , allTriggers = (tName tr,mn, cn,getCTVariation (compTrigger tr),cl:args tr,Just tr):allTriggers env }) ppdate (n+1) xs scope
       Just mapeinfo -> 
-           let mapeinfo' = updateInfo mapeinfo mn v 
-               ppdate'   = addTrigger2ppDATE tr ppdate 
+           let mapeinfo' = updateInfo mapeinfo mn v       
            in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
-                                     , allTriggers = (tName tr,mn, cn,getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs scope
+                                     , allTriggers = (tName tr,mn, cn,getCTVariation (compTrigger tr),cl:args tr,Just tr):allTriggers env }) ppdate (n+1) xs scope
 
 
 addTrigger2ppDATE :: TriggerDef -> PPDATE -> PPDATE
