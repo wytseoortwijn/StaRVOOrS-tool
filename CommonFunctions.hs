@@ -265,10 +265,6 @@ introduceOr :: [String] -> String
 introduceOr [x]    = x
 introduceOr (x:xs) = x ++ " || " ++ introduceOr xs
 
-introduceAnd :: [String] -> String
-introduceAnd [x]    = x
-introduceAnd (x:xs) = x ++ " && " ++ introduceAnd xs
-
 getAllTriggers :: Global -> Triggers
 getAllTriggers (Global (Ctxt vars ies trigs prop fors)) = trigs ++ getTriggersFors fors
 
