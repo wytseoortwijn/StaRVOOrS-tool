@@ -492,14 +492,14 @@ genRA c n esinf es env acc =
 --Generates automaton to control a postcondition
 generatePropRec :: HT -> Int -> [(Trigger, [String])] -> Triggers -> Env -> String
 generatePropRec c n esinf es env = 
- let tr      = generateTriggerRA env c n ("idPPD = msgPPD.id;")
+ let tr      = generateTriggerRA env c n ("idPPD = msgPPD.id;","idPPD = id;")
      prop    = generateRAString esinf es env c n Nothing
      cn      = snd prop
      oldExpM = oldExpTypes env
      zs      = getOldExpr oldExpM cn
      nvar    = if null zs then "" else "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n" 
  in "FOREACH (Integer idPPD) {\n\n"
-    ++ "VARIABLES {\n" ++ " Integer idAuxPPD = new Integer(0);\n " ++ nvar ++ "}\n\n"
+    ++ "VARIABLES {\n" ++ " Integer idAuxPPD = new Integer(0);\n" ++ nvar ++ "}\n\n"
     ++ "EVENTS {\n" ++ tr ++ "}\n\n"
     ++ fst prop
     ++ "}\n\n"
@@ -538,8 +538,7 @@ getInvocationsInMethodBody mcn env =
  let mns = methodsInFiles env
  in getMethodInvocations mcn mns
 
-
-generateTriggerRA :: Env -> HT -> Int -> String -> String
+generateTriggerRA :: Env -> HT -> Int -> (String,String) -> String
 generateTriggerRA env c n w =
  let cn       = htName c
      mnc      = methodCN c
@@ -549,21 +548,11 @@ generateTriggerRA env c n w =
      oldExpM  = oldExpTypes env
      zs       = getOldExpr oldExpM cn
      nvar     = if null zs then "PPD" else "Old_" ++ cn     
+     wtr      = if null (snd w) then "" else " where { " ++ snd w ++ "}\n"
+     ntr      = getTriggerDef ov c (allTriggers env)
  in "rh" ++ show n ++ "(Messages" ++ nvar  
-    ++ " msgPPD) = {h"++ show n ++ ".receive(msgPPD)} where {" ++ w ++  "}\n"
-    ++ getTrigger (generateExitTrigger ov c env)
-
-
-generateExitTrigger :: Overloading -> HT -> Env -> TriggerDef
-generateExitTrigger OverNil c env = 
- let mnc = methodCN c
-     cl  = clinf mnc
-     tr  = mn ++ "_ppdex"
-     mn  = mname mnc
- in case head [ tdef | (tr',_,cl',_,_,tdef) <- allTriggers env, isInfixOf tr tr',cl == cl'] of
-         Nothing   -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ "\n."
-         Just tdef -> tdef
-generateExitTrigger (Over ts) c env = undefined
+    ++ " msgPPD) = {h"++ show n ++ ".receive(msgPPD)} where {" ++ fst w ++  "}\n"
+    ++ init (concatMap getTrigger (instrumentTriggers [ntr] [c] env)) ++ wtr
 
 
 generateRAString :: [(Trigger, [String])] -> Triggers -> Env -> HT -> Int -> Maybe () -> (String,HTName)
@@ -578,7 +567,7 @@ generateRAString esinf es env c n rec =
 --Optimisation: If the method is not recursive, then use optimised automaton
 generatePropNonRec :: HT -> Int -> [(Trigger, [String])] -> Triggers -> Env -> String
 generatePropNonRec c n esinf es env = 
- let tr      = generateTriggerRA env c n ("idPPD"++ show n ++ " = null;")
+ let tr      = generateTriggerRA env c n ("idPPD"++ show n ++ " = null;","idPPD"++ show n ++ " = null;")
      prop    = generateRAString esinf es env c n (Just ())
      cn      = snd prop
      oldExpM = oldExpTypes env
@@ -586,7 +575,7 @@ generatePropNonRec c n esinf es env =
      nvar    = "VARIABLES {\n"
      nvar'   = if null zs 
                then "" 
-               else nvar ++ "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n }\n\n"
+               else nvar ++ "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n}\n\n"
  in "FOREACH (Integer idPPD" ++ show n ++ ") {\n\n"
     ++ nvar'
     ++ "EVENTS {\n" ++ tr ++ "}\n\n"

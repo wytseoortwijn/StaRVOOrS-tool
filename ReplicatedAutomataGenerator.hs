@@ -25,8 +25,7 @@ makeTransitions :: HT -> Int -> Env -> Transitions
 makeTransitions c n env =
    let mn      = mname $ methodCN c
        cl      = clinf $ methodCN c
-       trigs   = lookForExitTrigger (allTriggers env) mn cl
-       trig    = getGenTrEx trigs mn
+       trig    = tName $ getTriggerDef (overl $ methodCN c) c (allTriggers env) 
        esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
        cn      = htName c
        oldExpM = oldExpTypes env
@@ -46,11 +45,6 @@ makeTransitions c n env =
       ]
 
 
-getGenTrEx :: [Trigger] -> MethodName -> Trigger
-getGenTrEx trs mn = if elem (mn++"_ppdex") trs
-                    then mn++"_ppdex"
-                    else head trs
-
 generateRAOptimised :: HT -> Int -> Env -> Property
 generateRAOptimised c n env = 
   Property (htName c)
@@ -65,8 +59,7 @@ makeTransitions' :: HT -> Int -> Env -> Transitions
 makeTransitions' c n env =
    let mn      = mname $ methodCN c
        cl      = clinf $ methodCN c
-       trigs   = lookForExitTrigger (allTriggers env) mn cl
-       trig    = getGenTrEx trigs mn
+       trig    = tName $ getTriggerDef (overl $ methodCN c) c (allTriggers env) 
        esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
        cn      = htName c
        oldExpM = oldExpTypes env

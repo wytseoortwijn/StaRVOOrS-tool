@@ -181,7 +181,7 @@ generateNewTriggers ppd consts =
      let mfiles  = methodsInFiles env
      let mns     = removeDuplicates [(clinf mn,mname mn) | mn <- map methodCN consts]
      let entry   = filterDefinedTriggers (entryTriggersInfo env) mns 
-     let exit    = filterDefinedTriggers (exitTriggersInfo env) mns 
+     let exit    = mns 
      let entry'  = [(x,y,head $ filter (\(a,b,c,_) -> y == b) z) | (x,y) <- entry, (_,d,z) <- mfiles,d==x]
      let exit'   = [(x,y,head $ filter (\(a,b,c,_) -> y == b) z) | (x,y) <- exit, (_,d,z) <- mfiles,d==x]
      let scope   = properScope ppdate
@@ -255,7 +255,7 @@ addNewTriggerEntry env ppdate n (x:xs) scope =
 --Creates the info to be added in the environment and the ppDATE associated to the new exit trigger
 createTriggerExit:: (ClassInfo,MethodName,(String,MethodName,[String],MethodInvocations)) -> Int -> Scope -> ((ClassInfo,MethodName,(Id, String, [Args],Scope)), TriggerDef)
 createTriggerExit (cn,mn,(rt,mn',xs',_)) n scope = 
- let trnm = mn ++ "_ppdex" ++ show n
+ let trnm = mn ++ "_ppdex"
      nvar = "cv" ++ "_" ++ (show n)
      cn'  = cn ++ " " ++ nvar
      ret  = "ret_ppd" ++ (show n)

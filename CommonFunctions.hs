@@ -7,6 +7,7 @@ import Data.Either
 import Types
 import ErrM
 import qualified Data.Map as Map
+import Data.Maybe (fromJust)
 
 readIdentifier :: String -> Err (String, String)
 readIdentifier text 
@@ -161,12 +162,39 @@ getBindArgs' [BindType t id]        = t ++ " " ++ id
 getBindArgs' ((BindType t id):y:ys) = t ++ " " ++ id ++ "," ++ getBindArgs' (y:ys)
 getBindArgs' _                      = ""
 
-getInfoTrigger :: (Id,MethodName,ClassInfo,TriggerVariation,[Bind],Maybe TriggerDef) -> Maybe (Trigger, [String])
+getInfoTrigger :: (Trigger,MethodName,ClassInfo,TriggerVariation,[Bind],Maybe TriggerDef) -> Maybe (Trigger, [String])
 getInfoTrigger (tr,mn',ci,e,bs,_) = 
  case e of
      EVExit _ -> Just (tr,splitOnIdentifier "," $ getBindArgs' bs)
      EVEntry  -> Just (tr,splitOnIdentifier "," $ getBindArgs' bs)
      _        -> Nothing
+
+getTriggerDef :: Overloading -> HT -> [(Trigger,MethodName,ClassInfo,TriggerVariation,[Bind],Maybe TriggerDef)] -> TriggerDef 
+getTriggerDef OverNil c xs = 
+ let mnc = methodCN c
+     cl  = clinf mnc
+     tr  = mn ++ "_ppdex"
+     mn  = mname mnc
+     xs'  = [ tdef | (tr',_,cl',_,_,tdef) <- xs, isInfixOf tr tr',cl == cl']
+     xs'' = filter (\ c -> c /= Nothing) xs'
+ in case xs'' of
+         []     -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
+         tdef:_ -> fromJust tdef
+getTriggerDef (Over ts) c xs = 
+ let mnc  = methodCN c
+     cl   = clinf mnc
+     tr   = mn ++ "_ppdex"
+     mn   = mname mnc
+     xs'  = [ tdef | (tr',_,cl',_,_,tdef) <- xs, isInfixOf tr tr',cl == cl']
+     xs'' = filter (\ c -> c /= Nothing) xs'
+ in if length xs'' == 1
+    then case head xs' of
+         Nothing   -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
+         Just tdef -> tdef
+    else let xs''' = map fromJust xs''
+         in case [ x | (ts',x) <- zip (map (map getBindTypeType.getCTArgs.compTrigger) xs''') xs''', ts == ts'] of
+                 []  -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
+                 [x] -> x
 
 lookfor :: [(Trigger, [String])] -> Trigger -> [String]
 lookfor [] _     = []

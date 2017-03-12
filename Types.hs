@@ -390,6 +390,9 @@ instance Show CompoundTrigger where
 getCTVariation :: CompoundTrigger -> TriggerVariation
 getCTVariation (NormalEvent _ _ _ tv) = tv
 
+getCTArgs :: CompoundTrigger -> [Bind]
+getCTArgs (NormalEvent _ _ bs _) = bs
+
 data TriggerVariation =
    EVEntry
  | EVExit [Bind]
