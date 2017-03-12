@@ -290,35 +290,47 @@ generateAllTransitions ((State ns ic l@(_:_)):xs) cs ts env pn =
 
 accumTransitions :: [HTName] -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
 accumTransitions [] _ _ ts _ _                = ts
-accumTransitions (cn:cns) ns consts ts env pn =
- let nts = generateTransitions cn ns consts ts env pn
- in accumTransitions cns ns consts nts env pn
+accumTransitions (cn:cns) ns consts ts env pn = undefined
+ --let nts = generateTransitions cn ns consts ts env pn
+ --in accumTransitions cns ns consts nts env pn
 
 accumTransitions' :: [HTName] -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
-accumTransitions' cns ns consts ts env pn = removeDuplicates $ concatMap (\cn -> generateTransitions cn ns consts ts env pn) cns
+accumTransitions' [] _ _ ts _ _                = ts
+accumTransitions' (cn:cns) ns consts ts env pn =
+ let (nonlts,gentrans,lts) = generateTransitions cn ns consts ts env pn
+     instrans = instrumentTransitions cn ns consts lts env pn
+ in accumTransitions' cns ns consts (nonlts++instrans) env pn ++ gentrans
 
-
-generateTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
+generateTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> (Transitions,Transitions,Transitions)
 generateTransitions p ns cs ts env pn = 
  let c             = lookForHT p cs ns
      cl            = clinf $ methodCN c
      mn            = mname $ methodCN c
      entrs         = lookForEntryTrigger (allTriggers env) mn cl
-     entrs'        = [tr | tr <- entrs, isInfixOf (mn++"_ppden") tr]
+     entrs'        = [tr | tr <- entrs, not(isInfixOf (mn++"_ppden") tr)]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
  in if null entrs
     then error $ "Translation: Missing entry trigger for method " ++ mn ++ ".\n"
     else if (null lts)
-         then ts ++ makeTransitionAlg1 ns c env pn mn entrs
-         else let lts' = avoidTriviallyFalseCond lts
-                  ext  = map (\e -> makeExtraTransitionAlg2 lts' c e ns env pn) entrs'
-                  xs   = concat [map (\x -> instrumentTransitionAlg2 c x tr env pn) lts | tr <- entrs']
-              in nonlts ++ xs ++ ext
+         then (ts,makeTransitionAlg1 ns c env pn mn entrs,[])
+         else let ext  = map (\e -> makeExtraTransitionAlg2 lts c e ns env pn) entrs'
+                  ext' = map fromJust $ filter (\c -> c /= Nothing) ext
+              in (nonlts,ext',lts)
 
---Method used to avoid generating transitions with conditions trivially false
-avoidTriviallyFalseCond :: Transitions -> Transitions
-avoidTriviallyFalseCond = filter (check.trim.cond.arrow)
-                                    where check = \ t -> t /= "true" && (not.null) t
+instrumentTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
+instrumentTransitions p ns cs ts env pn = 
+ let c             = lookForHT p cs ns
+     cl            = clinf $ methodCN c
+     mn            = mname $ methodCN c
+     entrs         = lookForEntryTrigger (allTriggers env) mn cl
+     entrs'        = [tr | tr <- entrs, not(isInfixOf (mn++"_ppden") tr)]
+     (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
+ in if null entrs
+    then error $ "Translation: Missing entry trigger for method " ++ mn ++ ".\n"
+    else if (null lts)
+         then []
+         else concat [map (\x -> instrumentTransitionAlg2 c x tr env pn) lts | tr <- entrs']
+              
 
 -- Implementation of Algorithm 1 --
 
@@ -364,7 +376,8 @@ initOldExpr oel cn =
 
 -- Implementation of Algorithm 2 --
 
-makeExtraTransitionAlg2 :: Transitions -> HT -> Trigger -> NameState -> Env -> PropertyName -> Transition
+makeExtraTransitionAlg2 :: Transitions -> HT -> Trigger -> NameState -> Env -> PropertyName -> Maybe Transition
+makeExtraTransitionAlg2 [] _ _ _ _ _     = Nothing
 makeExtraTransitionAlg2 ts c e ns env pn = 
  let esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
      oldExpM = oldExpTypes env
@@ -381,17 +394,28 @@ makeExtraTransitionAlg2 ts c e ns env pn =
      ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
      msg     = "new Messages" ++ type_ ++ ident' ++ old ++ ")"
      act     = " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
-     c'      = makeExtraTransitionAlg2Cond ts pn ++ pre'
- in Transition ns (Arrow e c' act) ns
+     c'      = makeExtraTransitionAlg2Cond ts 
+ in case c' of
+         Nothing  -> Nothing 
+         Just c'' -> Just $ Transition ns (Arrow e (c''++ pre') act) ns
 
-makeExtraTransitionAlg2Cond :: Transitions -> PropertyName -> String
-makeExtraTransitionAlg2Cond [] _      = ""
-makeExtraTransitionAlg2Cond (t:ts) pn =
+makeExtraTransitionAlg2Cond :: Transitions -> Maybe String
+makeExtraTransitionAlg2Cond ts = 
+ case avoidTriviallyFalseCond ts of 
+      [] -> Nothing 
+      xs -> Just $ getConditionsInTransitions xs
+
+getConditionsInTransitions :: Transitions -> String
+getConditionsInTransitions []     = ""
+getConditionsInTransitions (t:ts) =
  let cond'  = cond $ arrow t
      cond'' = if (null $ clean cond') then "true" else cond'
- in
- "!("++ cond'' ++ ") && " ++ makeExtraTransitionAlg2Cond ts pn
+ in "!("++ cond'' ++ ") && " ++ getConditionsInTransitions ts
 
+--Method used to avoid generating transitions with conditions trivially false
+avoidTriviallyFalseCond :: Transitions -> Transitions
+avoidTriviallyFalseCond = filter (check.trim.cond.arrow)
+                                    where check = \ t -> t /= "true" && (not.null.trim) t
 
 instrumentTransitionAlg2 :: HT -> Transition -> Trigger -> Env -> PropertyName -> Transition
 instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env pn =
@@ -408,7 +432,7 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env pn =
      ident   = lookforClVar pn (propInForeach env)
      ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
      msg     = "new Messages" ++ type_ ++ ident' ++ old ++ ")"
-     act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "}"
+     act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "} ;"
  in Transition q (Arrow e' c' (act ++ act')) q'
 
 

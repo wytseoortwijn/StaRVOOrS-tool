@@ -53,7 +53,7 @@ checkIfParseErrors es = let (ls, rs) = partitionEithers es
 
 
 lookForExitTrigger :: [(Id,MethodName,ClassInfo,TriggerVariation,[Bind],Maybe TriggerDef)] -> MethodName -> ClassInfo -> [Trigger]
-lookForExitTrigger [] _ _                      = []
+lookForExitTrigger [] _ _                        = []
 lookForExitTrigger ((tr,mn',ci',e,_,_):es) mn ci = 
     case e of
         EVExit _ -> if (mn == mn' && ci == ci')
@@ -62,7 +62,7 @@ lookForExitTrigger ((tr,mn',ci',e,_,_):es) mn ci =
         _        -> lookForExitTrigger es mn ci
 
 lookForEntryTrigger :: [(Id,MethodName,ClassInfo,TriggerVariation,[Bind],Maybe TriggerDef)] -> MethodName -> ClassInfo -> [Trigger]
-lookForEntryTrigger [] _ _                       = []
+lookForEntryTrigger [] _ _                         = []
 lookForEntryTrigger ((tr,mn',ci',e,_,_):es) mn ci  = 
     case e of
         EVEntry -> if (mn == mn' && ci == ci')
@@ -265,6 +265,9 @@ introduceOr :: [String] -> String
 introduceOr [x]    = x
 introduceOr (x:xs) = x ++ " || " ++ introduceOr xs
 
+introduceAnd :: [String] -> String
+introduceAnd [x]    = x
+introduceAnd (x:xs) = x ++ " && " ++ introduceAnd xs
 
 getAllTriggers :: Global -> Triggers
 getAllTriggers (Global (Ctxt vars ies trigs prop fors)) = trigs ++ getTriggersFors fors
