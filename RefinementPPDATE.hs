@@ -241,7 +241,8 @@ addNewTriggerEntry env ppdate n (x:xs) scope =
      mn     = (\(x,y,z) -> y) p 
      v      = (\(x,y,z) -> z) p 
      cl     = makeBind $ (\(_,y,_,_) -> y) v
-     tinfo  = TI (tName tr) mn cn ((\(_,y,_,_) -> y) v) EVEntry (cl:args tr) (Just tr) scope
+     ov     = generateOverloading (args tr) ((getCTArgs.compTrigger) tr) 
+     tinfo  = TI (tName tr) mn cn ((\(_,y,_,_) -> y) v) EVEntry (cl:args tr) (Just tr) scope ov
   in case Map.lookup cn (entryTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn [v] Map.empty
                      ppdate'   = addTrigger2ppDATE tr ppdate 
@@ -266,11 +267,13 @@ createTriggerExit (cn,mn,(rt,mn',xs',_)) n scope =
       then let bs  = map ((\[x,y] -> BindType x y).words) xs
                cpe = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words.remGenerics') xs) (EVExit [])
                tr  = TriggerDef trnm bs cpe ""
-           in TI trnm mn cn nvar (EVExit []) bs (Just tr) scope
+               ov  = generateOverloading bs (getCTArgs cpe) 
+           in TI trnm mn cn nvar (EVExit []) bs (Just tr) scope ov
       else let bs  = (map ((\[x,y] -> BindType x y).words) xs ++ [BindType rt ret])
                cpe = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words.remGenerics') xs) (EVExit [BindId ret]) 
                tr  = TriggerDef trnm bs cpe ""
-           in TI trnm mn cn nvar (EVExit [BindId ret]) bs (Just tr) scope
+               ov  = generateOverloading bs (getCTArgs cpe) 
+           in TI trnm mn cn nvar (EVExit [BindId ret]) bs (Just tr) scope ov
  else error $ "Problem when creating an exit trigger. Mismatch between method names " ++ mn ++ " and " ++ mn' ++ ".\n"
 
 addNewTriggerExit :: Env -> PPDATE -> Int -> [(ClassInfo,MethodName,(String,MethodName,[String],MethodInvocations))] -> Scope -> (Env, PPDATE)

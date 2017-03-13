@@ -56,7 +56,7 @@ lookForEntryTrigger :: [TriggersInfo] -> MethodName -> ClassInfo -> [Trigger]
 lookForEntryTrigger [] _ _                         = []
 lookForEntryTrigger (tinfo:es) mn ci  = 
     case (tiTrvar tinfo) of
-        EVEntry -> if (mn == (inMN tinfo) && ci == (tiCI tinfo))
+        EVEntry -> if (mn == (tiMN tinfo) && ci == (tiCI tinfo))
                    then (tiTN tinfo):lookForEntryTrigger es mn ci
                    else lookForEntryTrigger es mn ci
         _       -> lookForEntryTrigger es mn ci
@@ -152,12 +152,18 @@ getBindArgs' [BindType t id]        = t ++ " " ++ id
 getBindArgs' ((BindType t id):y:ys) = t ++ " " ++ id ++ "," ++ getBindArgs' (y:ys)
 getBindArgs' _                      = ""
 
-getInfoTrigger :: TriggersInfo -> Maybe (Trigger, [String])
-getInfoTrigger tinfo = 
- case tiTrvar tinfo of
-     EVExit _ -> Just (tiTN tinfo,splitOnIdentifier "," $ getBindArgs' (tiBinds tinfo))
-     EVEntry  -> Just (tiTN tinfo,splitOnIdentifier "," $ getBindArgs' (tiBinds tinfo))
-     _        -> Nothing
+getInfoTrigger :: [TriggersInfo] -> Trigger -> HT -> Maybe TriggersInfo
+getInfoTrigger [] _ _          = Nothing
+getInfoTrigger (tinfo:ts) tr c = 
+ let mnc = methodCN c
+     cl  = clinf mnc     
+     mn  = mname mnc
+     ov  = overl mnc
+ in if (tiTN tinfo == tr) && (tiCI tinfo == cl) && (tiMN tinfo == mn)
+    then if (tiOver tinfo == ov || ov == OverNil)
+         then Just tinfo
+         else getInfoTrigger ts tr c
+    else getInfoTrigger ts tr c
 
 getTriggerDef :: Overloading -> HT -> [TriggersInfo] -> TriggerDef 
 getTriggerDef OverNil c xs = 
@@ -165,7 +171,7 @@ getTriggerDef OverNil c xs =
      cl  = clinf mnc
      tr  = mn ++ "_ppdex"
      mn  = mname mnc
-     xs'  = [ tdef | TI tr' _ cl' _ _ _ tdef _ <- xs, isInfixOf tr tr',cl == cl']
+     xs'  = [ tiTrDef tinfo | tinfo <- xs, isInfixOf tr (tiTN tinfo), cl == (tiCI tinfo), tiTrDef tinfo /= Nothing ]
      xs'' = filter (\ c -> c /= Nothing) xs'
  in case xs'' of
          []     -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
@@ -175,7 +181,7 @@ getTriggerDef (Over ts) c xs =
      cl   = clinf mnc
      tr   = mn ++ "_ppdex"
      mn   = mname mnc
-     xs'  = [ tdef | TI tr' _ cl' _ _ _ tdef _ <- xs, isInfixOf tr tr',cl == cl']
+     xs'  = [ tiTrDef tinfo | tinfo <- xs, isInfixOf tr (tiTN tinfo), cl == (tiCI tinfo), tiTrDef tinfo /= Nothing ]
      xs'' = filter (\ c -> c /= Nothing) xs'
  in if length xs'' == 1
     then case head xs' of

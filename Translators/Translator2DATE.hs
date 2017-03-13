@@ -285,21 +285,15 @@ generateAllTransitions :: [State] -> HTriples -> Transitions -> Env -> PropertyN
 generateAllTransitions [] _ ts _ _                             = ts
 generateAllTransitions ((State ns ic []):xs) cs ts env pn      = generateAllTransitions xs cs ts env pn
 generateAllTransitions ((State ns ic l@(_:_)):xs) cs ts env pn = 
- let ts' = accumTransitions' l ns cs ts env pn
+ let ts' = accumTransitions l ns cs ts env pn
  in generateAllTransitions xs cs ts' env pn
 
 accumTransitions :: [HTName] -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
 accumTransitions [] _ _ ts _ _                = ts
-accumTransitions (cn:cns) ns consts ts env pn = undefined
- --let nts = generateTransitions cn ns consts ts env pn
- --in accumTransitions cns ns consts nts env pn
-
-accumTransitions' :: [HTName] -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
-accumTransitions' [] _ _ ts _ _                = ts
-accumTransitions' (cn:cns) ns consts ts env pn =
+accumTransitions (cn:cns) ns consts ts env pn =
  let (nonlts,gentrans,lts) = generateTransitions cn ns consts ts env pn
      instrans = instrumentTransitions cn ns consts lts env pn
- in accumTransitions' cns ns consts (nonlts++instrans) env pn ++ gentrans
+ in accumTransitions cns ns consts (nonlts++instrans) env pn ++ gentrans
 
 generateTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> (Transitions,Transitions,Transitions)
 generateTransitions p ns cs ts env pn = 
@@ -315,22 +309,7 @@ generateTransitions p ns cs ts env pn =
          then (ts,makeTransitionAlg1 ns c env pn mn entrs,[])
          else let ext  = map (\e -> makeExtraTransitionAlg2 lts c e ns env pn) entrs'
                   ext' = map fromJust $ filter (\c -> c /= Nothing) ext
-              in (nonlts,ext',lts)
-
-instrumentTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
-instrumentTransitions p ns cs ts env pn = 
- let c             = lookForHT p cs ns
-     cl            = clinf $ methodCN c
-     mn            = mname $ methodCN c
-     entrs         = lookForEntryTrigger (allTriggers env) mn cl
-     entrs'        = [tr | tr <- entrs, not(isInfixOf (mn++"_ppden") tr)]
-     (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
- in if null entrs
-    then error $ "Translation: Missing entry trigger for method " ++ mn ++ ".\n"
-    else if (null lts)
-         then []
-         else concat [map (\x -> instrumentTransitionAlg2 c x tr env pn) lts | tr <- entrs']
-              
+              in (nonlts,ext',lts)            
 
 -- Implementation of Algorithm 1 --
 
@@ -346,11 +325,8 @@ makeTransitionAlg1Cond :: NameState -> Trigger -> HT -> Env -> PropertyName -> T
 makeTransitionAlg1Cond ns e c env pn =
  let cn      = htName c
      oldExpM = oldExpTypes env
-     esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
-     esinf'  = filter (/="") $ lookfor esinf e
-     arg     = if null esinf' 
-               then ""
-               else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
+     bs      = tiBinds $ fromJust $ getInfoTrigger (allTriggers env) e c
+     arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map getBindTypeId bs
      c'      = "HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")"
      zs      = getExpForOld oldExpM cn
      act     = " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
@@ -379,14 +355,11 @@ initOldExpr oel cn =
 makeExtraTransitionAlg2 :: Transitions -> HT -> Trigger -> NameState -> Env -> PropertyName -> Maybe Transition
 makeExtraTransitionAlg2 [] _ _ _ _ _     = Nothing
 makeExtraTransitionAlg2 ts c e ns env pn = 
- let esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
-     oldExpM = oldExpTypes env
+ let oldExpM = oldExpTypes env
      cn      = htName c
      zs      = getExpForOld oldExpM cn
-     esinf'  = filter (/="") $ lookfor esinf e
-     arg     = if null esinf' 
-               then ""
-               else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
+     bs      = tiBinds $ fromJust $ getInfoTrigger (allTriggers env) e c
+     arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map getBindTypeId bs
      pre'    = "HoareTriplesPPD." ++ (htName c) ++ "_pre(" ++ arg ++ ")"
      type_   = if null zs then "PPD" else "Old_" ++ cn
      old     = if null zs then "" else "," ++ zs
@@ -417,15 +390,26 @@ avoidTriviallyFalseCond :: Transitions -> Transitions
 avoidTriviallyFalseCond = filter (check.trim.cond.arrow)
                                     where check = \ t -> t /= "true" && (not.null.trim) t
 
+instrumentTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
+instrumentTransitions p ns cs ts env pn = 
+ let c             = lookForHT p cs ns
+     cl            = clinf $ methodCN c
+     mn            = mname $ methodCN c
+     entrs         = lookForEntryTrigger (allTriggers env) mn cl
+     entrs'        = [tr | tr <- entrs, not(isInfixOf (mn++"_ppden") tr)]
+     (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
+ in if null entrs
+    then error $ "Translation: Missing entry trigger for method " ++ mn ++ ".\n"
+    else if (null lts)
+         then []
+         else concat [map (\x -> instrumentTransitionAlg2 c x tr env pn) lts | tr <- entrs']
+
 instrumentTransitionAlg2 :: HT -> Transition -> Trigger -> Env -> PropertyName -> Transition
 instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env pn =
  let cn      = htName c
      oldExpM = oldExpTypes env
-     esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
-     esinf'  = filter (/="") $ lookfor esinf e
-     arg     = if null esinf' 
-               then ""
-               else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
+     bs      = tiBinds $ fromJust $ getInfoTrigger (allTriggers env) e c
+     arg     = init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map getBindTypeId bs
      zs      = getExpForOld oldExpM cn
      type_   = if null zs then "PPD" else "Old_" ++ cn
      old     = if null zs then "" else "," ++ zs
@@ -496,28 +480,27 @@ generateReplicatedAutomata :: HTriples -> Triggers -> Env -> String
 generateReplicatedAutomata cs es env = 
  let n        = length cs
      ys       = zip cs [1..n]
-     esinf    = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
- in generateProp esinf es ys env []
+ in generateProp es ys env []
 
 
-generateProp :: [(Trigger, [String])] -> Triggers -> [(HT,Int)] -> Env -> [(MethodCN,Bool)] -> String
-generateProp _ _ [] _ _                  = ""
-generateProp esinf es ((c,n):ys) env acc = 
- let (ra,acc') = genRA c n esinf es env acc
- in ra ++ generateProp esinf es ys env acc'
+generateProp :: Triggers -> [(HT,Int)] -> Env -> [(MethodCN,Bool)] -> String
+generateProp _ [] _ _              = ""
+generateProp es ((c,n):ys) env acc = 
+ let (ra,acc') = genRA c n es env acc
+ in ra ++ generateProp es ys env acc'
 
-genRA :: HT -> Int -> [(Trigger, [String])] -> Triggers -> Env -> [(MethodCN,Bool)] -> (String,[(MethodCN,Bool)])
-genRA c n esinf es env acc = 
+genRA :: HT -> Int -> Triggers -> Env -> [(MethodCN,Bool)] -> (String,[(MethodCN,Bool)])
+genRA c n es env acc = 
  let (b,acc') = checkIfRec (methodCN c) env acc
- in if b 
-    then (generatePropRec c n esinf es env, acc')
-    else (generatePropNonRec c n esinf es env, acc')
+ in if True --TODO:replace by b once the optimisation is implemented
+    then (generatePropRec c n es env, acc')
+    else (generatePropNonRec c n es env, acc')
 
 --Generates automaton to control a postcondition
-generatePropRec :: HT -> Int -> [(Trigger, [String])] -> Triggers -> Env -> String
-generatePropRec c n esinf es env = 
+generatePropRec :: HT -> Int -> Triggers -> Env -> String
+generatePropRec c n es env = 
  let tr      = generateTriggerRA env c n ("idPPD = msgPPD.id;","idPPD = id;")
-     prop    = generateRAString esinf es env c n Nothing
+     prop    = generateRAString es env c n Nothing
      cn      = snd prop
      oldExpM = oldExpTypes env
      zs      = getOldExpr oldExpM cn
@@ -579,8 +562,8 @@ generateTriggerRA env c n w =
     ++ init (concatMap getTrigger (instrumentTriggers [ntr] [c] env)) ++ wtr
 
 
-generateRAString :: [(Trigger, [String])] -> Triggers -> Env -> HT -> Int -> Maybe () -> (String,HTName)
-generateRAString esinf es env c n rec =
+generateRAString :: Triggers -> Env -> HT -> Int -> Maybe () -> (String,HTName)
+generateRAString es env c n rec =
   let ra = if rec == Nothing then generateRA c n env else generateRAOptimised c n env
       cn = pName ra
   in ("PROPERTY " ++ cn ++ "\n{\n\n"
@@ -589,10 +572,10 @@ generateRAString esinf es env c n rec =
      ++ "}\n\n",cn)
 
 --Optimisation: If the method is not recursive, then use optimised automaton
-generatePropNonRec :: HT -> Int -> [(Trigger, [String])] -> Triggers -> Env -> String
-generatePropNonRec c n esinf es env = 
+generatePropNonRec :: HT -> Int -> Triggers -> Env -> String
+generatePropNonRec c n es env = 
  let tr      = generateTriggerRA env c n ("idPPD"++ show n ++ " = null;","idPPD"++ show n ++ " = null;")
-     prop    = generateRAString esinf es env c n (Just ())
+     prop    = generateRAString es env c n (Just ())
      cn      = snd prop
      oldExpM = oldExpTypes env
      zs      = getOldExpr oldExpM cn

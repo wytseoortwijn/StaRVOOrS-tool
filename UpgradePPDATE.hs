@@ -207,16 +207,17 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                 if b' then
                                                                   if (not.null) err1 then fail err1 else
                                                                   do let einfo = if null s''
-                                                                                 then getTriggerClass bind
+                                                                                 then show bind
                                                                                  else s''
+                                                                     let ov = generateOverloading bs (getCTArgs ce')
                                                                      let (env',ci') = updateEntryTriggersInfo env (id'',einfo, (map bindToArgs bs),scope) bs mn bind s''
-                                                                     let (ci,cinm) = getClassVarName env id'' mn bs bind s''
+                                                                     let (ci,cinm) = getClassVarName id'' mn bs bind s''
                                                                      let tr = TriggerDef { tName = id''
-                                                                                       , args  = bs
-                                                                                       , compTrigger = ce'
-                                                                                       , whereClause = getWhereClause wc
-                                                                                     }
-                                                                     put env' { allTriggers = TI id'' mn ci cinm EVEntry ((properBind bind) ++bs) (Just tr) scope : allTriggers env }
+                                                                                         , args  = bs
+                                                                                         , compTrigger = ce'
+                                                                                         , whereClause = getWhereClause wc
+                                                                                         }
+                                                                     put env' { allTriggers = TI id'' mn ci cinm EVEntry ((properBind bind) ++bs) (Just tr) scope ov: allTriggers env }
                                                                      return tr
                                                                 else fail (err1 ++ s'')
                                        EVExit rs -> let id  = getIdBind bind
@@ -233,16 +234,14 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                               (b',s'') -> 
                                                                 if (b' && (checkRetVar rs argss))
                                                                 then if (not.null) err1 then fail err1 else
-                                                                     do let einfo = if null s''
-                                                                                    then getTriggerClass bind
-                                                                                    else s''
-                                                                        let (ci,cinm) = getClassVarName env id'' mn bs bind s''
+                                                                     do let (ci,cinm) = getClassVarName id'' mn bs bind s''
+                                                                        let ov = generateOverloading bs (getCTArgs ce')
                                                                         let tr = TriggerDef { tName = id''
-                                                                                          , args  = bs
-                                                                                          , compTrigger = ce'
-                                                                                          , whereClause = wc'
-                                                                                          }
-                                                                        put env { allTriggers = TI id'' mn ci cinm (EVExit rs) ((properBind bind) ++ bs) (Just tr) scope : allTriggers env }
+                                                                                            , args  = bs
+                                                                                            , compTrigger = ce'
+                                                                                            , whereClause = wc'
+                                                                                            }
+                                                                        put env { allTriggers = TI id'' mn ci cinm (EVExit rs) ((properBind bind) ++ bs) (Just tr) scope ov: allTriggers env }
                                                                         return tr
                                                                 else fail (err1 ++ s'')
                                        _        -> return TriggerDef { tName = id''
@@ -251,12 +250,19 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                      , whereClause = getWhereClause wc
                                                                      }
                           _  -> if (not.null) err1 then fail err1 else
-                                do put env { allTriggers = TI id'' "" "" "" EVNil bs Nothing scope : allTriggers env }
+                                do put env { allTriggers = TI id'' "" "" "" EVNil bs Nothing scope OverNil: allTriggers env }
                                    return TriggerDef { tName = id''
                                                      , args  = bs
                                                      , compTrigger = ce'
                                                      , whereClause = getWhereClause wc
                                                      }
+
+generateOverloading :: [Bind] -> [Bind] -> Overloading
+generateOverloading bs ms = Over $ map (getTypeForOverLoading bs) (map getIdBind ms)
+
+getTypeForOverLoading :: [Bind] -> Id -> Type
+getTypeForOverLoading [] _                     = ""
+getTypeForOverLoading ((BindType t id):bs) id' = if id == id' then t else getTypeForOverLoading bs id'
 
 --Method handling the special cases of the use of new and channels
 checkSpecialCases :: Bool -> MethodName -> Bind -> [Bind] -> [Bind] -> [String] -> Trigger -> Env -> Writer String Bool
@@ -1110,15 +1116,6 @@ getArgsGenMethods (trn, varClass', args,_) =
                       else (trim varClass')  ++ "," ++ flattenArgs args
  in (args', argswt'')
 
--- Get the variable name of a bind
--- It is used to get the name of the class variable associated to an entry/exit Trigger
-getTriggerClass :: Bind -> String
-getTriggerClass bn = 
- case bn of
-      BindType t id' -> t ++ " " ++ id'
-      BindId id'     -> id'
-      BindStar       -> "*"
-
 getAllTriggers :: Global -> Env -> Triggers
 getAllTriggers (Global (Ctxt vars ies trigs prop fors)) env = 
  let trs = trigs ++ getTriggersFors fors 
@@ -1195,10 +1192,10 @@ updateEntryTriggersInfo env einfo args mn (BindId id) s     =
                    in (env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) },(head ts))
 
 
-getClassVarName :: Env -> Trigger -> MethodName -> [Bind] -> Bind -> String -> (ClassInfo,String)
-getClassVarName env _ _ args BindStar _        = ("*","")
-getClassVarName env _ _ args (BindType t id) _ = (t,id)
-getClassVarName env tr mn args (BindId id) s   = 
+getClassVarName :: Trigger -> MethodName -> [Bind] -> Bind -> String -> (ClassInfo,String)
+getClassVarName _ _ args BindStar _        = ("*","")
+getClassVarName _ _ args (BindType t id) _ = (t,id)
+getClassVarName tr mn args (BindId id) s   = 
  let ts' = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
      ts  = if (null ts') then prepareValUpd mn s id s else ts'
  in if (length ts /= 1)

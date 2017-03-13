@@ -258,13 +258,14 @@ type MethodInvocations = [Exp]
 
 data TriggersInfo = 
  TI { tiTN      :: Trigger --trigger_name
-    , inMN      :: MethodName --method_name
+    , tiMN      :: MethodName --method_name
     , tiCI      :: ClassInfo --class_type
     , tiCVar    :: String --class_variable_name
     , tiTrvar   :: TriggerVariation
     , tiBinds   :: [Bind]
     , tiTrDef   :: Maybe TriggerDef
     , tiScope   :: Scope
+    , tiOver    :: Overloading
     } deriving (Show,Eq)
 
 --------------
