@@ -99,12 +99,13 @@ auxNewVars (Var _ t [VarDecl id _]:xs) = (t ++ " " ++ id):auxNewVars xs
 
 methodForPost :: HT -> Env -> OldExprM -> UpgradePPD String
 methodForPost c env oldExpM =
- do (argsPost, argsPostwt) <- lookForAllExitTriggerArgs env (clinf $ methodCN c) (mname $ methodCN c)
+ do (argsPost, argsPostwt) <- lookForAllExitTriggerArgs env c
     let tnvs      = getConstTnv c oldExpM
     let tnvs'     = auxNewVars tnvs
     let newargs   = addComma tnvs'
     let nargs     = if (null tnvs) then "" else "," ++ newargs
-    let args      = addComma $ map unwords $ map (\s -> if isInfixOf "ret_ppd" (head $ tail s) then (head s):["ret"] else s) $ map words $ splitOnIdentifier "," (argsPost ++ nargs)
+    let args      = addComma $ map unwords $ map (\s -> if isInfixOf "ret_ppd" (head $ tail s) then (head s):["ret"] else s)
+                    $ map words $ splitOnIdentifier "," (argsPost ++ nargs)
     return $ "  // " ++ (htName c) ++ "\n"
              ++ "  public static boolean " ++ (htName c) ++ "_post(" ++ args ++ ") {\n"
              ++ "    return " ++ (post c) ++ ";\n" 

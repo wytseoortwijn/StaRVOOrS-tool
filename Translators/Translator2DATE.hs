@@ -205,8 +205,8 @@ lookupHTForTrigger e ci (c:cs) = case compTrigger e of
 
 getClassInfo :: TriggerDef -> Env -> ClassInfo
 getClassInfo e env = 
- let trs = [tr | tr <- allTriggers env, ((\(x,_,_,_,_,_) -> x) tr) == tName e]
- in head $ map (\(_,_,x,_,_,_) -> x) trs
+ let trs = [tr | tr <- allTriggers env, tiTN tr == tName e]
+ in head $ map tiCI trs
 
 ----------------
 -- Properties --

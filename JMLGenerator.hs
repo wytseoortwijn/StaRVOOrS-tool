@@ -22,7 +22,6 @@ fromCInvariant2JML (CI _ body) =
 -- Hoare Triples --
 -------------------
 
--- For analysis of all the Hoare triples at once version
 getHTs :: UpgradePPD PPDATE -> HTjml
 getHTs = genJMLConstsAll'
 
@@ -48,18 +47,15 @@ updateJMLForM' c mn cl ov ((mn', cl', ov',jml):xs) = if (mn == mn' && cl == cl' 
 fromHT2JML' :: HT -> String
 fromHT2JML' (HT cn _ precon postcon assig _ _ _) =  
   "    @ public normal_behaviour\n"
-  ++ "    @ " ++ requires' precon cn
+  ++ "    @ " ++ requires precon cn
   ++ "    @ " ++ ensures postcon
   ++ "    @ " ++ assign assig
   ++ "    @ diverges true;\n" -- partial correctness
 
 -- bool variable added to be able to identify the Hoare triple
 -- associated to the jml specification when analysing the .xml file
-requires' :: Pre -> HTName -> String
-requires' p cn = "requires " ++ cn ++ " && " ++ p ++ ";\n"
-
-requires :: Pre -> String
-requires p = "requires " ++ p ++ ";\n"
+requires :: Pre -> HTName -> String
+requires p cn = "requires " ++ cn ++ " && " ++ p ++ ";\n"
 
 ensures :: Post -> String
 ensures p = "ensures " ++ p ++ ";\n"

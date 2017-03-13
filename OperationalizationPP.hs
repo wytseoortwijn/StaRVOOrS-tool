@@ -21,7 +21,7 @@ operationalizeOldResultBind ppd oldExprTypesM =
      consts   = htsGet ppdate
      mfiles   = methodsInFiles env
      methods  = map (\(x,y,z) -> (x,y,map (\(x,y,z,_) -> y) z)) mfiles
-     es       = getAllTriggers global
+     es       = getAllTriggers global env
      xs       = map (\ c -> operationalizePrePostORB c (varsInFiles env) es methods oldExprTypesM) consts
      xs'      = map (\(Bad s) -> s) $ filter isBad $ map (\x -> runStateT x env) xs
      oldExpT  = Map.unions $ map (snd.goo env) xs
@@ -203,7 +203,7 @@ operationalizeForall c env oldExpM =
     let p              = pre c
     (enargs, enargswt) <- lookForAllEntryTriggerArgs env cinfo mn
     let p'             = post c 
-    (exargs, exargswt) <- lookForAllExitTriggerArgs env cinfo mn
+    (exargs, exargswt) <- lookForAllExitTriggerArgs env c
     let xs             = splitInQuantifiedExpression p "\\forall"
     let ys             = splitInQuantifiedExpression p' "\\forall"
     let tnewvars       = getConstTnv c oldExpM 
@@ -304,7 +304,7 @@ splitInQuantifiedExpression s qexpident =
     then [Right $ head xs]
     else let begin = Right $ head xs
              ys    = map (lookforEnd 0 []) $ tail xs
-             zs    = concat $ map foo ys
+             zs    = concatMap foo ys
           in zs
                   where foo (a,b) = [Left a, Right b]
 
@@ -329,7 +329,7 @@ operationalizeExists c es oldExpM =
     let p              = pre c
     (enargs, enargswt) <- lookForAllEntryTriggerArgs es cinfo mn
     let p'             = post c 
-    (exargs, exargswt) <- lookForAllExitTriggerArgs es cinfo mn
+    (exargs, exargswt) <- lookForAllExitTriggerArgs es c
     let xs             = splitInQuantifiedExpression p "\\exists"
     let ys             = splitInQuantifiedExpression p' "\\exists"
     let tnewvars       = getConstTnv c oldExpM

@@ -18,7 +18,7 @@ import qualified ParserJML as ParJML
 import Data.List
 import Data.Either
 import TranslatorActions
-
+import Data.Maybe
 
 
 upgradePPD :: Abs.AbsPPDATE -> UpgradePPD PPDATE
@@ -36,7 +36,7 @@ upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
                        case runStateT (genGlobal global) env' of
                             Bad s              -> fail $ s ++ duplicateHT dcs
                             Ok (global', env'') ->  
-                               let trs     = map (\(x,_,_,_,_,_) -> x) $ allTriggers env''
+                               let trs     = map tiTN $ allTriggers env''
                                    noneTrs = [x | x <- triggersInTemps env'', not $ elem x trs] 
                                in  if (not.null.trim.concat) noneTrs
                                    then fail $ "Error: The trigger(s) [" ++ addComma noneTrs ++ "] are used in the definition of a template, but do(es) not exist(s).\n"
@@ -76,7 +76,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
  do vars' <- getVars vars
     trigs' <- getTriggers trigs scope
     env <- get
-    let prop' = getProperty prop (map (\(x,_,_,_,_,_) -> x) (allTriggers env)) env
+    let prop' = getProperty prop (map tiTN (allTriggers env)) env
     let cns   = htsNames env
     let ies'  = getActEvents ies   
     case runWriter prop' of
@@ -174,7 +174,7 @@ getTrigger' :: Scope -> Abs.Trigger -> UpgradePPD TriggerDef
 getTrigger' scope (Abs.Trigger id binds ce wc) =
  do env  <- get
     let id'' = getIdAbs id
-    let xs   = [ x | (x,_,_,_,_,_) <- allTriggers env, id'' == x ]    
+    let xs   = [ tiTN x | x <- allTriggers env, id'' == tiTN x ]
     let err  = if (not.null) xs
                then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") 
                else ""
@@ -209,13 +209,14 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                   do let einfo = if null s''
                                                                                  then getTriggerClass bind
                                                                                  else s''
-                                                                     let (env',ci) = updateEntryTriggersInfo env (id'',einfo, (map bindToArgs bs),scope) bs mn bind s''
+                                                                     let (env',ci') = updateEntryTriggersInfo env (id'',einfo, (map bindToArgs bs),scope) bs mn bind s''
+                                                                     let (ci,cinm) = getClassVarName env id'' mn bs bind s''
                                                                      let tr = TriggerDef { tName = id''
                                                                                        , args  = bs
                                                                                        , compTrigger = ce'
                                                                                        , whereClause = getWhereClause wc
                                                                                      }
-                                                                     put env' { allTriggers = (id'',mn,ci,EVEntry,(properBind bind) ++bs,Just tr) : allTriggers env }
+                                                                     put env' { allTriggers = TI id'' mn ci cinm EVEntry ((properBind bind) ++bs) (Just tr) scope : allTriggers env }
                                                                      return tr
                                                                 else fail (err1 ++ s'')
                                        EVExit rs -> let id  = getIdBind bind
@@ -233,15 +234,15 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                 if (b' && (checkRetVar rs argss))
                                                                 then if (not.null) err1 then fail err1 else
                                                                      do let einfo = if null s''
-                                                                                 then getTriggerClass bind
-                                                                                 else s''
-                                                                        let (env',ci) = updateExitTriggersInfo env (id'',einfo, (map bindToArgs bs),scope) bs mn bind s''
+                                                                                    then getTriggerClass bind
+                                                                                    else s''
+                                                                        let (ci,cinm) = getClassVarName env id'' mn bs bind s''
                                                                         let tr = TriggerDef { tName = id''
                                                                                           , args  = bs
                                                                                           , compTrigger = ce'
                                                                                           , whereClause = wc'
                                                                                           }
-                                                                        put env' { allTriggers = (id'',mn,ci,EVExit rs,(properBind bind) ++ bs, Just tr) : allTriggers env }
+                                                                        put env { allTriggers = TI id'' mn ci cinm (EVExit rs) ((properBind bind) ++ bs) (Just tr) scope : allTriggers env }
                                                                         return tr
                                                                 else fail (err1 ++ s'')
                                        _        -> return TriggerDef { tName = id''
@@ -250,7 +251,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                      , whereClause = getWhereClause wc
                                                                      }
                           _  -> if (not.null) err1 then fail err1 else
-                                do put env { allTriggers = (id'',"","",EVNil,bs, Nothing) : allTriggers env }
+                                do put env { allTriggers = TI id'' "" "" "" EVNil bs Nothing scope : allTriggers env }
                                    return TriggerDef { tName = id''
                                                      , args  = bs
                                                      , compTrigger = ce'
@@ -1059,41 +1060,38 @@ joinImport (xs:ys:iss) = xs ++ "." ++ joinImport (ys:iss)
 lookForAllEntryTriggerArgs :: Env -> ClassInfo -> MethodName -> UpgradePPD (String, String)
 lookForAllEntryTriggerArgs env cinf mn =
  case Map.lookup cinf (entryTriggersInfo env) of
-      Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
-                      Nothing -> fail $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                      Just m' -> case Map.lookup mn m' of
-                                      Nothing -> fail $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                      Just _  -> fail $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"                           
-      Just m  -> case Map.lookup mn m of
-                      Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
-                                      Nothing -> fail $ "Error: Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                      Just m' -> case Map.lookup mn m' of
-                                                 Nothing ->  fail $ "Problem when looking for arguments of an entry trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                                 Just _  -> fail $ "Error: Cannot associated a class variable to the entry trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
-                      Just xs -> let ys = filter (\(x,_,_,_) -> isSuffixOf "_ppden" x) xs
-                                 in if null ys
-                                    then return $ getArgsGenMethods (head xs)
-                                    else return $ getArgsGenMethods (head ys) 
+      Nothing -> 
+         case Map.lookup "*" (entryTriggersInfo env) of
+              Nothing -> fail $ "Error: Problem when looking for arguments of an entry trigger associated to method "
+                                 ++ mn ++ " in class " ++ cinf ++ ".\n"
+              Just m' -> case Map.lookup mn m' of
+                              Nothing -> fail $ "Error: Problem when looking for arguments of an entry trigger associated to method " 
+                                                ++ mn ++ " in class " ++ cinf ++ ".\n"
+                              Just _  -> fail $ "Error: Cannot associated a class variable to the entry trigger for method " 
+                                                ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"                           
+      Just m  ->
+         case Map.lookup mn m of
+              Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
+                              Nothing -> fail $ "Error: Problem when looking for arguments of an entry trigger associated to method " 
+                                                ++ mn ++ " in class " ++ cinf ++ ".\n"
+                              Just m' -> case Map.lookup mn m' of
+                                              Nothing ->  fail $ "Problem when looking for arguments of an entry trigger associated to method " 
+                                                                 ++ mn ++ " in class " ++ cinf ++ ".\n"
+                                              Just _  -> fail $ "Error: Cannot associated a class variable to the entry trigger for method " 
+                                                                ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
+              Just xs -> let ys = filter (\(x,_,_,_) -> isSuffixOf "_ppden" x) xs
+                         in if null ys
+                            then return $ getArgsGenMethods (head xs)
+                            else return $ getArgsGenMethods (head ys) 
 
-lookForAllExitTriggerArgs :: Env -> ClassInfo -> MethodName -> UpgradePPD (String, String)
-lookForAllExitTriggerArgs env cinf mn =
- case Map.lookup cinf (exitTriggersInfo env) of
-      Nothing -> case Map.lookup "*" (exitTriggersInfo env) of
-                      Nothing -> fail $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                      Just m' -> case Map.lookup mn m' of
-                                      Nothing -> fail $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                      Just _  -> fail $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
-      Just m  -> case Map.lookup mn m of
-                      Nothing -> case Map.lookup "*" (exitTriggersInfo env) of
-                                      Nothing -> fail $ "Error: Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                      Just m' -> case Map.lookup mn m' of
-                                                 Nothing ->  fail $ "Problem when looking for arguments of an exit trigger associated to method " ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                                 Just _  -> fail $ "Error: Cannot associated a class variable to the exit trigger for method " ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
-                      Just xs -> let ys = filter (\(x,_,_,_) -> isInfixOf "_ppdex" x) xs
-                                 in if null ys
-                                    then return $ getArgsGenMethods (head xs)
-                                    else return $ getArgsGenMethods (head ys) 
-                           
+lookForAllExitTriggerArgs :: Env -> HT -> UpgradePPD (String, String)
+lookForAllExitTriggerArgs env c =
+ let mnc   = methodCN c
+     over  = overl mnc
+     tr    = getTriggerDef over c (allTriggers env) 
+     tinfo = head [ t | t <- allTriggers env , Just tr == tiTrDef t]
+     args  = map (\(BindType t id) -> Args t id) (tiBinds tinfo)
+ in return (getArgsGenMethods (tiTN tinfo, tiCI tinfo ++ " " ++ tiCVar tinfo, args,tiScope tinfo))
 
 getArgsGenMethods :: (Id, String, [Args],Scope) -> (String,String)
 getArgsGenMethods (trn, varClass', args,_) = 
@@ -1112,19 +1110,19 @@ getArgsGenMethods (trn, varClass', args,_) =
                       else (trim varClass')  ++ "," ++ flattenArgs args
  in (args', argswt'')
 
-flattenArgs :: [Args] -> String
-flattenArgs []               = ""
-flattenArgs [(Args t id)]    = t ++ " " ++ id
-flattenArgs ((Args t id):xs) = t ++ " " ++ id ++ "," ++ flattenArgs xs
-
 -- Get the variable name of a bind
 -- It is used to get the name of the class variable associated to an entry/exit Trigger
 getTriggerClass :: Bind -> String
-getTriggerClass bn = case bn of
-                        BindType t id' -> t ++ " " ++ id'
-                        BindId id'     -> id'
-                        BindStar       -> "*"
+getTriggerClass bn = 
+ case bn of
+      BindType t id' -> t ++ " " ++ id'
+      BindId id'     -> id'
+      BindStar       -> "*"
 
+getAllTriggers :: Global -> Env -> Triggers
+getAllTriggers (Global (Ctxt vars ies trigs prop fors)) env = 
+ let trs = trigs ++ getTriggersFors fors 
+ in trs ++ [ fromJust (tiTrDef t) | t <- allTriggers env, tiTrDef t /= Nothing, not (elem (fromJust $ tiTrDef t) trs)]
 
 --------------------------------------------------------------------
 -- Environment with variables, triggers and foreaches information --
@@ -1136,8 +1134,7 @@ type MapTrigger = Map.Map MethodName [(Trigger, String, [Args],Scope)] --[(trigg
 data Env = Env
  { forsVars            :: [Id] --foreach bounded variable names 
  , entryTriggersInfo   :: Map.Map ClassInfo MapTrigger
- , exitTriggersInfo    :: Map.Map ClassInfo MapTrigger
- , allTriggers         :: [(Trigger,MethodName,ClassInfo,TriggerVariation,[Bind],Maybe TriggerDef)]
+ , allTriggers         :: [TriggersInfo]
  , htsNames            :: [HTName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
  , varsInPPD           :: Variables
@@ -1156,7 +1153,6 @@ type UpgradePPD a = CM.StateT Env Err a
 emptyEnv :: Env
 emptyEnv = Env { forsVars            = []
                , entryTriggersInfo   = Map.empty
-               , exitTriggersInfo    = Map.empty
                , allTriggers         = []
                , htsNames            = []
                , varsInFiles         = []
@@ -1199,34 +1195,15 @@ updateEntryTriggersInfo env einfo args mn (BindId id) s     =
                    in (env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) },(head ts))
 
 
-updateExitTriggersInfo :: Env -> (Id, String, [Args],Scope) -> [Bind] -> [Char] -> Bind -> String -> (Env,ClassInfo)
-updateExitTriggersInfo env einfo args mn BindStar _        = 
- let t = "*" in
- case Map.lookup t (exitTriggersInfo env) of
-      Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
-                 in (env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) },t)
-      Just mapeinfo -> 
-           let mapeinfo' = updateInfo mapeinfo mn einfo 
-           in (env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) },t)
-updateExitTriggersInfo env einfo args mn (BindType t id) _ = 
- case Map.lookup t (exitTriggersInfo env) of
-      Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
-                 in (env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) },t)
-      Just mapeinfo -> 
-           let mapeinfo' = updateInfo mapeinfo mn einfo 
-           in (env { exitTriggersInfo = Map.insert t mapeinfo' (exitTriggersInfo env) },t)
-updateExitTriggersInfo env einfo args mn (BindId id) s     = 
+getClassVarName :: Env -> Trigger -> MethodName -> [Bind] -> Bind -> String -> (ClassInfo,String)
+getClassVarName env _ _ args BindStar _        = ("*","")
+getClassVarName env _ _ args (BindType t id) _ = (t,id)
+getClassVarName env tr mn args (BindId id) s   = 
  let ts' = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
      ts  = if (null ts') then prepareValUpd mn s id s else ts'
  in if (length ts /= 1)
-    then error $ "The trigger " ++ (\(x,_,_,_) -> x) einfo ++ " does not include a class variable declaration.\n" 
-    else case Map.lookup (head ts) (exitTriggersInfo env) of
-              Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
-                         in (env { exitTriggersInfo = Map.insert (head ts) mapeinfo' (exitTriggersInfo env) },(head ts))
-              Just mapeinfo -> 
-                   let mapeinfo' = updateInfo mapeinfo mn einfo 
-                   in (env { exitTriggersInfo = Map.insert (head ts) mapeinfo' (exitTriggersInfo env) },(head ts))
-
+    then error $ "The trigger " ++ tr ++ " does not include a class variable declaration.\n" 
+    else (head ts,id)
  
 prepareValUpd :: MethodName -> String -> String -> String -> [String]
 prepareValUpd mn s id chan = 
@@ -1262,12 +1239,6 @@ getEntryTriggersEnv ppd = let env = CM.execStateT ppd emptyEnv
                           in case env of
                              Bad _ -> Map.empty
                              Ok fs -> entryTriggersInfo fs
-
-getExitTriggersEnv :: UpgradePPD a -> Map.Map ClassInfo MapTrigger
-getExitTriggersEnv ppd = let env = CM.execStateT ppd emptyEnv
-                         in case env of
-                            Bad _ -> Map.empty
-                            Ok fs -> exitTriggersInfo fs
 
 getForeachVarsEnv :: UpgradePPD a -> [Id]
 getForeachVarsEnv ppd = let env = CM.execStateT ppd emptyEnv

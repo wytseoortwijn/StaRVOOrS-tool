@@ -14,6 +14,7 @@ import Data.List
 refinePPDATE :: UpgradePPD PPDATE -> [Proof] -> UpgradePPD PPDATE
 refinePPDATE ppd proofs = 
  let ppdate    = getValue ppd 
+     env       = getEnvVal ppd
      consts    = htsGet ppdate
      nproved   = filter (\(x,y,z,t) -> (not.null) z) $ map getInfoFromProof proofs
      proved    = filter (\(x,y,z,t) -> (null z)) $ map getInfoFromProof proofs
@@ -22,7 +23,7 @@ refinePPDATE ppd proofs =
      ppd'      = generateNewTriggers ppd consts'
      ppdate'   = getValue ppd'
      global    = globalGet ppdate'
-     triggers' = getAllTriggers global 
+     triggers' = getAllTriggers global env
      consts''  = updateHTs nproved consts' triggers'
      env'      = getEnvVal ppd'     
      global'   = optimizedProvenHTs cproved refinePropertyOptGlobal global
@@ -181,12 +182,11 @@ generateNewTriggers ppd consts =
      let mfiles  = methodsInFiles env
      let mns     = removeDuplicates [(clinf mn,mname mn) | mn <- map methodCN consts]
      let entry   = filterDefinedTriggers (entryTriggersInfo env) mns 
-     let exit    = mns 
      let entry'  = [(x,y,head $ filter (\(a,b,c,_) -> y == b) z) | (x,y) <- entry, (_,d,z) <- mfiles,d==x]
-     let exit'   = [(x,y,head $ filter (\(a,b,c,_) -> y == b) z) | (x,y) <- exit, (_,d,z) <- mfiles,d==x]
+     let exit    = [(x,y,head $ filter (\(a,b,c,_) -> y == b) z) | (x,y) <- mns, (_,d,z) <- mfiles,d==x]
      let scope   = properScope ppdate
      let (env',ppdate')   = addNewTriggerEntry env ppdate 0 entry' scope
-     let (env'',ppdate'') = addNewTriggerExit env' ppdate' (length entry') exit' scope
+     let (env'',ppdate'') = addNewTriggerExit env' ppdate' (length entry') exit scope
      put env''
      return ppdate''
 
@@ -241,19 +241,20 @@ addNewTriggerEntry env ppdate n (x:xs) scope =
      mn     = (\(x,y,z) -> y) p 
      v      = (\(x,y,z) -> z) p 
      cl     = makeBind $ (\(_,y,_,_) -> y) v
+     tinfo  = TI (tName tr) mn cn ((\(_,y,_,_) -> y) v) EVEntry (cl:args tr) (Just tr) scope
   in case Map.lookup cn (entryTriggersInfo env) of
       Nothing -> let mapeinfo' =  Map.insert mn [v] Map.empty
                      ppdate'   = addTrigger2ppDATE tr ppdate 
                  in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
-                                            , allTriggers = (tName tr,mn,cn,EVEntry,cl:args tr,Just tr):allTriggers env}) ppdate' (n+1) xs scope
+                                            , allTriggers = tinfo:allTriggers env}) ppdate' (n+1) xs scope
       Just mapeinfo -> 
            let mapeinfo' = updateInfo mapeinfo mn v 
                ppdate'   = addTrigger2ppDATE tr ppdate 
            in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
-                                      , allTriggers = (tName tr,mn,cn,EVEntry, cl:args tr, Just tr):allTriggers env}) ppdate' (n+1) xs scope
+                                      , allTriggers = tinfo:allTriggers env}) ppdate' (n+1) xs scope
 
 --Creates the info to be added in the environment and the ppDATE associated to the new exit trigger
-createTriggerExit:: (ClassInfo,MethodName,(String,MethodName,[String],MethodInvocations)) -> Int -> Scope -> ((ClassInfo,MethodName,(Id, String, [Args],Scope)), TriggerDef)
+createTriggerExit:: (ClassInfo,MethodName,(String,MethodName,[String],MethodInvocations)) -> Int -> Scope -> TriggersInfo
 createTriggerExit (cn,mn,(rt,mn',xs',_)) n scope = 
  let trnm = mn ++ "_ppdex"
      nvar = "cv" ++ "_" ++ (show n)
@@ -262,30 +263,21 @@ createTriggerExit (cn,mn,(rt,mn',xs',_)) n scope =
      xs   = map remGenerics' xs' in
  if (mn == mn')
  then if (rt == "void")
-      then let cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [])
-               tr   = TriggerDef trnm (map ((\[x,y] -> BindType x y).words) xs) cpe ""
-           in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words) xs,scope)), tr)
-      else let cpe = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [BindId ret]) 
-               tr  = TriggerDef trnm (map ((\[x,y] -> BindType x y).words) xs ++ [BindType rt ret]) cpe ""
-           in ((cn,mn,(trnm, cn', (map ((\[x,y] -> Args x y).words) xs) ++ [Args rt ret],scope)),tr)
+      then let bs  = map ((\[x,y] -> BindType x y).words) xs
+               cpe = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words.remGenerics') xs) (EVExit [])
+               tr  = TriggerDef trnm bs cpe ""
+           in TI trnm mn cn nvar (EVExit []) bs (Just tr) scope
+      else let bs  = (map ((\[x,y] -> BindType x y).words) xs ++ [BindType rt ret])
+               cpe = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words.remGenerics') xs) (EVExit [BindId ret]) 
+               tr  = TriggerDef trnm bs cpe ""
+           in TI trnm mn cn nvar (EVExit [BindId ret]) bs (Just tr) scope
  else error $ "Problem when creating an exit trigger. Mismatch between method names " ++ mn ++ " and " ++ mn' ++ ".\n"
 
 addNewTriggerExit :: Env -> PPDATE -> Int -> [(ClassInfo,MethodName,(String,MethodName,[String],MethodInvocations))] -> Scope -> (Env, PPDATE)
 addNewTriggerExit env ppdate _ [] _         = (env,ppdate)
 addNewTriggerExit env ppdate n (x:xs) scope =
- let (p,tr) = createTriggerExit x n scope
-     cn     = (\(x,y,z) -> x) p 
-     mn     = (\(x,y,z) -> y) p 
-     v      = (\(x,y,z) -> z) p 
-     cl     = makeBind $ (\(_,y,_,_) -> y) v
- in case Map.lookup cn (exitTriggersInfo env) of
-      Nothing -> let mapeinfo' = Map.insert mn [v] Map.empty                     
-                 in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
-                                           , allTriggers = (tName tr,mn, cn,getCTVariation (compTrigger tr),cl:args tr,Just tr):allTriggers env }) ppdate (n+1) xs scope
-      Just mapeinfo -> 
-           let mapeinfo' = updateInfo mapeinfo mn v       
-           in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
-                                     , allTriggers = (tName tr,mn, cn,getCTVariation (compTrigger tr),cl:args tr,Just tr):allTriggers env }) ppdate (n+1) xs scope
+ let tinfo  = createTriggerExit x n scope
+ in addNewTriggerExit (env { allTriggers = tinfo:allTriggers env }) ppdate (n+1) xs scope
 
 
 addTrigger2ppDATE :: TriggerDef -> PPDATE -> PPDATE
