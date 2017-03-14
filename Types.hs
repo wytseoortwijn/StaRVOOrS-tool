@@ -60,7 +60,11 @@ data MethodCN   =
      } deriving (Show,Eq)
 
 data Overloading = Over [Type] | OverNil
-  deriving (Eq, Ord, Show, Read)
+  deriving (Eq, Ord, Read)
+
+instance Show Overloading where
+ show OverNil   = ""
+ show (Over xs) = "(" ++ foldr1 (\x xs -> x ++ "," ++ xs) xs ++ ")"
 
 data HT = HT
   { htName :: HTName

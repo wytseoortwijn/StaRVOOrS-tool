@@ -210,14 +210,13 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                                  then show bind
                                                                                  else s''
                                                                      let ov = generateOverloading bs (getCTArgs ce')
-                                                                     let (env',ci') = updateEntryTriggersInfo env (id'',einfo, (map bindToArgs bs),scope) bs mn bind s''
                                                                      let (ci,cinm) = getClassVarName id'' mn bs bind s''
                                                                      let tr = TriggerDef { tName = id''
                                                                                          , args  = bs
                                                                                          , compTrigger = ce'
                                                                                          , whereClause = getWhereClause wc
                                                                                          }
-                                                                     put env' { allTriggers = TI id'' mn ci cinm EVEntry ((properBind bind) ++bs) (Just tr) scope ov: allTriggers env }
+                                                                     put env { allTriggers = TI id'' mn ci cinm EVEntry ((properBind bind) ++bs) (Just tr) scope ov: allTriggers env }
                                                                      return tr
                                                                 else fail (err1 ++ s'')
                                        EVExit rs -> let id  = getIdBind bind
@@ -258,6 +257,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                      }
 
 generateOverloading :: [Bind] -> [Bind] -> Overloading
+generateOverloading bs [] = OverNil
 generateOverloading bs ms = Over $ map (getTypeForOverLoading bs) (map getIdBind ms)
 
 getTypeForOverLoading :: [Bind] -> Id -> Type
@@ -1063,32 +1063,23 @@ joinImport [ys]   = ys
 joinImport (xs:ys:iss) = xs ++ "." ++ joinImport (ys:iss)
 
 
-lookForAllEntryTriggerArgs :: Env -> ClassInfo -> MethodName -> UpgradePPD (String, String)
-lookForAllEntryTriggerArgs env cinf mn =
- case Map.lookup cinf (entryTriggersInfo env) of
-      Nothing -> 
-         case Map.lookup "*" (entryTriggersInfo env) of
-              Nothing -> fail $ "Error: Problem when looking for arguments of an entry trigger associated to method "
-                                 ++ mn ++ " in class " ++ cinf ++ ".\n"
-              Just m' -> case Map.lookup mn m' of
-                              Nothing -> fail $ "Error: Problem when looking for arguments of an entry trigger associated to method " 
-                                                ++ mn ++ " in class " ++ cinf ++ ".\n"
-                              Just _  -> fail $ "Error: Cannot associated a class variable to the entry trigger for method " 
-                                                ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"                           
-      Just m  ->
-         case Map.lookup mn m of
-              Nothing -> case Map.lookup "*" (entryTriggersInfo env) of
-                              Nothing -> fail $ "Error: Problem when looking for arguments of an entry trigger associated to method " 
-                                                ++ mn ++ " in class " ++ cinf ++ ".\n"
-                              Just m' -> case Map.lookup mn m' of
-                                              Nothing ->  fail $ "Problem when looking for arguments of an entry trigger associated to method " 
-                                                                 ++ mn ++ " in class " ++ cinf ++ ".\n"
-                                              Just _  -> fail $ "Error: Cannot associated a class variable to the entry trigger for method " 
-                                                                ++ mn ++ ". It is associated to '*' on its definition" ++ ".\n"
-              Just xs -> let ys = filter (\(x,_,_,_) -> isSuffixOf "_ppden" x) xs
-                         in if null ys
-                            then return $ getArgsGenMethods (head xs)
-                            else return $ getArgsGenMethods (head ys) 
+lookForAllEntryTriggerArgs :: Env -> HT -> UpgradePPD (String, String)
+lookForAllEntryTriggerArgs env c =
+ let trs = allTriggers env
+ in do tinfo <- getEntryTriggers (methodCN c) trs
+       let args  = map (\(BindType t id) -> Args t id) (tiBinds tinfo)
+       return (getArgsGenMethods (tiTN tinfo, tiCI tinfo ++ " " ++ tiCVar tinfo, args))   
+
+getEntryTriggers :: MethodCN -> [TriggersInfo] -> UpgradePPD TriggersInfo
+getEntryTriggers mnc []         = fail $ "Error: Could not find an entry trigger associated to method "
+                                         ++ mname mnc ++ show (overl mnc) ++ " of the class " ++ clinf mnc ++ ".\n"
+getEntryTriggers mnc (tinfo:ts) =
+ if (mname mnc) == (tiMN tinfo) && (clinf mnc) == (tiCI tinfo) 
+    && ((tiOver tinfo) == overl mnc || overl mnc == OverNil)
+    && tiTrvar tinfo == EVEntry
+ then return tinfo
+ else getEntryTriggers mnc ts
+
 
 lookForAllExitTriggerArgs :: Env -> HT -> UpgradePPD (String, String)
 lookForAllExitTriggerArgs env c =
@@ -1097,10 +1088,10 @@ lookForAllExitTriggerArgs env c =
      tr    = getTriggerDef over c (allTriggers env) 
      tinfo = head [ t | t <- allTriggers env , Just tr == tiTrDef t]
      args  = map (\(BindType t id) -> Args t id) (tiBinds tinfo)
- in return (getArgsGenMethods (tiTN tinfo, tiCI tinfo ++ " " ++ tiCVar tinfo, args,tiScope tinfo))
+ in return (getArgsGenMethods (tiTN tinfo, tiCI tinfo ++ " " ++ tiCVar tinfo, args))
 
-getArgsGenMethods :: (Id, String, [Args],Scope) -> (String,String)
-getArgsGenMethods (trn, varClass', args,_) = 
+getArgsGenMethods :: (Id, String, [Args]) -> (String,String)
+getArgsGenMethods (trn, varClass', args) = 
  let classPost = words $ varClass'
      varClass  = last classPost
      argswt    = map getArgsId args
@@ -1121,16 +1112,13 @@ getAllTriggers (Global (Ctxt vars ies trigs prop fors)) env =
  let trs = trigs ++ getTriggersFors fors 
  in trs ++ [ fromJust (tiTrDef t) | t <- allTriggers env, tiTrDef t /= Nothing, not (elem (fromJust $ tiTrDef t) trs)]
 
+
 --------------------------------------------------------------------
 -- Environment with variables, triggers and foreaches information --
 --------------------------------------------------------------------
 
-type MapTrigger = Map.Map MethodName [(Trigger, String, [Args],Scope)] --[(trigger_name,type class_variable,trigger_arguments,scope)]
-
---Triggers associated to methods in Hoare triples should include: type class_variable
 data Env = Env
  { forsVars            :: [Id] --foreach bounded variable names 
- , entryTriggersInfo   :: Map.Map ClassInfo MapTrigger
  , allTriggers         :: [TriggersInfo]
  , htsNames            :: [HTName]
  , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
@@ -1149,7 +1137,6 @@ type UpgradePPD a = CM.StateT Env Err a
 
 emptyEnv :: Env
 emptyEnv = Env { forsVars            = []
-               , entryTriggersInfo   = Map.empty
                , allTriggers         = []
                , htsNames            = []
                , varsInFiles         = []
@@ -1161,36 +1148,6 @@ emptyEnv = Env { forsVars            = []
                , propInForeach       = []
                , actes               = []
                }
-
-updateEntryTriggersInfo :: Env -> (Id, String, [Args],Scope) -> [Bind] -> [Char] -> Bind -> String -> (Env,ClassInfo)
-updateEntryTriggersInfo env einfo args mn BindStar _        = 
- let t = "*" in
- case Map.lookup t (entryTriggersInfo env) of
-      Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
-                 in (env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) },t)
-      Just mapeinfo -> 
-           let mapeinfo' = updateInfo mapeinfo mn einfo 
-           in (env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) },"*")
-updateEntryTriggersInfo env einfo args mn (BindType t id) _ = 
- case Map.lookup t (entryTriggersInfo env) of
-      Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
-                 in (env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) },t)
-      Just mapeinfo -> 
-           let mapeinfo' = updateInfo mapeinfo mn einfo 
-           in (env { entryTriggersInfo = Map.insert t mapeinfo' (entryTriggersInfo env) },t)
-updateEntryTriggersInfo env einfo args mn (BindId id) s     = 
- let ts' = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
-     val = prepareValUpd mn s id s
-     ts  = if (null ts') then val else ts'
- in if (length ts /= 1)
-    then error $ "The trigger " ++ (\(x,_,_,_) -> x) einfo ++ " does not include a class variable declaration.\n"
-    else case Map.lookup (head ts) (entryTriggersInfo env) of
-              Nothing -> let mapeinfo' =  Map.insert mn [einfo] Map.empty
-                         in (env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) },(head ts))
-              Just mapeinfo -> 
-                   let mapeinfo' = updateInfo mapeinfo mn einfo 
-                   in (env { entryTriggersInfo = Map.insert (head ts) mapeinfo' (entryTriggersInfo env) },(head ts))
-
 
 getClassVarName :: Trigger -> MethodName -> [Bind] -> Bind -> String -> (ClassInfo,String)
 getClassVarName _ _ args BindStar _        = ("*","")
@@ -1231,28 +1188,8 @@ getValue uppd = fst . (\(Ok x) -> x) $ runStateT uppd emptyEnv
 getEnvVal :: UpgradePPD a -> Env
 getEnvVal uppd = snd . (\(Ok x) -> x) $ runStateT uppd emptyEnv
 
-getEntryTriggersEnv :: UpgradePPD a -> Map.Map ClassInfo MapTrigger
-getEntryTriggersEnv ppd = let env = CM.execStateT ppd emptyEnv
-                          in case env of
-                             Bad _ -> Map.empty
-                             Ok fs -> entryTriggersInfo fs
-
-getForeachVarsEnv :: UpgradePPD a -> [Id]
-getForeachVarsEnv ppd = let env = CM.execStateT ppd emptyEnv
-                        in case env of
-                           Bad _ -> []
-                           Ok fs -> forsVars fs
-
 getHTNamesEnv :: UpgradePPD a -> [HTName]
 getHTNamesEnv ppd = let env = CM.execStateT ppd emptyEnv
                     in case env of
-                       Bad _ -> []
-                       Ok fs -> htsNames fs
-
-getOldExpTypesEnv :: UpgradePPD a -> OldExprM
-getOldExpTypesEnv ppd = let env = CM.execStateT ppd emptyEnv
-                        in case env of
-                           Bad _ -> Map.empty
-                           Ok fs -> oldExpTypes fs
-
-
+                            Bad _ -> []
+                            Ok fs -> htsNames fs

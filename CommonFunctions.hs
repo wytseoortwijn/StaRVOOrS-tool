@@ -152,6 +152,7 @@ getBindArgs' [BindType t id]        = t ++ " " ++ id
 getBindArgs' ((BindType t id):y:ys) = t ++ " " ++ id ++ "," ++ getBindArgs' (y:ys)
 getBindArgs' _                      = ""
 
+
 getInfoTrigger :: [TriggersInfo] -> Trigger -> HT -> Maybe TriggersInfo
 getInfoTrigger [] _ _          = Nothing
 getInfoTrigger (tinfo:ts) tr c = 
@@ -165,6 +166,7 @@ getInfoTrigger (tinfo:ts) tr c =
          else getInfoTrigger ts tr c
     else getInfoTrigger ts tr c
 
+
 getTriggerDef :: Overloading -> HT -> [TriggersInfo] -> TriggerDef 
 getTriggerDef OverNil c xs = 
  let mnc = methodCN c
@@ -172,8 +174,7 @@ getTriggerDef OverNil c xs =
      tr  = mn ++ "_ppdex"
      mn  = mname mnc
      xs'  = [ tiTrDef tinfo | tinfo <- xs, isInfixOf tr (tiTN tinfo), cl == (tiCI tinfo), tiTrDef tinfo /= Nothing ]
-     xs'' = filter (\ c -> c /= Nothing) xs'
- in case xs'' of
+ in case xs' of
          []     -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
          tdef:_ -> fromJust tdef
 getTriggerDef (Over ts) c xs = 
@@ -182,15 +183,15 @@ getTriggerDef (Over ts) c xs =
      tr   = mn ++ "_ppdex"
      mn   = mname mnc
      xs'  = [ tiTrDef tinfo | tinfo <- xs, isInfixOf tr (tiTN tinfo), cl == (tiCI tinfo), tiTrDef tinfo /= Nothing ]
-     xs'' = filter (\ c -> c /= Nothing) xs'
- in if length xs'' == 1
+ in if length xs' == 1
     then case head xs' of
          Nothing   -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
          Just tdef -> tdef
-    else let xs''' = map fromJust xs''
-         in case [ x | (ts',x) <- zip (map (map getBindTypeType.getCTArgs.compTrigger) xs''') xs''', ts == ts'] of
+    else let xs'' = map fromJust xs'
+         in case [ x | (ts',x) <- zip (map (map getBindTypeType.getCTArgs.compTrigger) xs'') xs'', ts == ts'] of
                  []  -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
                  [x] -> x
+
 
 lookfor :: [(Trigger, [String])] -> Trigger -> [String]
 lookfor [] _     = []
