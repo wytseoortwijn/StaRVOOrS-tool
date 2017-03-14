@@ -13,7 +13,6 @@ import Data.Maybe
 import Data.List
 
 
---TODO: Possible problem when operationalising nested properties
 operationalizeOldResultBind :: UpgradePPD PPDATE -> Map.Map HTName [(String,Type)] -> UpgradePPD PPDATE
 operationalizeOldResultBind ppd oldExprTypesM =
  let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
@@ -302,10 +301,10 @@ splitInQuantifiedExpression s qexpident =
  let xs = splitOnIdentifier qexpident s
  in if (length xs == 1)
     then [Right $ head xs]
-    else let begin = Right $ head xs
+    else let begin = Right $ init $ trim $ head xs
              ys    = map (lookforEnd 0 []) $ tail xs
              zs    = concatMap foo ys
-          in zs
+          in begin:zs
                   where foo (a,b) = [Left a, Right b]
 
 lookforEnd :: Int -> String -> String -> (String ,String)
