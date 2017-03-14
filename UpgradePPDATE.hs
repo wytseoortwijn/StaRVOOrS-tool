@@ -1068,7 +1068,7 @@ lookForAllEntryTriggerArgs env c =
  let trs = allTriggers env
  in do tinfo <- getEntryTriggers (methodCN c) trs
        let args  = map (\(BindType t id) -> Args t id) (tiBinds tinfo)
-       return (getArgsGenMethods (tiTN tinfo, tiCI tinfo ++ " " ++ tiCVar tinfo, args))   
+       return (getArgsGenMethods (tiCI tinfo ++ " " ++ tiCVar tinfo, args))   
 
 getEntryTriggers :: MethodCN -> [TriggersInfo] -> UpgradePPD TriggersInfo
 getEntryTriggers mnc []         = fail $ "Error: Could not find an entry trigger associated to method "
@@ -1088,10 +1088,10 @@ lookForAllExitTriggerArgs env c =
      tr    = getTriggerDef over c (allTriggers env) 
      tinfo = head [ t | t <- allTriggers env , Just tr == tiTrDef t]
      args  = map (\(BindType t id) -> Args t id) (tiBinds tinfo)
- in return (getArgsGenMethods (tiTN tinfo, tiCI tinfo ++ " " ++ tiCVar tinfo, args))
+ in return (getArgsGenMethods (tiCI tinfo ++ " " ++ tiCVar tinfo, args))
 
-getArgsGenMethods :: (Id, String, [Args]) -> (String,String)
-getArgsGenMethods (trn, varClass', args) = 
+getArgsGenMethods :: (String, [Args]) -> (String,String)
+getArgsGenMethods (varClass', args) = 
  let classPost = words $ varClass'
      varClass  = last classPost
      argswt    = map getArgsId args
