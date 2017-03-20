@@ -65,7 +65,7 @@ staticAnalysis' jpath ppd output_add fn flags =
        updateTmpFilesCInvs ppd nulla_add cinv_add
        let consts_jml = JMLGenerator.getHTs ppd
        copyFiles jpath output_add'
-       generateTmpFilesAllConsts ppd consts_jml output_add' (nulla_add ++ "/")
+       generateTmpFilesAllConsts ppd consts_jml output_add' (nulla_add ++ "/")       
        runKeY output_add' output_addr flags
        let xml_add = output_addr ++ "out.xml"
        b <- doesFileExist xml_add

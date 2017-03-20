@@ -60,10 +60,16 @@ data MethodCN   =
      } deriving (Show,Eq)
 
 data Overloading = Over [Type] | OverNil
-  deriving (Eq, Ord, Read)
+  deriving (Ord, Read)
+
+instance Eq Overloading where
+ OverNil == OverNil     = True
+ (Over xs) == (Over ys) = xs == ys
+ _ == _                 = False
 
 instance Show Overloading where
- show OverNil   = ""
+ show OverNil   = "nil"
+ show (Over []) = "()"
  show (Over xs) = "(" ++ foldr1 (\x xs -> x ++ "," ++ xs) xs ++ ")"
 
 data HT = HT

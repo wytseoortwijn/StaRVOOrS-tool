@@ -191,7 +191,7 @@ generateNewTriggers ppd consts =
      put env''
      return ppdate'
 
---Filter methods associated to triggers defined at top-level
+--Filter methods associated to entry triggers defined at top-level
 filterDefEntryTriggers :: [MethodCN] -> [TriggersInfo] -> [MethodCN]
 filterDefEntryTriggers [] _                                = []
 filterDefEntryTriggers (mnc@(MCN ci mn OverNil):mncs) ts   = 
@@ -207,7 +207,7 @@ filterDefEntryTriggers (mnc@(MCN ci mn (Over xs)):mncs) ts =
 createTriggerEntry :: (ClassInfo,MethodName,(String,MethodName,[String],MethodInvocations)) -> Int -> Scope -> TriggersInfo
 createTriggerEntry (cn,mn,(rt,mn',xs,_)) n scope = 
  if (mn == mn')
- then let trnm = mn ++ "_ppden"
+ then let trnm = mn ++ "_ppden"++ (show n)
           nvar = "cv" ++ "_" ++ (show n)
           cn'  = cn ++ " " ++ nvar
           cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words.remGenerics') xs) EVEntry

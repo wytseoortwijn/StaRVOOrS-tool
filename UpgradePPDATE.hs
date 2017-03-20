@@ -216,7 +216,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                                          , compTrigger = ce'
                                                                                          , whereClause = getWhereClause wc
                                                                                          }
-                                                                     put env { allTriggers = TI id'' mn ci cinm EVEntry ((properBind bind) ++bs) (Just tr) scope ov: allTriggers env }
+                                                                     put env { allTriggers = TI id'' mn ci cinm EVEntry bs (Just tr) scope ov: allTriggers env }
                                                                      return tr
                                                                 else fail (err1 ++ s'')
                                        EVExit rs -> let id  = getIdBind bind
@@ -240,7 +240,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                                             , compTrigger = ce'
                                                                                             , whereClause = wc'
                                                                                             }
-                                                                        put env { allTriggers = TI id'' mn ci cinm (EVExit rs) ((properBind bind) ++ bs) (Just tr) scope ov: allTriggers env }
+                                                                        put env { allTriggers = TI id'' mn ci cinm (EVExit rs) bs (Just tr) scope ov: allTriggers env }
                                                                         return tr
                                                                 else fail (err1 ++ s'')
                                        _        -> return TriggerDef { tName = id''
@@ -257,7 +257,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                      }
 
 generateOverloading :: [Bind] -> [Bind] -> Overloading
-generateOverloading bs [] = OverNil
+generateOverloading bs [] = Over []
 generateOverloading bs ms = Over $ map (getTypeForOverLoading bs) (map getIdBind ms)
 
 getTypeForOverLoading :: [Bind] -> Id -> Type
@@ -966,11 +966,7 @@ writePPDHts' (h:hts) =
 
 writePPDMethods :: Methods -> String
 writePPDMethods [] = ""
-writePPDMethods xs =
- "METHODS {\n"
- ++ xs
- ++ "}\n"
-
+writePPDMethods xs = xs
 
 ------------------------
 -- Selector functions --
@@ -1068,7 +1064,7 @@ lookForAllEntryTriggerArgs env c =
  let trs = allTriggers env
  in do tinfo <- getEntryTriggers (methodCN c) trs
        let args  = map (\(BindType t id) -> Args t id) (tiBinds tinfo)
-       return (getArgsGenMethods (tiCI tinfo ++ " " ++ tiCVar tinfo, args))   
+       return (getArgsGenMethods (tiCI tinfo,tiCVar tinfo, args))   
 
 getEntryTriggers :: MethodCN -> [TriggersInfo] -> UpgradePPD TriggersInfo
 getEntryTriggers mnc []         = fail $ "Error: Could not find an entry trigger associated to method "
@@ -1088,23 +1084,22 @@ lookForAllExitTriggerArgs env c =
      tr    = getTriggerDef over c (allTriggers env) 
      tinfo = head [ t | t <- allTriggers env , Just tr == tiTrDef t]
      args  = map (\(BindType t id) -> Args t id) (tiBinds tinfo)
- in return (getArgsGenMethods (tiCI tinfo ++ " " ++ tiCVar tinfo, args))
+ in return (getArgsGenMethods (tiCI tinfo, tiCVar tinfo, args))
 
-getArgsGenMethods :: (String, [Args]) -> (String,String)
-getArgsGenMethods (varClass', args) = 
- let classPost = words $ varClass'
-     varClass  = last classPost
+getArgsGenMethods :: (ClassInfo, String, [Args]) -> (String,String)
+getArgsGenMethods (ci, cvar, args) = 
+ let varClass' = ci ++ " " ++ cvar
      argswt    = map getArgsId args
      argswt'   = addComma argswt
-     argswt''  = if (elem varClass argswt)
+     argswt''  = if (elem cvar argswt) 
                  then argswt'
-                 else varClass ++ "," ++ argswt'
+                 else if null argswt' then cvar else cvar ++ "," ++ argswt'
      flatArgs  = flattenArgs args
-     args'     = if (elem varClass argswt)
+     args'     = if (elem cvar argswt)
                  then flatArgs
                  else if (null flatArgs)
                       then trim varClass'
-                      else (trim varClass')  ++ "," ++ flattenArgs args
+                      else (trim varClass') ++ if null args then "" else "," ++ flattenArgs args
  in (args', argswt'')
 
 getAllTriggers :: Global -> Env -> Triggers

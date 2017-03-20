@@ -182,16 +182,15 @@ getTriggerDef (Over ts) c xs =
      cl   = clinf mnc
      tr   = mn ++ "_ppdex"
      mn   = mname mnc
-     xs'  = [ tiTrDef tinfo | tinfo <- xs, isInfixOf tr (tiTN tinfo), cl == (tiCI tinfo), tiTrDef tinfo /= Nothing ]
+     xs'  = [ tiTrDef tinfo | tinfo <- xs, isInfixOf tr (tiTN tinfo), cl == (tiCI tinfo), tiTrDef tinfo /= Nothing, Over ts == tiOver tinfo ]
  in if length xs' == 1
     then case head xs' of
          Nothing   -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
          Just tdef -> tdef
     else let xs'' = map fromJust xs'
          in case [ x | (ts',x) <- zip (map (map getBindTypeType.getCTArgs.compTrigger) xs'') xs'', ts == ts'] of
-                 []  -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
-                 [x] -> x
-
+                 []   -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
+                 x:xs -> x
 
 lookfor :: [(Trigger, [String])] -> Trigger -> [String]
 lookfor [] _     = []
