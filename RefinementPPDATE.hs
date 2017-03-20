@@ -148,7 +148,7 @@ getGeneratedExTr []       = []
 getGeneratedExTr (tr:trs) = 
   case (compTrigger tr) of
       NormalEvent (BindingVar b) id _ ev' -> 
-                  if (isInfixOf "_ppdex" (tName tr))
+                  if (isInfixOf "_ppdex" (tName tr) && checkArgsOver (args e) (getCTArgs (compTrigger e)) (overl $ methodCN c)) 
                   then case b of
                             BindStar      -> []
                             BindType _ id -> [id]
