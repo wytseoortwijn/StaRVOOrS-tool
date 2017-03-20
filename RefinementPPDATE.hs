@@ -126,7 +126,7 @@ checkMiddleExcluded xss     = xss
 lookupClassVar :: Triggers -> HT -> TriggerVariation -> String
 lookupClassVar trs c ev = 
  let trs' = filterTriggers trs c ev
- in case getGeneratedExTr trs' of
+ in case getGeneratedExTr trs' c of
          []   -> getExTr trs' c ev
          [id] -> id
 
@@ -143,17 +143,17 @@ filterTriggers (e:es) c ev =
               else filterTriggers es c ev
       _                                   -> filterTriggers es c ev
 
-getGeneratedExTr :: Triggers -> [String]
-getGeneratedExTr []       = []
-getGeneratedExTr (tr:trs) = 
+getGeneratedExTr :: Triggers -> HT -> [String]
+getGeneratedExTr [] _       = []
+getGeneratedExTr (tr:trs) c = 
   case (compTrigger tr) of
       NormalEvent (BindingVar b) id _ ev' -> 
-                  if (isInfixOf "_ppdex" (tName tr) && checkArgsOver (args e) (getCTArgs (compTrigger e)) (overl $ methodCN c)) 
+                  if (isInfixOf "_ppdex" (tName tr) && checkArgsOver (args tr) (getCTArgs (compTrigger tr)) (overl $ methodCN c)) 
                   then case b of
                             BindStar      -> []
                             BindType _ id -> [id]
                             BindId id     -> [id]
-                  else getGeneratedExTr trs
+                  else getGeneratedExTr trs c
 
 getExTr :: Triggers -> HT -> TriggerVariation -> String
 getExTr [] _ _      = ""
