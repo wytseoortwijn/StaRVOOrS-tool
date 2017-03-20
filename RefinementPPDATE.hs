@@ -136,8 +136,9 @@ filterTriggers (e:es) c ev =
  case (compTrigger e) of
       NormalEvent (BindingVar b) id _ ev' -> 
            let mn = mname (methodCN c) 
-               ov = overl (methodCN c) 
-           in if (id == mn && compareEV ev ev')
+               ov = overl (methodCN c)
+           in if (id == mn && compareEV ev ev'
+                 && checkArgsOver (args e) (getCTArgs (compTrigger e)) (overl $ methodCN c))
               then e:filterTriggers es c ev
               else filterTriggers es c ev
       _                                   -> filterTriggers es c ev
@@ -159,8 +160,7 @@ getExTr [] _ _      = ""
 getExTr (e:es) c ev = 
  case (compTrigger e) of
       NormalEvent (BindingVar b) id _ ev' -> 
-                  if (id == mname (methodCN c) && compareEV ev ev' 
-                     && checkArgsOver (args e) (getCTArgs (compTrigger e)) (overl $ methodCN c))
+                  if (id == mname (methodCN c) && compareEV ev ev')
                   then case b of
                             BindStar      -> ""
                             BindType _ id -> id
