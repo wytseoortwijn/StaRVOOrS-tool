@@ -691,22 +691,22 @@ getCInv (Abs.CI cn jml) =
 
 genHTs :: Abs.HTriples -> Imports -> UpgradePPD HTriples
 genHTs Abs.HTempty _          = return []
-genHTs (Abs.HTriples cs) imps = sequence $ map (getHT imps) cs
+genHTs (Abs.HTriples cs) imps = checkOverl $ sequence $ map (getHT imps) cs
 
 getHT :: Imports -> Abs.HT -> UpgradePPD HT
 getHT imps (Abs.HT id pre' method post' (Abs.Assignable ass)) =
- do let mCN = MCN { clinf = getMethodClassInfo method, mname = getMethodMethodName method, overl = getMethodOverloading method }
+ do let mcn = MCN { clinf = getMethodClassInfo method, mname = getMethodMethodName method, overl = getMethodOverloading method }
     env <- get
-    case checkImports (clinf mCN) imps of
-         []     -> fail $ "Error: Hoare triple " ++ getIdAbs id ++ " is associated to class " ++ clinf mCN ++ ", but the class is not imported.\n"
+    case checkImports (clinf mcn) imps of
+         []     -> fail $ "Error: Hoare triple " ++ getIdAbs id ++ " is associated to class " ++ clinf mcn ++ ", but the class is not imported.\n"
          (x:xs) -> if (not.null) xs 
-                   then fail $ "Error: Multiple imports for class " ++ clinf mCN
+                   then fail $ "Error: Multiple imports for class " ++ clinf mcn
                    else do let cns = htsNames env
                            let ys  = map checkJML $ [getPre pre',getPost post'] ++ (map assig ass)
                            joinErrorJML ys (getIdAbs id)
                            put env { htsNames = (getIdAbs id):(htsNames env) }
                            return (HT { htName   = getIdAbs id
-                                  , methodCN     = mCN
+                                  , methodCN     = mcn
                                   , pre          = filter (/='\n') $ getJMLExp $ getPre pre'
                                   , post         = filter (/='\n') $ getJMLExp $ getPost post'
                                   , assignable   = joinAssignable $ map (getJMLExp.assig) ass
@@ -749,6 +749,29 @@ checkImports cn (Import s:xs) =
  in if (trim $ last ys) == cn
     then (Import s):checkImports cn xs
     else checkImports cn xs
+
+checkOverl :: UpgradePPD HTriples -> UpgradePPD HTriples
+checkOverl hts = 
+ case runStateT hts emptyEnv of
+      Bad s         -> fail s
+      Ok (hts',env) -> let ys  = zip (map htName hts') (map methodCN hts')
+                           ys' = [(htn,mnc') | (htn,mnc') <- ys, overl mnc' /= OverNil]
+                       in if null ys'
+                          then hts
+                          else case runWriter $ sequence $ map (checkOV ys') [p | p <- ys, not (elem p ys')] of
+                                    (b,s) -> if and b
+                                             then hts
+                                             else fail s
+
+checkOV :: [(HTName,MethodCN)] -> (HTName,MethodCN) -> Writer String Bool
+checkOV xs (htn,mnc) =
+ let ys = [ mnc' | (_,mnc') <- xs, mname mnc == mname mnc', clinf mnc == clinf mnc']
+ in if null ys
+    then return True
+    else do tell $ "Error: Type missing for the method " ++ mname mnc ++ " of the class "
+                   ++ clinf mnc ++ " in the Hoare triple " ++ htn ++ ".\n"
+            return False
+    
 
 -------------
 -- Methods --
@@ -1113,35 +1136,35 @@ getAllTriggers (Global (Ctxt vars ies trigs prop fors)) env =
 --------------------------------------------------------------------
 
 data Env = Env
- { forsVars            :: [Id] --foreach bounded variable names 
- , allTriggers         :: [TriggersInfo]
- , htsNames            :: [HTName]
- , varsInFiles         :: [(String, ClassInfo, [(Type, Id)])]
- , varsInPPD           :: Variables
- , methodsInFiles      :: [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])] --[(path_to_class,class_name,[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body)])]
- , oldExpTypes         :: OldExprM
- , tempsId             :: [Id]
- , triggersInTemps     :: [Trigger] --is used to check whether the triggers in the transitions of the templates are  
-                                    --defined in the triggers of the ppDATE
- , propInForeach       :: [(PropertyName, ClassInfo, String)]-- is used to avoid ambigous reference to variable id in foreaches
- , actes               :: [Id] --list of all defined action events
+ { forsVars        :: [Id] --foreach bounded variable names 
+ , allTriggers     :: [TriggersInfo]
+ , htsNames        :: [HTName]
+ , varsInFiles     :: [(String, ClassInfo, [(Type, Id)])]
+ , varsInPPD       :: Variables
+ , methodsInFiles  :: [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])] --[(path_to_class,class_name,[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body)])]
+ , oldExpTypes     :: OldExprM
+ , tempsId         :: [Id]
+ , triggersInTemps :: [Trigger] --is used to check whether the triggers in the transitions of the templates are  
+                                --defined in the triggers of the ppDATE
+ , propInForeach   :: [(PropertyName, ClassInfo, String)]-- is used to avoid ambigous reference to variable id in foreaches
+ , actes           :: [Id] --list of all defined action events
  }
   deriving (Show)
 
 type UpgradePPD a = CM.StateT Env Err a
 
 emptyEnv :: Env
-emptyEnv = Env { forsVars            = []
-               , allTriggers         = []
-               , htsNames            = []
-               , varsInFiles         = []
-               , varsInPPD           = []
-               , methodsInFiles      = []
-               , oldExpTypes         = Map.empty
-               , tempsId             = []
-               , triggersInTemps     = []
-               , propInForeach       = []
-               , actes               = []
+emptyEnv = Env { forsVars        = []
+               , allTriggers     = []
+               , htsNames        = []
+               , varsInFiles     = []
+               , varsInPPD       = []
+               , methodsInFiles  = []
+               , oldExpTypes     = Map.empty
+               , tempsId         = []
+               , triggersInTemps = []
+               , propInForeach   = []
+               , actes           = []
                }
 
 getClassVarName :: Trigger -> MethodName -> [Bind] -> Bind -> String -> (ClassInfo,String)
