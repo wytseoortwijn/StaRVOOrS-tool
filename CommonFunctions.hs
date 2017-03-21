@@ -52,14 +52,17 @@ checkIfParseErrors es = let (ls, rs) = partitionEithers es
                            then Left ls
                            else Right rs
 
-lookForEntryTrigger :: [TriggersInfo] -> MethodName -> ClassInfo -> [Trigger]
-lookForEntryTrigger [] _ _                         = []
-lookForEntryTrigger (tinfo:es) mn ci  = 
-    case (tiTrvar tinfo) of
-        EVEntry -> if (mn == (tiMN tinfo) && ci == (tiCI tinfo))
-                   then (tiTN tinfo):lookForEntryTrigger es mn ci
-                   else lookForEntryTrigger es mn ci
-        _       -> lookForEntryTrigger es mn ci
+lookForEntryTrigger :: [TriggersInfo] -> MethodCN -> [Trigger]
+lookForEntryTrigger [] _           = []
+lookForEntryTrigger (tinfo:es) mnc = 
+ let mn = mname mnc
+     ci = clinf mnc
+     ov = overl mnc
+ in case (tiTrvar tinfo) of
+        EVEntry -> if (mn == (tiMN tinfo) && ci == (tiCI tinfo) && (ov == (tiOver tinfo) || ov == OverNil))
+                   then (tiTN tinfo):lookForEntryTrigger es mnc
+                   else lookForEntryTrigger es mnc
+        _       -> lookForEntryTrigger es mnc
 
 openingBracket :: String -> Bool
 openingBracket "" = False

@@ -298,9 +298,8 @@ accumTransitions (cn:cns) ns consts ts env pn =
 generateTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> (Transitions,Transitions,Transitions)
 generateTransitions p ns cs ts env pn = 
  let c             = lookForHT p cs ns
-     cl            = clinf $ methodCN c
      mn            = mname $ methodCN c
-     entrs         = lookForEntryTrigger (allTriggers env) mn cl
+     entrs         = lookForEntryTrigger (allTriggers env) (methodCN c)
      entrs'        = [tr | tr <- entrs, not(isInfixOf (mn++"_ppden") tr)]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
  in if null entrs
@@ -391,9 +390,8 @@ avoidTriviallyFalseCond = filter (check.trim.cond.arrow)
 instrumentTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
 instrumentTransitions p ns cs ts env pn = 
  let c             = lookForHT p cs ns
-     cl            = clinf $ methodCN c
      mn            = mname $ methodCN c
-     entrs         = lookForEntryTrigger (allTriggers env) mn cl
+     entrs         = lookForEntryTrigger (allTriggers env) (methodCN c)
      entrs'        = [tr | tr <- entrs, not(isInfixOf (mn++"_ppden") tr)]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
  in if null entrs
