@@ -1071,7 +1071,7 @@ getEntryTriggers mnc []         = fail $ "Error: Could not find an entry trigger
                                          ++ mname mnc ++ show (overl mnc) ++ " of the class " ++ clinf mnc ++ ".\n"
 getEntryTriggers mnc (tinfo:ts) =
  if (mname mnc) == (tiMN tinfo) && (clinf mnc) == (tiCI tinfo) 
-    && ((tiOver tinfo) == overl mnc || overl mnc == OverNil)
+    && (cmpOverloading (overl mnc) (tiOver tinfo))
     && tiTrvar tinfo == EVEntry
  then return tinfo
  else getEntryTriggers mnc ts

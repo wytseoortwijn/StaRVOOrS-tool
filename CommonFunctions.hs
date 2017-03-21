@@ -59,10 +59,13 @@ lookForEntryTrigger (tinfo:es) mnc =
      ci = clinf mnc
      ov = overl mnc
  in case (tiTrvar tinfo) of
-        EVEntry -> if (mn == (tiMN tinfo) && ci == (tiCI tinfo) && (ov == (tiOver tinfo) || ov == OverNil))
+        EVEntry -> if (mn == (tiMN tinfo) && ci == (tiCI tinfo) && (cmpOverloading ov (tiOver tinfo) || ov == OverNil))
                    then (tiTN tinfo):lookForEntryTrigger es mnc
                    else lookForEntryTrigger es mnc
         _       -> lookForEntryTrigger es mnc
+
+cmpOverloading :: Overloading -> Overloading -> Bool
+cmpOverloading ov ov' = ov == ov' || ov == OverNil
 
 openingBracket :: String -> Bool
 openingBracket "" = False
@@ -164,7 +167,7 @@ getInfoTrigger (tinfo:ts) tr c =
      mn  = mname mnc
      ov  = overl mnc
  in if (tiTN tinfo == tr) && (tiCI tinfo == cl) && (tiMN tinfo == mn)
-    then if (tiOver tinfo == ov || ov == OverNil)
+    then if (cmpOverloading ov (tiOver tinfo))
          then Just tinfo
          else getInfoTrigger ts tr c
     else getInfoTrigger ts tr c
