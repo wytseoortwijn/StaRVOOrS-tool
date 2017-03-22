@@ -213,10 +213,8 @@ constructorOldExpr ((t,exp):xs) = "    " ++ "this." ++ exp ++ " = " ++ exp ++ ";
 
 messagesFileGen :: FilePath -> Env -> IO [()]
 messagesFileGen output_add env = 
- let oldExpM  = oldExpTypes env
-     cns      = map ("Old_"++) [x | (x,y) <- Map.toList oldExpM, (not.null) y]
-     files    = (output_add ++ "MessagesPPD.java") : map (\s -> output_add ++ "Messages" ++ s ++ ".java") cns
-     xs       = messagesGen : map messageOldExpGen cns
+ let files    = [(output_add ++ "MessagesPPD.java") , (output_add ++ "MessagesOld.java")]
+     xs       = [messagesGen , messageOldExpGen]
  in sequence $ map (uncurry writeFile) $ zip files xs
     
 messagesGen :: String
@@ -232,20 +230,19 @@ messagesGen =
   ++ "  }\n"
   ++ "}\n"
  
-messageOldExpGen :: String -> String
-messageOldExpGen t =
+messageOldExpGen :: String
+messageOldExpGen =
  "package ppArtifacts;\n\n"
-  ++ "public class Messages" ++ t ++ " extends MessagesPPD  {\n\n"
-  ++ "  public " ++ t ++ " oldExpr; \n\n"
-  ++ "  public Messages" ++ t ++ " (Integer id, " ++ t ++ " oldExpr) { \n"
+  ++ "public class MessagesOld<T> extends MessagesPPD  {\n\n"
+  ++ "  public T oldExpr; \n\n"
+  ++ "  public MessagesOld (Integer id, T oldExpr) { \n"
   ++ "     super(id); \n" 
   ++ "     this.oldExpr = oldExpr; \n" 
   ++ "  }\n\n"  
-  ++ "  public static " ++ t ++ " getOldExpr(Messages" ++ t ++ " m) {\n"
-  ++ "     return m.oldExpr;\n"
+  ++ "  public T getOldExpr() {\n"
+  ++ "     return oldExpr;\n"
   ++ "  }\n"
   ++ "}\n"
-
 
 ------------------------------------
 -- Cloning reference type objects --

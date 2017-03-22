@@ -23,15 +23,13 @@ makeReplicateAutomaton c n env =
 
 makeTransitions :: HT -> Int -> Env -> Transitions
 makeTransitions c n env =
-   let mn      = mname $ methodCN c
-       cl      = clinf $ methodCN c
-       trig    = tName $ getTriggerDef (overl $ methodCN c) c (allTriggers env) 
+   let trig    = tName $ getTriggerDef (overl $ methodCN c) c (allTriggers env) 
        bs      = snd $ getValue $ lookForAllExitTriggerArgs env c
        cn      = htName c
        oldExpM = oldExpTypes env
        checkId = "id.equals(idAuxPPD) && "
        zs      = if getOldExpr oldExpM cn == "" then "" else ",oldExpAux"
-       nvar    = if null zs then "" else "CopyUtilsPPD.copy(MessagesOld_" ++ cn ++ ".getOldExpr(msgPPD),oldExpAux); "
+       nvar    = if null zs then "" else "CopyUtilsPPD.copy(msgPPD.getOldExpr(),oldExpAux); "
        idle_to_postok = Arrow trig (checkId ++ "HoareTriplesPPD." ++ cn ++ "_post(" ++ bs ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_postOK \\n \");")
        idle_to_bad    = Arrow trig (checkId ++ "!HoareTriplesPPD." ++ cn ++ "_post(" ++ bs ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_bad \\n \");")
        start_to_idle  = Arrow ("rh" ++ show n) "" ("CopyUtilsPPD.copy(MessagesPPD.getId(msgPPD),idAuxPPD) ; " ++ nvar ++ "System.out.println(\"    " ++ cn ++ "_preOK \\n\");")
@@ -53,14 +51,12 @@ generateRAOptimised c n env =
 
 makeTransitions' :: HT -> Int -> Env -> Transitions
 makeTransitions' c n env =
-   let mn      = mname $ methodCN c
-       cl      = clinf $ methodCN c
-       trig    = tName $ getTriggerDef (overl $ methodCN c) c (allTriggers env) 
+   let trig    = tName $ getTriggerDef (overl $ methodCN c) c (allTriggers env) 
        bs      = snd $ getValue $ lookForAllExitTriggerArgs env c
        cn      = htName c
        oldExpM = oldExpTypes env
        zs      = if getOldExpr oldExpM cn == "" then "" else ",oldExpAux"
-       nvar    = if null zs then "" else "CopyUtilsPPD.copy(MessagesOld_" ++ cn ++ ".getOldExpr(msgPPD),oldExpAux); "
+       nvar    = if null zs then "" else "CopyUtilsPPD.copy(msgPPD.getOldExpr(),oldExpAux); "
        idle_to_postok = Arrow trig ("HoareTriplesPPD." ++ cn ++ "_post(" ++ bs ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_postOK \\n \");")
        idle_to_bad    = Arrow trig ("!HoareTriplesPPD." ++ cn ++ "_post(" ++ bs ++ zs ++ ")") ("System.out.println(\"    " ++ cn ++ "_bad \\n \");")
        start_to_idle  = Arrow ("rh" ++ show n) "" (nvar ++ "System.out.println(\"    " ++ cn ++ "_preOK \\n\");")
