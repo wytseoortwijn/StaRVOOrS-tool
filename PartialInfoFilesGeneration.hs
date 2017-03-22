@@ -213,9 +213,7 @@ constructorOldExpr ((t,exp):xs) = "    " ++ "this." ++ exp ++ " = " ++ exp ++ ";
 
 messagesFileGen :: FilePath -> Env -> IO [()]
 messagesFileGen output_add env = 
- let oldExpM  = oldExpTypes env
-     cns      = [x | (x,y) <- Map.toList oldExpM, (not.null) y]
-     files    = [(output_add ++ "MessagesPPD.java") , (output_add ++ "MessagesOld.java")]
+ let files    = [(output_add ++ "MessagesPPD.java") , (output_add ++ "MessagesOld.java")]
      xs       = [messagesGen , messageOldExpGen]
  in sequence $ map (uncurry writeFile) $ zip files xs
     
