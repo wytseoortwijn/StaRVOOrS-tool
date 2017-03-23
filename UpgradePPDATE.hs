@@ -5,7 +5,7 @@ import CommonFunctions
 import Control.Monad
 import Control.Monad.Writer
 import qualified Control.Monad.State as CM
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import qualified AbsPpdate as Abs
 import qualified Absactions as Act
 import ErrM
@@ -509,7 +509,8 @@ getArrow (Abs.Arrow id mark (Abs.Cond2 cond)) env =
              Ok (Act.Actions ac) -> 
                       case runWriter $ sequence (map (\a -> checkTempInCreate a env) ac) of
                            (ac',s') -> do tell s'
-                                          return $ Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, action = foldr (\ x xs -> x ++ "; " ++ xs) [] $ map PrintAct.printTree ac' }
+                                          return $ Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, 
+                                                           action = foldr (\ x xs -> x ++ "; " ++ xs) [] $ map PrintAct.printTree ac' }
       
 
 addQuestionMark :: Abs.Actmark -> String

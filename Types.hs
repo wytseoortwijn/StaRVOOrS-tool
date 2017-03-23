@@ -282,6 +282,8 @@ data TriggersInfo =
     , tiOver    :: Overloading
     } deriving (Show,Eq)
 
+type Channel = String
+
 --------------
 -- PROPERTY --
 --------------
