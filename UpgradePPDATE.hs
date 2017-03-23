@@ -7,10 +7,10 @@ import Control.Monad.Writer
 import qualified Control.Monad.State as CM
 import qualified Data.Map.Strict as Map
 import qualified AbsPpdate as Abs
-import qualified Absactions as Act
+import qualified AbsActions as Act
 import ErrM
 import PrintPpdate
-import qualified Printactions as PrintAct
+import qualified PrintActions as PrintAct
 import qualified PrintJml as PrintJML
 import Parser
 import qualified ParserAct as ParAct

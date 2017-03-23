@@ -1,6 +1,6 @@
 module TranslatorActions(translateAct) where
 
-import Absactions
+import AbsActions
 
 
 translateAct :: Actions -> Actions

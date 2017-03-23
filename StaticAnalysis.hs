@@ -22,7 +22,7 @@ import System.FilePath
 import qualified Data.Map as Map
 import TypeInferenceXml
 import DL2JML
-import qualified Printactions as PrintAct
+import qualified PrintActions as PrintAct
 import qualified ParserAct as ParAct
 import TranslatorActions
 import System.Exit
