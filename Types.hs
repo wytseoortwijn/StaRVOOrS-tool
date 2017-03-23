@@ -174,6 +174,10 @@ data ForId = ForId Id deriving (Eq,Show,Read)
 --Type used to know where a trigger is defined
 data Scope = TopLevel | InFor ForId | InTemp Id deriving (Eq,Show,Read)
 
+tempScope :: Scope -> Bool
+tempScope (InTemp _) = True
+tempScope _          = False
+
 data Args =
  Args { getArgsType :: Type
       , getArgsId :: Id

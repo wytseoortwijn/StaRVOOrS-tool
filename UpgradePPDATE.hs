@@ -174,9 +174,9 @@ getTrigger' :: Scope -> Abs.Trigger -> UpgradePPD TriggerDef
 getTrigger' scope (Abs.Trigger id binds ce wc) =
  do env  <- get
     let id'' = getIdAbs id
-    let xs   = [ tiTN x | x <- allTriggers env, id'' == tiTN x ]
+    let xs   = [ x | x <- allTriggers env, id'' == tiTN x, tiScope x == scope ]
     let err  = if (not.null) xs
-               then ("Error: Multiple definitions for trigger " ++ id'' ++ ".\n") 
+               then "Error: Multiple definitions for trigger " ++ id'' ++ ".\n" ++ show scope ++ "\n" 
                else ""
     do case runWriter (getBindsArgs binds) of
          (bs, s) ->
@@ -202,7 +202,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                        else
                                                          case runWriter ((checkAllArgs argss allArgs bind)) of
                                                           (b,zs) ->
-                                                            case runWriter (checkSpecialCases b mn bind bs [] zs id'' env) of 
+                                                            case runWriter (checkSpecialCases b mn bind bs [] zs id'' env scope) of 
                                                              (b',s'') -> 
                                                                 if b' then
                                                                   if (not.null) err1 then fail err1 else
@@ -210,7 +210,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                                  then show bind
                                                                                  else s''
                                                                      let ov = generateOverloading bs (getCTArgs ce')
-                                                                     let (ci,cinm) = getClassVarName id'' mn bs bind s''
+                                                                     (ci,cinm) <- getClassVarName id'' mn bs bind s'' scope
                                                                      let tr = TriggerDef { tName = id''
                                                                                          , args  = bs
                                                                                          , compTrigger = ce'
@@ -229,11 +229,11 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                        else
                                                         case runWriter ((checkAllArgs argss allArgs bind)) of
                                                           (b,zs) ->
-                                                            case runWriter (checkSpecialCases b mn bind bs rs zs id'' env) of 
+                                                            case runWriter (checkSpecialCases b mn bind bs rs zs id'' env scope) of 
                                                               (b',s'') -> 
                                                                 if (b' && (checkRetVar rs argss))
                                                                 then if (not.null) err1 then fail err1 else
-                                                                     do let (ci,cinm) = getClassVarName id'' mn bs bind s''
+                                                                     do (ci,cinm) <- getClassVarName id'' mn bs bind s'' scope
                                                                         let ov = generateOverloading bs (getCTArgs ce')
                                                                         let tr = TriggerDef { tName = id''
                                                                                             , args  = bs
@@ -265,8 +265,8 @@ getTypeForOverLoading [] _                     = ""
 getTypeForOverLoading ((BindType t id):bs) id' = if id == id' then t else getTypeForOverLoading bs id'
 
 --Method handling the special cases of the use of new and channels
-checkSpecialCases :: Bool -> MethodName -> Bind -> [Bind] -> [Bind] -> [String] -> Trigger -> Env -> Writer String Bool
-checkSpecialCases b mn bind bs rs zs id env = 
+checkSpecialCases :: Bool -> MethodName -> Bind -> [Bind] -> [Bind] -> [String] -> Trigger -> Env -> Scope -> Writer String Bool
+checkSpecialCases b mn bind bs rs zs id env scope = 
  if b
  then return b
  else case runWriter (checkMNforNew mn bind bs rs id zs) of
@@ -274,7 +274,10 @@ checkSpecialCases b mn bind bs rs zs id env =
            (False,s) -> if null s
                         then case runWriter (checkForChannel bind env) of
                                   (True,s)  -> writer (True,s)
-                                  (False,_) -> fail $ "Error: Trigger declaration [" ++ id ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n"                             
+                                  (False,s) -> if tempScope scope
+                                               then writer (True,s)
+                                               else fail $ "Error: Trigger declaration [" ++ id ++ "] uses wrong argument(s) [" 
+                                                           ++ addComma zs ++ "] in the method component.\n"                             
                         else fail s
 
 --Method handling new
@@ -363,10 +366,10 @@ getCompTrigger ce =
                                  return (OnlyIdPar id')
 
 getCompTriggers :: Abs.CompoundTrigger -> Writer String CompoundTrigger
-getCompTriggers (Abs.Collection (Abs.CECollection esl)) = do
-                                                           let xs = map getCompTrigger esl
-                                                           ce <- sequence xs
-                                                           return (Collection (CECollection ce))
+getCompTriggers (Abs.Collection (Abs.CECollection esl)) = 
+ do let xs = map getCompTrigger esl
+    ce <- sequence xs
+    return (Collection (CECollection ce))
 getCompTriggers ce                                      = getCompTrigger ce
 
 --Checks if the arguments in the triggers have the right form
@@ -380,7 +383,7 @@ getBindsArgs (b:bs) =
                        _                 -> do tell (mAppend (printTree b) s)
                                                return bs'
 
---Checks if the arguments in the method call on trigger have the right form
+--Checks if the arguments in the method call on a trigger have the right form
 getBindsBody :: [Abs.Bind] -> Writer String [Bind]
 getBindsBody []     = return []
 getBindsBody (b:bs) =
@@ -1167,15 +1170,17 @@ emptyEnv = Env { forsVars        = []
                , actes           = []
                }
 
-getClassVarName :: Trigger -> MethodName -> [Bind] -> Bind -> String -> (ClassInfo,String)
-getClassVarName _ _ args BindStar _        = ("*","")
-getClassVarName _ _ args (BindType t id) _ = (t,id)
-getClassVarName tr mn args (BindId id) s   = 
+getClassVarName :: Trigger -> MethodName -> [Bind] -> Bind -> String -> Scope -> UpgradePPD (ClassInfo,String)
+getClassVarName _ _ args BindStar _ _          = return ("*","")
+getClassVarName _ _ args (BindType t id) _ _   = return (t,id)
+getClassVarName tr mn args (BindId id) s scope = 
  let ts' = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
      ts  = if (null ts') then prepareValUpd mn s id s else ts'
  in if (length ts /= 1)
-    then error $ "The trigger " ++ tr ++ " does not include a class variable declaration.\n" 
-    else (head ts,id)
+    then if tempScope scope
+         then return ("",id)
+         else fail $ "The trigger " ++ tr ++ " does not include a class variable declaration.\n" 
+    else return (head ts,id)
  
 prepareValUpd :: MethodName -> String -> String -> String -> [String]
 prepareValUpd mn s id chan = 
