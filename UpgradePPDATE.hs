@@ -34,7 +34,7 @@ upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
                     Bad s             -> fail s
                     Ok (temps',env') ->
                        case runStateT (genGlobal global) env' of
-                            Bad s              -> fail $ s ++ duplicateHT dcs
+                            Bad s               -> fail $ s ++ duplicateHT dcs
                             Ok (global', env'') ->  
                                let trs     = map tiTN $ allTriggers env''
                                    noneTrs = [x | x <- triggersInTemps env'', not $ elem x trs] 
@@ -62,7 +62,7 @@ genImports (Abs.Imports imps) =
 
 genGlobal :: Abs.Global -> UpgradePPD Global
 genGlobal (Abs.Global ctxt) =
- do ctxt' <- getCtxt ctxt TopLevel
+ do ctxt' <- getCtxt ctxt TopLevel    
     return (Global ctxt')
 
 -- Context --
@@ -489,8 +489,8 @@ getTransition' id env (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) 
  case runWriter (getArrow ar env) of
       (xs,s) -> do let err = "Error: Parsing error in an action of a transition from state " ++ getIdAbs q1 ++ " to state " 
                              ++ getIdAbs q2 ++ " in property " ++ id ++ ".\n"
-                   let s' = if null s then "" else err
-                   tell s'                   
+                   let s' = if null s then "" else err ++ s
+                   tell s'                  
                    return (Transition { fromState = getIdAbs q1
                                       , arrow = xs
                                       , toState = getIdAbs q2
@@ -520,9 +520,9 @@ addQuestionMark Abs.ActMark     = "?"
 checkTempInCreate :: Act.Action -> Env -> Writer String Act.Action
 checkTempInCreate ac@(Act.ActCreate (Act.Temp (Act.IdAct id) ) _) env = 
  let tmpids = tempsId env
- in if elem id tmpids
-    then do tell $ "Error: Template " ++ id ++ ", which is used in an action create does not exist.\n"
-            return Act.ActSkip
+ in if not (elem id tmpids)
+    then do tell $ "Template " ++ id ++ ", which is used in an action create does not exist.\n"
+            return ac
     else return ac
 checkTempInCreate (Act.ActCond conds act) env = 
  case runWriter $ checkTempInCreate act env of
