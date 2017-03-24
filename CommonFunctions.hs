@@ -219,6 +219,16 @@ getImports :: Imports -> String
 getImports []            = ""
 getImports (Import s:xs) = "import " ++ s ++ ";\n" ++ getImports xs
 
+filterRefTypes :: [Args] -> [Args]
+filterRefTypes []         = []
+filterRefTypes (arg:args) = 
+ case getArgsType arg of
+      "Action"     -> filterRefTypes args
+      "Condition"  -> filterRefTypes args
+      "Trigger"    -> filterRefTypes args
+      "MethodName" -> filterRefTypes args
+      _            -> arg:filterRefTypes args
+
 ---------------------------------------
 -- Manipulating the parsed .xml file --
 ---------------------------------------

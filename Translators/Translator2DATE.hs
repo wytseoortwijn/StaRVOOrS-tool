@@ -10,7 +10,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.List
 import Language.Java.Syntax hiding(VarDecl)
-
+import qualified AbsActions as Act
 
 translate :: UpgradePPD PPDATE -> FilePath -> IO ()
 translate ppd fpath =
@@ -52,15 +52,14 @@ writeGlobal ppdate env =
      prop   = property global
      fors   = foreaches global         
      temps  = templatesGet ppdate            
- in "GLOBAL {\n\n"
-    ++ writeVariables vars consts acts (allCreateAct env)
+ in "GLOBAL {\n\n" ++ writeVariables vars consts acts (allCreateAct env)
     ++ writeTriggers trs consts acts env
     ++ writeProperties prop consts env
     ++ writeForeach fors consts env
     ++ generateReplicatedAutomata consts trs env  
     ++ writeTemplates temps env
     ++ "}\n" 
-
+ 
 ---------------
 -- Variables --
 ---------------
@@ -594,9 +593,40 @@ generatePropNonRec c n es env =
 ---------------
 
 writeTemplates :: Templates -> Env -> String
-writeTemplates TempNil _       = ""
-writeTemplates (Temp tmps) env = concatMap generateRAtmp tmps
+writeTemplates TempNil _        = ""
+writeTemplates (Temp temps) env = 
+ let creates = removeDuplicates $ allCreateAct env
+     skell   = map generateRAtmp temps
+     xs      = [ instantiateTemp for id args ch | (id,args,for) <- skell , (id',_,ch,_) <- creates, id == id' ] 
+ in writeForeach xs [] env
 
-generateRAtmp :: Template -> String
-generateRAtmp temp = ""
+generateRAtmp :: Template -> (Id, [Args], Foreach)
+generateRAtmp temp = (tempId temp, tempBinds temp, Foreach (filterRefTypes $ tempBinds temp) (generateCtxtForTemp temp) (ForId (tempId temp)))
 
+generateCtxtForTemp :: Template -> Context
+generateCtxtForTemp temp = Ctxt (tempVars temp) (tempActEvents temp) (tempTriggers temp) (tempProp temp) []
+
+instantiateTemp :: Foreach -> Id -> [Args] -> Channel -> Foreach
+instantiateTemp for id args ch = 
+ let ctxt   = getCtxtForeach for 
+     ctxt'  = updateCtxtTrs ctxt ((genTriggerForCreate id ch args):triggers ctxt)
+     ctxt'' = updateCtxtProps ctxt' (instantiateProp (property ctxt) args ch)
+ in Foreach (getArgsForeach for) ctxt'' (ForId (show (getIdForeach for) ++ ch))
+
+instantiateProp :: Property -> [Args] -> Channel -> Property
+instantiateProp PNIL _ _                              = PNIL
+instantiateProp (Property id sts trans props) args ch =  
+ let sts'   = addNewInitState sts
+     trans' = (Transition "start" (Arrow ("r"++ch) "" "") (head $ map getNameState $ getStarting sts)):trans
+ in Property (id++"_"++ch) sts' trans' props
+
+genTriggerForCreate :: Id -> Channel -> [Args] -> TriggerDef
+genTriggerForCreate id ch args = 
+ let tr    = "r"++ch
+     args' = BindType ("Tmp_"++id) "obj"
+     ce    = NormalEvent (BindingVar (BindId ch)) "receive" [BindId "obj"] EVEntry
+     w     = concat [ getArgsId arg ++ " = obj." ++ getArgsId arg ++ "; " | arg <- filterRefTypes args ] 
+ in TriggerDef tr [args'] ce w
+
+addNewInitState :: States -> States
+addNewInitState (States start accep bad norm) = States [State "start" InitNil []] accep bad (norm++start)

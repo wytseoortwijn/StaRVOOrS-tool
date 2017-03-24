@@ -170,7 +170,10 @@ data Foreach =
 updCtxtForeach :: Foreach -> Context -> Foreach
 updCtxtForeach (Foreach args ctxt id) ctxt' = Foreach args ctxt' id
 
-data ForId = ForId Id deriving (Eq,Show,Read)
+data ForId = ForId Id deriving (Eq,Read)
+
+instance Show ForId where
+ show (ForId id) = id
 
 --Type used to know where a trigger is defined
 data Scope = TopLevel | InFor ForId | InTemp Id deriving (Eq,Show,Read)
@@ -304,6 +307,9 @@ type PropertyName = String
 type NameState = String
 
 data State = State NameState InitialCode [HTName] deriving (Eq,Read)
+
+getNameState :: State -> NameState
+getNameState (State nm _ _) = nm
 
 instance Show State where
  show (State ns initc hts) = ns ++ show initc ++ foo hts ++ "; "

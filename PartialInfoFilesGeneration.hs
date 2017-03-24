@@ -314,16 +314,6 @@ tempGen imps temp =
     ++ "  }\n\n"
     ++ "}\n", nameClass ++ ".java") 
 
-filterRefTypes :: [Args] -> [Args]
-filterRefTypes []         = []
-filterRefTypes (arg:args) = 
- case getArgsType arg of
-      "Action"     -> filterRefTypes args
-      "Condition"  -> filterRefTypes args
-      "Trigger"    -> filterRefTypes args
-      "MethodName" -> filterRefTypes args
-      _            -> arg:filterRefTypes args
-
 varDeclTemp :: [Args] -> String
 varDeclTemp []       = "\n"
 varDeclTemp (arg:xs) = 

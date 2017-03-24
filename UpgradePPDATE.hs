@@ -728,7 +728,8 @@ getHT imps (Abs.HT id pre' method post' (Abs.Assignable ass)) =
  do let mcn = MCN { clinf = getMethodClassInfo method, mname = getMethodMethodName method, overl = getMethodOverloading method }
     env <- get
     case checkImports (clinf mcn) imps of
-         []     -> fail $ "Error: Hoare triple " ++ getIdAbs id ++ " is associated to class " ++ clinf mcn ++ ", but the class is not imported.\n"
+         []     -> fail $ "Error: Hoare triple " ++ getIdAbs id ++ " is associated to class " 
+                          ++ clinf mcn ++ ", but the class is not imported.\n"
          (x:xs) -> if (not.null) xs 
                    then fail $ "Error: Multiple imports for class " ++ clinf mcn
                    else do let cns = htsNames env
@@ -1171,7 +1172,8 @@ data Env = Env
  , htsNames        :: [HTName]
  , varsInFiles     :: [(String, ClassInfo, [(Type, Id)])]
  , varsInPPD       :: Variables
- , methodsInFiles  :: [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])] --[(path_to_class,class_name,[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body)])]
+ , methodsInFiles  :: [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])]
+                      --[(path_to_class,class_name,[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body)])]
  , oldExpTypes     :: OldExprM
  , tempsInfo       :: [(Id,[Args])]
  , triggersInTemps :: [Trigger] --is used to check whether the triggers in the transitions of the templates are  
