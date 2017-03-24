@@ -46,7 +46,11 @@ data Type = TypeNil | Type IdAct
 data Template = Temp IdAct
   deriving (Eq, Ord, Show, Read)
 
-data Args = ArgsId IdAct | ArgsS String | ArgsNew Program
+data Args
+    = ArgsId IdAct
+    | ArgsS String
+    | ArgsNew Program
+    | ArgsAct String Params
   deriving (Eq, Ord, Show, Read)
 
 data Params = ParamsNil | Params [Param]

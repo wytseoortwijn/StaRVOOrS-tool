@@ -215,6 +215,10 @@ flattenArgs []               = ""
 flattenArgs [(Args t id)]    = t ++ " " ++ id
 flattenArgs ((Args t id):xs) = t ++ " " ++ id ++ "," ++ flattenArgs xs
 
+getImports :: Imports -> String
+getImports []            = ""
+getImports (Import s:xs) = "import " ++ s ++ ";\n" ++ getImports xs
+
 ---------------------------------------
 -- Manipulating the parsed .xml file --
 ---------------------------------------

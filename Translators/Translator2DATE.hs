@@ -32,10 +32,6 @@ assocChannel2HTs n (c:cs) = updateCH c n:assocChannel2HTs (n+1) cs
 -- IMPORTS section --
 ---------------------
 
-getImports :: Imports -> String
-getImports []            = ""
-getImports (Import s:xs) = "import " ++ s ++ ";\n" ++ getImports xs
-
 writeImports :: Imports -> HTriples -> String
 writeImports xss const = let newImp = "import ppArtifacts.*;\n"
                          in if null const 
@@ -54,13 +50,15 @@ writeGlobal ppdate env =
      acts   = actevents global
      trs    = triggers global
      prop   = property global
-     fors   = foreaches global                      
+     fors   = foreaches global         
+     temps  = templatesGet ppdate            
  in "GLOBAL {\n\n"
     ++ writeVariables vars consts acts
     ++ writeTriggers trs consts acts env
     ++ writeProperties prop consts env
     ++ writeForeach fors consts env
     ++ generateReplicatedAutomata consts trs env  
+    ++ writeTemplates temps
     ++ "}\n" 
 
 ---------------
@@ -584,4 +582,14 @@ generatePropNonRec c n es env =
     ++ fst prop
     ++ "}\n\n"
 
+---------------
+-- Templates --
+---------------
+
+writeTemplates :: Templates -> String
+writeTemplates TempNil     = ""
+writeTemplates (Temp tmps) = concatMap generateRAtmp tmps
+
+generateRAtmp :: Template -> String
+generateRAtmp temp = ""
 

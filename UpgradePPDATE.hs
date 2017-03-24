@@ -80,8 +80,9 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
     let cns   = htsNames env
     let ies'  = getActEvents ies   
     case runWriter prop' of
-         (PNIL,_)                              -> getForeaches foreaches (Ctxt vars' ies' trigs' PNIL []) scope
-         (PINIT pname id xs props,s)           -> 
+         ((PNIL,env'),_)                              -> do put env'
+                                                            getForeaches foreaches (Ctxt vars' ies' trigs' PNIL []) scope
+         ((PINIT pname id xs props,env'),s)           -> 
                   let trs = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
                       s'  = if (not.null) trs
                             then "Error: Trigger(s) [" ++ trs 
@@ -93,9 +94,10 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
                             else "Error: In the definition of property " ++ pname
                                  ++ ". The template " ++ id ++ " does not exist\n." 
                   in if (null (s'++s''))
-                     then getForeaches foreaches (Ctxt vars' ies' trigs' (PINIT pname id xs props) []) scope
+                     then do put env' 
+                             getForeaches foreaches (Ctxt vars' ies' trigs' (PINIT pname id xs props) []) scope
                      else fail s'
-         (Property pname states trans props,s) -> 
+         ((Property pname states trans props,env'),s) -> 
                   let accep  = checkAllHTsExist (getAccepting states) cns pname
                       bad    = checkAllHTsExist (getBad states) cns pname
                       normal = checkAllHTsExist (getNormal states) cns pname
@@ -107,7 +109,8 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
                                      ++ snd s ++ errs
                                else snd s ++ errs 
                   in if (null s')
-                     then getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) []) scope
+                     then do put env' 
+                             getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) []) scope
                      else fail s'
 
 
@@ -416,30 +419,32 @@ getWhereClause (Abs.WhereClauseDef wexp) = (concat.lines.printTree) wexp
 -- Properties --
 --
 
-getProperty :: Abs.Properties -> [Id] -> Env -> Writer (String,String) Property
-getProperty Abs.PropertiesNil _ _                                             = return PNIL
+getProperty :: Abs.Properties -> [Id] -> Env -> Writer (String,String) (Property,Env)
+getProperty Abs.PropertiesNil _ env                                           = return (PNIL,env)
 getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms env = 
  let props' = getProperty props enms env
  in case runWriter props' of
-      (p, s) -> do tell s
+      ((p,env'), s) -> 
+                do tell s
                    return (PINIT { piName  = getIdAbs id
                                  , tmpId   = getIdAbs id'
                                  , bounds  = map getIdAbs ids'
                                  , piProps = p
-                                 })
+                                 },env')
 getProperty (Abs.ProperiesDef id (Abs.PropKindNormal states trans) props) enms env =
- let props' = getProperty props enms env
-     trans' = getTransitions (getIdAbs id) trans env in
+ let trans' = getTransitions (getIdAbs id) trans env in
  case runWriter trans' of
-      (t,s') -> let ts = map (trigger.arrow) t
-                in case runWriter props' of
-                        (p, s)  -> do let xs = [x | x <- ts, not(elem x enms)]
-                                      tell $ mkErrPair s (addComma xs) s'
-                                      return (Property { pName        = getIdAbs id
-                                                       , pStates      = getStates' states
-                                                       , pTransitions = t
-                                                       , pProps       = p
-                                                       })
+      ((t,env'),s') ->
+           let props' = getProperty props enms env'
+               ts = map (trigger.arrow) t
+           in case runWriter props' of
+                   ((p,env''), s) -> 
+                              do let xs = [x | x <- ts, not(elem x enms)]
+                                 tell $ mkErrPair s (addComma xs) s'
+                                 return (Property { pName        = getIdAbs id
+                                                  , pStates      = getStates' states
+                                                  , pTransitions = t
+                                                  , pProps       = p },env'')
 
 mkErrPair :: (String, String) -> String -> String -> (String,String)
 mkErrPair s xs s' = ((mAppend xs (fst s)), s' ++ snd s)
@@ -480,38 +485,60 @@ getInitCode :: Abs.InitialCode -> InitialCode
 getInitCode Abs.InitNil      = InitNil
 getInitCode (Abs.InitProg p) = InitProg (getJava p)
 
-getTransitions :: PropertyName -> Abs.Transitions -> Env -> Writer String Transitions
+getTransitions :: PropertyName -> Abs.Transitions -> Env -> Writer String (Transitions,Env)
 getTransitions id (Abs.Transitions ts) env = 
- sequence $ map (getTransition' id env) ts
+ case runWriter (sequence $ map (getTransition' id env) ts) of
+      (xs,s) -> do let trans = map fst xs
+                   let envs  = map snd xs
+                   let env'  = joinEnvsCreate envs emptyEnv
+                   writer ((trans,env'),s)
 
-getTransition' :: PropertyName -> Env -> Abs.Transition -> Writer String Transition
+getTransition' :: PropertyName -> Env -> Abs.Transition -> Writer String (Transition,Env)
 getTransition' id env (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) = 
  case runWriter (getArrow ar env) of
-      (xs,s) -> do let err = "Error: Parsing error in an action of a transition from state " ++ getIdAbs q1 ++ " to state " 
+      ((xs,env'),s) -> 
+                do let err = "Error: Parsing error in an action of a transition from state " ++ getIdAbs q1 ++ " to state " 
                              ++ getIdAbs q2 ++ " in property " ++ id ++ ".\n"
                    let s' = if null s then "" else err ++ s
                    tell s'                  
                    return (Transition { fromState = getIdAbs q1
                                       , arrow = xs
                                       , toState = getIdAbs q2
-                                      })
+                                      },env')
 
-getArrow :: Abs.Arrow -> Env -> Writer String Arrow
-getArrow (Abs.Arrow id mark Abs.Cond1) _          = return $ Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = "", action = "" }
+getArrow :: Abs.Arrow -> Env -> Writer String (Arrow,Env)
+getArrow (Abs.Arrow id mark Abs.Cond1) env        = 
+ return $ (Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = "", action = "" },env)
 getArrow (Abs.Arrow id mark (Abs.Cond2 cond)) env = 
  case cond of
-      Abs.CondExpDef cexp     -> return $ Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, action = "" }
+      Abs.CondExpDef cexp     -> return $ (Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, action = "" },env)
       Abs.CondAction cexp act -> 
         let act' = (trim.printTree) act in
         case ParAct.parse act' of 
              Bad s -> do tell s
-                         return $ Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, action = "Parse error" }
+                         return $ (Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, action = "Parse error" },env)
              Ok (Act.Actions ac) -> 
                       case runWriter $ sequence (map (\a -> checkTempInCreate a env) ac) of
                            (ac',s') -> do tell s'
-                                          return $ Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, 
-                                                           action = foldr (\ x xs -> x ++ "; " ++ xs) [] $ map PrintAct.printTree ac' }
+                                          let ac'' = filter isCreateAct ac'
+                                          let acts = [(y,z,x) | (x,(y,z)) <- zip ac'' (map getIdAndArgs ac'')]
+                                          let env' = env { allCreateAct = acts ++ (allCreateAct env)}
+                                          return $ (Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, 
+                                                           action = foldr (\ x xs -> x ++ "; " ++ xs) [] $ map PrintAct.printTree ac' },env')
       
+
+isCreateAct :: Act.Action -> Bool
+isCreateAct (Act.ActCreate _ _) = True
+isCreateAct _                   = False
+
+getIdAndArgs :: Act.Action -> (Id,[Act.Args])
+getIdAndArgs (Act.ActCreate (Act.Temp (Act.IdAct id)) args) = (id,args)
+
+joinEnvsCreate :: [Env] -> Env -> Env
+joinEnvsCreate [] env          = env
+joinEnvsCreate (env:envs) env' = joinEnvsCreate envs (join env env')
+                                      where join env env' = env { allCreateAct = (allCreateAct env) ++ (allCreateAct env')}
+
 
 addQuestionMark :: Abs.Actmark -> String
 addQuestionMark Abs.ActMarkNil  = ""
@@ -608,16 +635,16 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
     let prop' = getProperty prop (map tName trigs') env
     let extrs = getExitTrsInfo trigs'
     case runWriter prop' of
-         (PNIL,_)                      -> fail $ "Error: The template " ++ getIdAbs id ++ " does not have a PROPERTY section.\n"
-         (PINIT pname id' xs props,s)  -> 
+         ((PNIL,env'),_)                      -> fail $ "Error: The template " ++ getIdAbs id ++ " does not have a PROPERTY section.\n"
+         ((PINIT pname id' xs props,env'),s)  -> 
                   let temptrs = splitOnIdentifier "," $ fst s
                       s'      = snd s ++ if props /= PNIL 
                                          then "Error: In template " ++ getIdAbs id ++ ", a template should describe only one property.\n"
                                          else "" 
                   in if ((not.null) s')
                      then fail s'
-                     else do put env { triggersInTemps = triggersInTemps env ++ temptrs 
-                                      , actes           = actes env ++ map show (getActEvents ies)}
+                     else do put env' { triggersInTemps = triggersInTemps env' ++ temptrs 
+                                      , actes           = actes env' ++ map show (getActEvents ies)}
                              return $ Template { tempId        = getIdAbs id
                                                , tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
                                                , tempVars      = getValue $ getVars vars
@@ -625,7 +652,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                                                , tempTriggers  = trigs'
                                                , tempProp      = PINIT pname id' xs props
                                                }
-         (Property pname states trans props,s) -> 
+         ((Property pname states trans props,env'),s) -> 
                   let accep   = checkAllHTsExist (getAccepting states) cns pname
                       bad     = checkAllHTsExist (getBad states) cns pname
                       normal  = checkAllHTsExist (getNormal states) cns pname
@@ -637,8 +664,8 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                       temptrs = splitOnIdentifier "," $ fst s
                   in if ((not.null) s')
                      then fail s'
-                     else do put env { triggersInTemps = triggersInTemps env ++ temptrs 
-                                      , actes           = actes env ++ map show (getActEvents ies)}
+                     else do put env' { triggersInTemps = triggersInTemps env' ++ temptrs 
+                                      , actes           = actes env' ++ map show (getActEvents ies)}
                              return $ Template { tempId        = getIdAbs id
                                                , tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
                                                , tempVars      = getValue $ getVars vars
@@ -1152,6 +1179,7 @@ data Env = Env
                                 --defined in the triggers of the ppDATE
  , propInForeach   :: [(PropertyName, ClassInfo, String)]-- is used to avoid ambigous reference to variable id in foreaches
  , actes           :: [Id] --list of all defined action events
+ , allCreateAct    :: [(Id,[Act.Args],Act.Action)]--list of all actions \create used in the transitions of the ppDATE
  }
   deriving (Show)
 
@@ -1169,6 +1197,7 @@ emptyEnv = Env { forsVars        = []
                , triggersInTemps = []
                , propInForeach   = []
                , actes           = []
+               , allCreateAct    = []
                }
 
 getClassVarName :: Trigger -> MethodName -> [Bind] -> Bind -> String -> Scope -> UpgradePPD (ClassInfo,String)

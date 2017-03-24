@@ -56,6 +56,7 @@ transArgs x = case x of
   ArgsId idact -> failure x
   ArgsS string -> failure x
   ArgsNew program -> failure x
+  ArgsAct string params -> failure x
 transParams :: Params -> Result
 transParams x = case x of
   ParamsNil -> failure x

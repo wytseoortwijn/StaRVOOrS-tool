@@ -16,18 +16,41 @@ type Doc = [ShowS] -> [ShowS]
 doc :: ShowS -> Doc
 doc = (:)
 
+-- Modify to remove white space before '[' and '('
+-- Modify to remove white space between ==
+-- Modify to remove white spaces around '.'
+-- Modify to remove white space after '\\' and '!'
+-- Modify to remove white space in "> =", "< =" , "! =" "& &" and "| |"
+-- Modify to remove white space after openning \" and before closing \"
+-- Modify to remove white spaces around and between ::
 render :: Doc -> String
 render d = rend 0 (map ($ "") $ d []) "" where
   rend i ss = case ss of
-    "["      :ts -> showChar '[' . rend i ts
-    "("      :ts -> showChar '(' . rend i ts
+    "\\"     :ts -> showChar '\\' . rend i ts
+    t:"+":"+":ts -> showString t . showChar '+' . space "+" . rend i ts
+    t:"-":"-":ts -> showString t . showChar '-' . space "-" . rend i ts
+    t: "%"   :ts -> space t . showChar '%' . rend i ts
+    t: "."   :ts -> showString t . showChar '.' . rend i ts 
+    t:":":":":ts -> showString t . showChar ':' . showChar ':' . rend i ts
+    "=" :"=" :ts -> showChar '=' . space "=" . rend i ts
+    ">" :"=" :ts -> showChar '>' . space "=" . rend i ts
+    "<" :"=" :ts -> showChar '<' . space "=" . rend i ts
+    "!" :"=" :ts -> showChar '!' . space "=" . rend i ts
+    "!" :t   :ts -> showChar '!' . showString t . rend i ts
+    "&" :"&" :ts -> showChar '&' . space "&" . rend i ts
+    "|" :"|" :ts -> showChar '|' . space "|" . rend i ts
+    t : "["  :ts -> showString t . showChar '[' . rend i ts
+    t : "("  :ts -> showString t . showChar '(' . rend i ts
     "{"      :ts -> showChar '{' . new (i+1) . rend (i+1) ts
     "}" : ";":ts -> new (i-1) . space "}" . showChar ';' . new (i-1) . rend (i-1) ts
     "}"      :ts -> new (i-1) . showChar '}' . new (i-1) . rend (i-1) ts
     ";"      :ts -> showChar ';' . new i . rend i ts
     t  : "," :ts -> showString t . space "," . rend i ts
-    t  : ")" :ts -> showString t . showChar ')' . rend i ts
+    t  : ")" :ts -> showString t . showString ") " . rend i ts
     t  : "]" :ts -> showString t . showChar ']' . rend i ts
+    "\""     :ts -> showChar '\"' . rend i ts
+    t  :"\"" :ts -> if (t == " ") then showChar '\"' . rend i ts 
+                                  else showString t . showChar '\"' . rend i ts 
     t        :ts -> space t . rend i ts
     _            -> id
   new i   = showChar '\n' . replicateS (2*i) (showChar ' ') . dropWhile isSpace
@@ -138,6 +161,7 @@ instance Print Args where
     ArgsId idact -> prPrec i 0 (concatD [prt 0 idact])
     ArgsS str -> prPrec i 0 (concatD [prt 0 str])
     ArgsNew program -> prPrec i 0 (concatD [doc (showString "new"), prt 0 program])
+    ArgsAct str params -> prPrec i 0 (concatD [doc (showString "\\log"), doc (showString "("), prt 0 str, prt 0 params, doc (showString ")")])
   prtList _ [] = (concatD [])
   prtList _ [x] = (concatD [prt 0 x])
   prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])

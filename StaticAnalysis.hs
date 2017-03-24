@@ -92,16 +92,17 @@ staticAnalysis' jpath ppd output_add fn flags =
                idFileGen add
                cloningFileGen add
                oldExprFileGen add ppdate''
+               templatesFileGen add ppdate''
                messagesFileGen add (getEnvVal ppdate'')
                copyFiles jpath (output_addr ++ annotated_add)
                methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
                return ppdate''
        else do generateReportFailure output_addr flags
-               let ppd'' = generateNewTriggers ppd (htsGet $ getValue ppd)    
-               let ppd' = translateActions $ replacePInit ppd''
+               let ppd'  = generateNewTriggers ppd (htsGet $ getValue ppd)    
+               let ppd'' = translateActions $ replacePInit ppd'
                putStrLn "Generating Java files to control the Hoare triple(s) at runtime."
-               oldExpTypes <- inferTypesOldExprs ppd' jpath (output_addr ++ "workspace/")
-               let ppdate'' = operationalizeOldResultBind ppd' oldExpTypes
+               oldExpTypes <- inferTypesOldExprs ppd'' jpath (output_addr ++ "workspace/")
+               let ppdate'' = operationalizeOldResultBind ppd'' oldExpTypes
                let add = output_addr ++ "ppArtifacts/"
                let annotated_add = getSourceCodeFolderName jpath ++ "/"
                createDirectoryIfMissing True add
@@ -110,6 +111,7 @@ staticAnalysis' jpath ppd output_add fn flags =
                idFileGen add
                cloningFileGen add
                oldExprFileGen add ppdate''
+               templatesFileGen add ppdate''
                messagesFileGen add (getEnvVal ppdate'')
                copyFiles jpath (output_addr ++ annotated_add)
                methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
