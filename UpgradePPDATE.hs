@@ -521,7 +521,7 @@ getArrow (Abs.Arrow id mark (Abs.Cond2 cond)) env =
                       case runWriter $ sequence (map (\a -> checkTempInCreate a env) ac) of
                            (ac',s') -> do tell s'
                                           let ac'' = filter isCreateAct ac'
-                                          let acts = [(y,z,x) | (x,(y,z)) <- zip ac'' (map getIdAndArgs ac'')]
+                                          let acts = [(y,z,"",x) | (x,(y,z)) <- zip ac'' (map getIdAndArgs ac'')]
                                           let env' = env { allCreateAct = acts ++ (allCreateAct env)}
                                           return $ (Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, 
                                                            action = foldr (\ x xs -> x ++ "; " ++ xs) [] $ map PrintAct.printTree ac' },env')
@@ -1179,11 +1179,12 @@ data Env = Env
                                 --defined in the triggers of the ppDATE
  , propInForeach   :: [(PropertyName, ClassInfo, String)]-- is used to avoid ambigous reference to variable id in foreaches
  , actes           :: [Id] --list of all defined action events
- , allCreateAct    :: [(Id,[Act.Args],Act.Action)]--list of all actions \create used in the transitions of the ppDATE
+ , allCreateAct    :: [(Id,[Act.Args],Channel,Act.Action)]--list of all actions \create used in the transitions of the ppDATE
  }
   deriving (Show)
 
 type UpgradePPD a = CM.StateT Env Err a
+type Channel = String
 
 emptyEnv :: Env
 emptyEnv = Env { forsVars        = []
