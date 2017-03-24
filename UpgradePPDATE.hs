@@ -17,7 +17,6 @@ import qualified ParserAct as ParAct
 import qualified ParserJML as ParJML
 import Data.List
 import Data.Either
-import TranslatorActions
 import Data.Maybe
 
 
@@ -89,7 +88,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
                                  ++ "] is(are) used in the transitions, but is(are) not defined in section TRIGGERS.\n" 
                                  ++ snd s
                             else snd s
-                      s'' = if elem id (tempsId env)
+                      s'' = if elem id (map fst $ tempsInfo env)
                             then ""
                             else "Error: In the definition of property " ++ pname
                                  ++ ". The template " ++ id ++ " does not exist\n." 
@@ -546,7 +545,7 @@ addQuestionMark Abs.ActMark     = "?"
             
 checkTempInCreate :: Act.Action -> Env -> Writer String Act.Action
 checkTempInCreate ac@(Act.ActCreate (Act.Temp (Act.IdAct id) ) _) env = 
- let tmpids = tempsId env
+ let tmpids = map fst $ tempsInfo env
  in if not (elem id tmpids)
     then do tell $ "Template " ++ id ++ ", which is used in an action create does not exist.\n"
             return ac
@@ -623,7 +622,7 @@ genTemplates Abs.TempsNil   = return TempNil
 genTemplates (Abs.Temps xs) = 
  do xs <- sequence $ map genTemplate xs
     env <- get
-    put env { tempsId = tempsId env ++ foldr (\ x xs -> tempId x : xs) [] xs}
+    put env { tempsInfo = tempsInfo env ++ foldr (\ x xs -> (tempId x,tempBinds x) : xs) [] xs}
     return $ Temp xs 
  
 
@@ -1174,17 +1173,16 @@ data Env = Env
  , varsInPPD       :: Variables
  , methodsInFiles  :: [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])] --[(path_to_class,class_name,[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body)])]
  , oldExpTypes     :: OldExprM
- , tempsId         :: [Id]
+ , tempsInfo       :: [(Id,[Args])]
  , triggersInTemps :: [Trigger] --is used to check whether the triggers in the transitions of the templates are  
                                 --defined in the triggers of the ppDATE
  , propInForeach   :: [(PropertyName, ClassInfo, String)]-- is used to avoid ambigous reference to variable id in foreaches
  , actes           :: [Id] --list of all defined action events
- , allCreateAct    :: [(Id,[Act.Args],Channel,Act.Action)]--list of all actions \create used in the transitions of the ppDATE
+ , allCreateAct    :: [CreateActInfo]--list of all actions \create used in the transitions of the ppDATE
  }
   deriving (Show)
 
 type UpgradePPD a = CM.StateT Env Err a
-type Channel = String
 
 emptyEnv :: Env
 emptyEnv = Env { forsVars        = []
@@ -1194,7 +1192,7 @@ emptyEnv = Env { forsVars        = []
                , varsInPPD       = []
                , methodsInFiles  = []
                , oldExpTypes     = Map.empty
-               , tempsId         = []
+               , tempsInfo       = []
                , triggersInTemps = []
                , propInForeach   = []
                , actes           = []

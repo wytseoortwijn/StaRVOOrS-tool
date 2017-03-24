@@ -47,32 +47,39 @@ writeGlobal ppdate env =
  let global = ctxtGet $ globalGet ppdate
      consts = htsGet ppdate
      vars   = variables global
-     acts   = actevents global
+     acts   = actes env
      trs    = triggers global
      prop   = property global
      fors   = foreaches global         
      temps  = templatesGet ppdate            
  in "GLOBAL {\n\n"
-    ++ writeVariables vars consts acts
+    ++ writeVariables vars consts acts (allCreateAct env)
     ++ writeTriggers trs consts acts env
     ++ writeProperties prop consts env
     ++ writeForeach fors consts env
     ++ generateReplicatedAutomata consts trs env  
-    ++ writeTemplates temps
+    ++ writeTemplates temps env
     ++ "}\n" 
 
 ---------------
 -- Variables --
 ---------------
 
-writeVariables :: Variables -> HTriples -> ActEvents -> String
-writeVariables vars consts acts = 
- let actChann = if (null acts) then "" else concatMap (makeChannelsAct.show) acts in
- if (null consts)
- then if (null vars) 
-      then "" 
-      else "VARIABLES {\n" ++ actChann ++ writeVariables' vars ++ "}\n\n"
- else "VARIABLES {\n" ++ makeChannels (length consts) "h" ++ actChann ++ writeVariables' vars ++ "}\n\n"
+writeVariables :: Variables -> HTriples -> [Id] -> [CreateActInfo] -> String
+writeVariables vars [] [] [] = 
+ if null vars
+ then ""
+ else "VARIABLES {\n" ++ writeVariables' vars ++ "}\n\n"
+writeVariables vars consts acts creates = 
+ let actChann    = if (null acts) then "" else concatMap makeChannelsAct (removeDuplicates acts) 
+     createChann = if (null creates) then "" else concatMap (makeChannelsAct . (\(_,_,x,_) -> x)) creates
+     constsChann = if (null consts) then "" else makeChannels (length consts) "h"
+     extraChann  = actChann ++ createChann ++ constsChann
+ in if (null vars) 
+    then if (null extraChann)
+         then ""
+         else "VARIABLES {\n" ++ extraChann ++ "}\n\n"
+    else "VARIABLES {\n" ++ extraChann ++ writeVariables' vars ++ "}\n\n"
 
 writeVariables' :: Variables -> String
 writeVariables' []     = ""
@@ -111,7 +118,7 @@ makeChannelsAct s = " Channel " ++ s ++ " = new Channel();\n"
 -- Triggers --
 --------------
 
-writeTriggers :: Triggers -> HTriples -> ActEvents -> Env -> String
+writeTriggers :: Triggers -> HTriples -> [Id] -> Env -> String
 writeTriggers [] _ _ _           = ""
 writeTriggers es consts acts env = 
  "EVENTS {\n"
@@ -119,10 +126,10 @@ writeTriggers es consts acts env =
  ++ writeAllTriggers (instrumentTriggers es consts env)
  ++ "}\n\n"
 
-writeTriggersActs :: ActEvents -> String
+writeTriggersActs :: [Id] -> String
 writeTriggersActs []         = "" 
 writeTriggersActs (act:acts) =
- 'r':show act ++ "() = {" ++ show act ++ ".receive()}" ++ "\n" ++ writeTriggersActs acts 
+ 'r':show act ++ "() = {" ++ act ++ ".receive()}" ++ "\n" ++ writeTriggersActs acts 
 
 
 writeAllTriggers :: Triggers -> String
@@ -445,7 +452,7 @@ writeForeach (foreach:fors) consts env =
      acts   = actevents ctxt
      fors'  = foreaches ctxt
  in "FOREACH (" ++ getForeachArgs args ++ ") {\n\n"
-    ++ writeVariables vars [] []
+    ++ writeVariables vars [] [] []
     ++ writeTriggers es consts [] env
     ++ writeProperties prop consts env
     ++ writeForeach fors' consts env
@@ -586,9 +593,9 @@ generatePropNonRec c n es env =
 -- Templates --
 ---------------
 
-writeTemplates :: Templates -> String
-writeTemplates TempNil     = ""
-writeTemplates (Temp tmps) = concatMap generateRAtmp tmps
+writeTemplates :: Templates -> Env -> String
+writeTemplates TempNil _       = ""
+writeTemplates (Temp tmps) env = concatMap generateRAtmp tmps
 
 generateRAtmp :: Template -> String
 generateRAtmp temp = ""

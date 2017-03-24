@@ -40,7 +40,7 @@ staticAnalysis jpath ppd output_add fn flags =
     then staticAnalysis' jpath ppd output_add fn flags
     else if (null consts)
          then do putStrLn "\nThere are no Hoare triples to analyse."
-                 return $ translateActions $ replacePInit ppd
+                 return $ translateActions $ replacePInit $ namedCreateActPPD ppd
          else staticAnalysis' jpath ppd output_add fn flags
 
 staticAnalysis' :: FilePath -> UpgradePPD PPDATE -> FilePath -> Filename -> [Flag] -> IO (UpgradePPD PPDATE)
@@ -76,7 +76,7 @@ staticAnalysis' jpath ppd output_add fn flags =
                let xml'    = removeNoneHTs xml cns
                let ppdref  = refinePPDATE ppd xml'
                let ppdref' = prepareRefPPD ppdref
-               let ppdate' = translateActions $ replacePInit ppdref
+               let ppdate' = translateActions $ replacePInit $ namedCreateActPPD ppdref
                let refFile = output_addr ++ generateRefPPDFileName fn
                if (not (elem XML flags)) then removeFile xml_add else return ()
                writeFile refFile (writePPD ppdref')
@@ -99,7 +99,7 @@ staticAnalysis' jpath ppd output_add fn flags =
                return ppdate''
        else do generateReportFailure output_addr flags
                let ppd'  = generateNewTriggers ppd (htsGet $ getValue ppd)    
-               let ppd'' = translateActions $ replacePInit ppd'
+               let ppd'' = translateActions $ replacePInit $ namedCreateActPPD ppd'
                putStrLn "Generating Java files to control the Hoare triple(s) at runtime."
                oldExpTypes <- inferTypesOldExprs ppd'' jpath (output_addr ++ "workspace/")
                let ppdate'' = operationalizeOldResultBind ppd'' oldExpTypes
@@ -116,6 +116,26 @@ staticAnalysis' jpath ppd output_add fn flags =
                copyFiles jpath (output_addr ++ annotated_add)
                methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
                return ppdate''
+
+-----------------------------------------------------------------
+-- Generate name for the channels associated to actions create --
+-----------------------------------------------------------------
+
+namedCreateActPPD :: UpgradePPD PPDATE -> UpgradePPD PPDATE
+namedCreateActPPD ppd = 
+ do let env = getEnvVal ppd
+    put (namedCreateAct env)
+    return (getValue ppd)
+
+namedCreateAct :: Env -> Env
+namedCreateAct env =
+ let xs = allCreateAct env 
+     ys = genChannelNames $ zip xs [1..length xs]
+ in env { allCreateAct = ys}
+
+genChannelNames :: [(CreateActInfo,Int)] -> [CreateActInfo]
+genChannelNames []                 = []
+genChannelNames (((x,y,_,t),n):xs) = (x,y,"cact"++show n,t):genChannelNames xs
 
 -------------
 -- Run KeY --
@@ -223,51 +243,51 @@ newHTriples (h:hts) =
 translateActions :: UpgradePPD PPDATE -> UpgradePPD PPDATE
 translateActions ppd =
  do ppdate <- ppd
-    return $ translateActInPPD ppdate
+    return $ translateActInPPD ppdate (getEnvVal ppd)
 
-translateActInPPD :: PPDATE -> PPDATE
-translateActInPPD (PPDATE imps global temps cinvs hts ms) = 
- PPDATE imps (translateActInGlobal global) temps cinvs hts ms
+translateActInPPD :: PPDATE -> Env -> PPDATE
+translateActInPPD (PPDATE imps global temps cinvs hts ms) env = 
+ PPDATE imps (translateActInGlobal global env) (translateActInTemps temps env) cinvs hts ms
 
 
-translateActInGlobal :: Global -> Global
-translateActInGlobal (Global ctxt) = Global (translateActInCtxt ctxt)
+translateActInGlobal :: Global -> Env -> Global
+translateActInGlobal (Global ctxt) env = Global (translateActInCtxt ctxt env)
 
-translateActInCtxt :: Context -> Context
-translateActInCtxt ctxt = 
- let prop' = translateActInProps (property ctxt)
-     fors' = translateActInFors (foreaches ctxt)
+translateActInCtxt :: Context -> Env -> Context
+translateActInCtxt ctxt env = 
+ let prop' = translateActInProps (property ctxt) env
+     fors' = translateActInFors env (foreaches ctxt)
  in updateCtxtProps (updateCtxtFors ctxt fors') prop'
  
-translateActInProps :: Property -> Property
-translateActInProps PNIL                          = PNIL
-translateActInProps (PINIT nm tmp bnds props)     = PINIT nm tmp bnds (translateActInProps props)
-translateActInProps (Property nm sts trans props) = Property nm sts (translateActInTrans trans) (translateActInProps props)
+translateActInProps :: Property -> Env -> Property
+translateActInProps PNIL _                            = PNIL
+translateActInProps (PINIT nm tmp bnds props) env     = PINIT nm tmp bnds (translateActInProps props env)
+translateActInProps (Property nm sts trans props) env = Property nm sts (translateActInTrans env trans) (translateActInProps props env)
 
-translateActInFors :: Foreaches -> Foreaches
-translateActInFors = map translateActInFor
+translateActInFors :: Env -> Foreaches -> Foreaches
+translateActInFors env = map (translateActInFor env)
 
-translateActInFor :: Foreach -> Foreach
-translateActInFor foreach = updCtxtForeach foreach (translateActInCtxt (getCtxtForeach foreach))
+translateActInFor :: Env -> Foreach -> Foreach
+translateActInFor env foreach = updCtxtForeach foreach (translateActInCtxt (getCtxtForeach foreach) env)
 
-translateActInTrans :: Transitions -> Transitions
-translateActInTrans = map translateActInTran
+translateActInTrans :: Env -> Transitions -> Transitions
+translateActInTrans env = map (translateActInTran env)
 
-translateActInTran :: Transition -> Transition
-translateActInTran (Transition q (Arrow tr cond act) q') =
- Transition q (Arrow tr cond (translateAction act)) q'
+translateActInTran :: Env -> Transition -> Transition
+translateActInTran env (Transition q (Arrow tr cond act) q') =
+ Transition q (Arrow tr cond (translateAction act env)) q'
 
-translateAction :: Action -> Action
-translateAction []  = ""
-translateAction act = 
+translateAction :: Action -> Env -> Action
+translateAction [] _    = ""
+translateAction act env = 
  case ParAct.parse act of 
-      Ok ac -> PrintAct.printTree (translateAct ac)
+      Ok ac -> PrintAct.printTree (translateAct ac env)
 
-translateActInTemps :: Templates -> Templates
-translateActInTemps TempNil = TempNil
-translateActInTemps (Temp tmps) = Temp $ map translateActInTemp tmps
+translateActInTemps :: Templates -> Env -> Templates
+translateActInTemps TempNil _       = TempNil
+translateActInTemps (Temp tmps) env = Temp $ map (translateActInTemp env) tmps
 
-translateActInTemp :: Template -> Template
-translateActInTemp tmp = 
- updateTemplateProp tmp (translateActInProps $ tempProp tmp)
+translateActInTemp :: Env -> Template -> Template
+translateActInTemp env tmp = 
+ updateTemplateProp tmp (translateActInProps (tempProp tmp) env)
 

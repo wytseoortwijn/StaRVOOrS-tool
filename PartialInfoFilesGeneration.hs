@@ -308,8 +308,8 @@ tempGen imps temp =
     ++ imps ++ "\n\n"
     ++ "public class " ++ nameClass ++ " {\n\n"
     ++ varDeclTemp args
-    ++ "  " ++ nameClass ++ "() { }\n\n"
-    ++ "  " ++ nameClass ++ "(" ++ addComma (map (\arg -> getArgsType arg ++ " " ++ getArgsId arg) args) ++ ") {\n"
+    ++ "  public " ++ nameClass ++ "() { }\n\n"
+    ++ "  public " ++ nameClass ++ "(" ++ addComma (map (\arg -> getArgsType arg ++ " " ++ getArgsId arg) args) ++ ") {\n"
     ++ constructorTemp args 
     ++ "  }\n\n"
     ++ "}\n", nameClass ++ ".java") 

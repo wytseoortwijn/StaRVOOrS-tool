@@ -5,6 +5,7 @@ import System.FilePath
 import System.Console.GetOpt
 import Data.Maybe ( fromMaybe )
 import Language.Java.Syntax hiding(Type,VarDecl)
+import qualified AbsActions as Act
 
 ------------
 -- ppDATE --
@@ -270,6 +271,8 @@ type HTjml = [(MethodName, ClassInfo, Overloading, String)]
 
 type MethodInvocations = [Exp]
 
+type Channel = String
+
 data TriggersInfo = 
  TI { tiTN      :: Trigger --trigger_name
     , tiMN      :: MethodName --method_name
@@ -281,6 +284,8 @@ data TriggersInfo =
     , tiScope   :: Scope
     , tiOver    :: Overloading
     } deriving (Show,Eq)
+
+type CreateActInfo = (Id,[Act.Args],Channel,Act.Action)
 
 --------------
 -- PROPERTY --
