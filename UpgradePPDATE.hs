@@ -35,14 +35,11 @@ upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
                        case runStateT (genGlobal global) env' of
                             Bad s               -> fail $ s ++ duplicateHT dcs
                             Ok (global', env'') -> 
-                               case runWriter $ wellFormedActions env'' of
-                                    (b,s) -> if b 
-                                             then case runStateT (genClassInvariants cinvs) env'' of
-                                                        Bad s              -> fail s
-                                                        Ok (cinvs',env''') -> 
-                                                                 do put env'''
-                                                                    return (PPDATE imports' global' temps' cinvs' consts' methods')
-                                             else fail s
+                               case runStateT (genClassInvariants cinvs) env'' of
+                                    Bad s              -> fail s
+                                    Ok (cinvs',env''') -> 
+                                             do put env'''
+                                                return (PPDATE imports' global' temps' cinvs' consts' methods')                               
 
    
 -------------
@@ -690,10 +687,14 @@ getClassVarArgs (BindType t id':args) id =
 getClassVarArgs (_:args) id              = getClassVarArgs args id
 
 
-wellFormedActions :: Env -> Writer String Bool
-wellFormedActions env = 
+--Check for the arguments used in the create actions
+wellFormedActions :: UpgradePPD PPDATE -> String
+wellFormedActions ppd = 
+ let env = getEnvVal ppd in
  case runWriter $ sequence $ map (wellFormedAction env) (allCreateAct env) of
-      (b,s) -> writer (and b,s)
+      (b,s) -> if and b
+               then ""
+               else s 
 
 wellFormedAction:: Env -> CreateActInfo -> Writer String Bool
 wellFormedAction env cai = 
@@ -705,7 +706,7 @@ wellFormedAction env cai =
          in if length tempArgs /= length (caiArgs cai)
             then writer (False, "Error: In an action create, the amount of arguments does not match the arguments in template "
                                 ++ caiId cai ++ ".\n")
-            else case runWriter $ checkTempArgs ys env of
+            else case runWriter $ checkTempArgs ys env (caiScope cai) of
                       (xs,s) -> if and xs
                                 then return True
                                 else writer (False,s)
@@ -721,16 +722,19 @@ splitTempArgs (arg:args) targs =
       "HTriple"    -> splitTempArgs args (targs {targHT = snd arg : targHT targs})
       _            -> splitTempArgs args (targs {targRef = snd arg : targRef targs})
 
-checkTempArgs :: TempArgs -> Env -> Writer String [Bool]
-checkTempArgs targs env = 
+checkTempArgs :: TempArgs -> Env -> Scope -> Writer String [Bool]
+checkTempArgs targs env scope = 
  sequence [ checkTempArgsActions (targAct targs)
           , checkTempArgsHTriples (targHT targs) (htsNames env)
+          , checkTempArgsConditions (targCond targs)
+          , checkTempArgsTriggers (targTr targs) (allTriggers env) scope
+          , checkMethodNames (targMN targs) (methodsInFiles env)
           ]
 
 checkTempArgsActions :: [Act.Args] -> Writer String Bool
 checkTempArgsActions []    = return True
 checkTempArgsActions targs = 
- let (xs,ys) = partitionErr $ map (ParAct.parse . (\xs -> xs ++ ";") . PrintAct.printTree) targs
+ let (xs,ys) = partitionErr $ map (ParAct.parse . (\xs -> xs ++ ";") . showActArgs) targs
  in if null xs 
     then return True
     else writer (False, "Error: In an action create: " ++ (unlines $ map fromBad xs))
@@ -741,13 +745,36 @@ checkTempArgsHTriples targs hts =
  let xs = [ h | h <- map showActArgs targs, not (elem h hts)]
  in if null xs
     then return True 
-    else writer (False, "Error: In an action create, the Hoare triple(s) [" ++ addComma xs ++ "] does not exist.\n")
+    else writer (False, "Error: In an action create, the Hoare triple(s) [" ++ addComma xs ++ "] do(es) not exist.\n")
 
 showActArgs :: Act.Args -> String
 showActArgs (Act.ArgsId (Act.IdAct id))                  = id
 showActArgs (Act.ArgsS s)                                = s
 showActArgs (Act.ArgsNew (Act.Prog (Act.IdAct id) args)) = "new " ++ id ++ PrintAct.printTree args
-ahowActArgs act                                          = PrintAct.printTree act
+showActArgs act                                          = PrintAct.printTree act
+
+checkTempArgsConditions :: [Act.Args] -> Writer String Bool 
+checkTempArgsConditions targs = 
+ let (xs,ys) = partitionErr $ map (ParJML.parse . showActArgs) targs
+ in if null xs 
+    then return True
+    else writer (False, "Error: In an action create, syntax error(s) on the condition(s) [" ++ addComma (map fromBad xs) ++ "].\n")
+
+checkTempArgsTriggers :: [Act.Args] -> [TriggersInfo] -> Scope -> Writer String Bool
+checkTempArgsTriggers targs tinfs scope = 
+ let xs = [ tr | tr <- map showActArgs targs, tinf <- tinfs, tiScope tinf == scope, tiTN tinf == tr]
+ in if length xs == length targs
+    then return True 
+    else writer (False, "Error: In an action create, the trigger(s) [" ++ addComma xs ++ "] do(es) not exist.\n") 
+
+checkMethodNames :: [Act.Args] -> [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])] -> Writer String Bool
+checkMethodNames targs minfs =
+ let xs = removeDuplicates [ mn | mn <- map showActArgs targs, (_,_,xs) <- minfs, (_,mn',_,_) <- xs, mn == mn' ]
+ in if length xs == length targs
+    then return True 
+    else writer (False, "Error: In an action create, the method(s) [" 
+                        ++ addComma [ x | x <- map showActArgs targs, not (elem x xs)] ++ "] do(es) not exist.\n") 
+
 
 -----------------
 -- CInvariants --
