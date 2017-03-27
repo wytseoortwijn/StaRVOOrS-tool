@@ -135,7 +135,7 @@ namedCreateAct env =
 
 genChannelNames :: [(CreateActInfo,Int)] -> [CreateActInfo]
 genChannelNames []                 = []
-genChannelNames (((x,y,_,t),n):xs) = (x,y,"cact"++show n,t):genChannelNames xs
+genChannelNames ((cai,n):xs) = (cai {caiCh = "cact"++show n}):genChannelNames xs
 
 -------------
 -- Run KeY --

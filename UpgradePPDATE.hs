@@ -34,16 +34,15 @@ upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
                     Ok (temps',env') ->
                        case runStateT (genGlobal global) env' of
                             Bad s               -> fail $ s ++ duplicateHT dcs
-                            Ok (global', env'') ->  
-                               let trs     = map tiTN $ allTriggers env''
-                                   noneTrs = [x | x <- triggersInTemps env'', not $ elem x trs] 
-                               in  if (not.null.trim.concat) noneTrs
-                                   then fail $ "Error: The trigger(s) [" ++ addComma noneTrs ++ "] are used in the definition of a template, but do(es) not exist(s).\n"
-                                   else case runStateT (genClassInvariants cinvs) env'' of
-                                             Bad s             -> fail s
-                                             Ok (cinvs',env''') -> 
-                                                do put env'''
-                                                   return (PPDATE imports' global' temps' cinvs' consts' methods')
+                            Ok (global', env'') -> 
+                               case runWriter $ wellFormedActions env'' of
+                                    (b,s) -> if b 
+                                             then case runStateT (genClassInvariants cinvs) env'' of
+                                                        Bad s              -> fail s
+                                                        Ok (cinvs',env''') -> 
+                                                                 do put env'''
+                                                                    return (PPDATE imports' global' temps' cinvs' consts' methods')
+                                             else fail s
 
    
 -------------
@@ -75,7 +74,7 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
  do vars' <- getVars vars
     trigs' <- getTriggers trigs scope
     env <- get
-    let prop' = getProperty prop (map tiTN (allTriggers env)) env
+    let prop' = getProperty prop (map tiTN (allTriggers env)) env scope
     let cns   = htsNames env
     let ies'  = getActEvents ies   
     case runWriter prop' of
@@ -97,10 +96,10 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
                              getForeaches foreaches (Ctxt vars' ies' trigs' (PINIT pname id xs props) []) scope
                      else fail s'
          ((Property pname states trans props,env'),s) -> 
-                  let accep  = checkAllHTsExist (getAccepting states) cns pname
-                      bad    = checkAllHTsExist (getBad states) cns pname
-                      normal = checkAllHTsExist (getNormal states) cns pname
-                      start  = checkAllHTsExist (getStarting states) cns pname
+                  let accep  = checkAllHTsExist (getAccepting states) cns pname scope
+                      bad    = checkAllHTsExist (getBad states) cns pname scope
+                      normal = checkAllHTsExist (getNormal states) cns pname scope
+                      start  = checkAllHTsExist (getStarting states) cns pname scope
                       errs   = concat $ start ++ accep ++ bad ++ normal
                       trs    = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
                       s'     = if (not.null) trs
@@ -113,18 +112,18 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
                      else fail s'
 
 
-checkAllHTsExist :: [State] -> [HTName] -> PropertyName -> [String]
-checkAllHTsExist [] _ _        = []
-checkAllHTsExist (s:ss) cns pn = 
+checkAllHTsExist :: [State] -> [HTName] -> PropertyName -> Scope -> [String]
+checkAllHTsExist [] _ _ _            = []
+checkAllHTsExist (s:ss) cns pn scope = 
  let ns   = getNS s
      cns' = getCNList s
      aux  = [x | x <- cns' , not (elem x cns)]
- in if (null aux)
-    then checkAllHTsExist ss cns pn
+ in if (null aux || (tempScope scope))
+    then checkAllHTsExist ss cns pn scope
     else ("Error: On property " ++ pn
          ++ ", in state " ++ ns ++ ", the Hoare triples(s) "
          ++ commaAdd aux
-         ++ " do(es) not exist.\n") : checkAllHTsExist ss cns pn
+         ++ " do(es) not exist.\n") : checkAllHTsExist ss cns pn scope
                               where commaAdd []       = ""
                                     commaAdd [xs]     = xs
                                     commaAdd (xs:xss) = xs ++ "," ++ commaAdd xss
@@ -418,10 +417,10 @@ getWhereClause (Abs.WhereClauseDef wexp) = (concat.lines.printTree) wexp
 -- Properties --
 --
 
-getProperty :: Abs.Properties -> [Id] -> Env -> Writer (String,String) (Property,Env)
-getProperty Abs.PropertiesNil _ env                                           = return (PNIL,env)
-getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms env = 
- let props' = getProperty props enms env
+getProperty :: Abs.Properties -> [Id] -> Env -> Scope -> Writer (String,String) (Property,Env)
+getProperty Abs.PropertiesNil _ env _                                               = return (PNIL,env)
+getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms env scope = 
+ let props' = getProperty props enms env scope
  in case runWriter props' of
       ((p,env'), s) -> 
                 do tell s
@@ -430,11 +429,11 @@ getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms env =
                                  , bounds  = map getIdAbs ids'
                                  , piProps = p
                                  },env')
-getProperty (Abs.ProperiesDef id (Abs.PropKindNormal states trans) props) enms env =
- let trans' = getTransitions (getIdAbs id) trans env in
+getProperty (Abs.ProperiesDef id (Abs.PropKindNormal states trans) props) enms env scope =
+ let trans' = getTransitions (getIdAbs id) trans env scope in
  case runWriter trans' of
       ((t,env'),s') ->
-           let props' = getProperty props enms env'
+           let props' = getProperty props enms env' scope
                ts = map (trigger.arrow) t
            in case runWriter props' of
                    ((p,env''), s) -> 
@@ -484,17 +483,17 @@ getInitCode :: Abs.InitialCode -> InitialCode
 getInitCode Abs.InitNil      = InitNil
 getInitCode (Abs.InitProg p) = InitProg (getJava p)
 
-getTransitions :: PropertyName -> Abs.Transitions -> Env -> Writer String (Transitions,Env)
-getTransitions id (Abs.Transitions ts) env = 
- case runWriter (sequence $ map (getTransition' id env) ts) of
+getTransitions :: PropertyName -> Abs.Transitions -> Env -> Scope -> Writer String (Transitions,Env)
+getTransitions id (Abs.Transitions ts) env scope = 
+ case runWriter (sequence $ map (getTransition' id env scope) ts) of
       (xs,s) -> do let trans = map fst xs
                    let envs  = map snd xs
                    let env'  = joinEnvsCreate envs emptyEnv
                    writer ((trans,env'),s)
 
-getTransition' :: PropertyName -> Env -> Abs.Transition -> Writer String (Transition,Env)
-getTransition' id env (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) = 
- case runWriter (getArrow ar env) of
+getTransition' :: PropertyName -> Env -> Scope -> Abs.Transition -> Writer String (Transition,Env)
+getTransition' id env scope (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) = 
+ case runWriter (getArrow ar env scope) of
       ((xs,env'),s) -> 
                 do let err = "Error: Parsing error in an action of a transition from state " ++ getIdAbs q1 ++ " to state " 
                              ++ getIdAbs q2 ++ " in property " ++ id ++ ".\n"
@@ -505,10 +504,10 @@ getTransition' id env (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) 
                                       , toState = getIdAbs q2
                                       },env')
 
-getArrow :: Abs.Arrow -> Env -> Writer String (Arrow,Env)
-getArrow (Abs.Arrow id mark Abs.Cond1) env        = 
+getArrow :: Abs.Arrow -> Env -> Scope -> Writer String (Arrow,Env)
+getArrow (Abs.Arrow id mark Abs.Cond1) env scope        = 
  return $ (Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = "", action = "" },env)
-getArrow (Abs.Arrow id mark (Abs.Cond2 cond)) env = 
+getArrow (Abs.Arrow id mark (Abs.Cond2 cond)) env scope = 
  case cond of
       Abs.CondExpDef cexp     -> return $ (Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, action = "" },env)
       Abs.CondAction cexp act -> 
@@ -520,7 +519,7 @@ getArrow (Abs.Arrow id mark (Abs.Cond2 cond)) env =
                       case runWriter $ sequence (map (\a -> checkTempInCreate a env) ac) of
                            (ac',s') -> do tell s'
                                           let ac'' = filter isCreateAct ac'
-                                          let acts = [(y,z,"",x) | (x,(y,z)) <- zip ac'' (map getIdAndArgs ac'')]
+                                          let acts = [CAI y z "" x scope | (x,(y,z)) <- zip ac'' (map getIdAndArgs ac'')]
                                           let env' = env { allCreateAct = acts ++ (allCreateAct env)}
                                           return $ (Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, 
                                                            action = foldr (\ x xs -> x ++ "; " ++ xs) [] $ map PrintAct.printTree ac' },env')
@@ -631,7 +630,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
  do trigs' <- getTriggers trs (InTemp (getIdAbs id))
     env <- get
     let cns   = htsNames env
-    let prop' = getProperty prop (map tName trigs') env
+    let prop' = getProperty prop (map tName trigs') env (InTemp (getIdAbs id))
     let extrs = getExitTrsInfo trigs'
     case runWriter prop' of
          ((PNIL,env'),_)                      -> fail $ "Error: The template " ++ getIdAbs id ++ " does not have a PROPERTY section.\n"
@@ -642,8 +641,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                                          else "" 
                   in if ((not.null) s')
                      then fail s'
-                     else do put env' { triggersInTemps = triggersInTemps env' ++ temptrs 
-                                      , actes           = actes env' ++ map show (getActEvents ies)}
+                     else do put env' { actes           = actes env' ++ map show (getActEvents ies)}
                              return $ Template { tempId        = getIdAbs id
                                                , tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
                                                , tempVars      = getValue $ getVars vars
@@ -652,10 +650,10 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                                                , tempProp      = PINIT pname id' xs props
                                                }
          ((Property pname states trans props,env'),s) -> 
-                  let accep   = checkAllHTsExist (getAccepting states) cns pname
-                      bad     = checkAllHTsExist (getBad states) cns pname
-                      normal  = checkAllHTsExist (getNormal states) cns pname
-                      start   = checkAllHTsExist (getStarting states) cns pname
+                  let accep   = checkAllHTsExist (getAccepting states) cns pname (InTemp (getIdAbs id)) 
+                      bad     = checkAllHTsExist (getBad states) cns pname (InTemp (getIdAbs id))
+                      normal  = checkAllHTsExist (getNormal states) cns pname (InTemp (getIdAbs id))
+                      start   = checkAllHTsExist (getStarting states) cns pname (InTemp (getIdAbs id))
                       errs    = concat $ start ++ accep ++ bad ++ normal
                       s'      = snd s ++ errs ++ if props /= PNIL 
                                                  then "Error: In template " ++ getIdAbs id ++ ", a template should describe eonly one property.\n"
@@ -663,8 +661,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                       temptrs = splitOnIdentifier "," $ fst s
                   in if ((not.null) s')
                      then fail s'
-                     else do put env' { triggersInTemps = triggersInTemps env' ++ temptrs 
-                                      , actes           = actes env' ++ map show (getActEvents ies)}
+                     else do put env' { actes           = actes env' ++ map show (getActEvents ies)}
                              return $ Template { tempId        = getIdAbs id
                                                , tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
                                                , tempVars      = getValue $ getVars vars
@@ -691,6 +688,66 @@ getClassVarArgs (BindType t id':args) id =
  then return t
  else getClassVarArgs args id
 getClassVarArgs (_:args) id              = getClassVarArgs args id
+
+
+wellFormedActions :: Env -> Writer String Bool
+wellFormedActions env = 
+ case runWriter $ sequence $ map (wellFormedAction env) (allCreateAct env) of
+      (b,s) -> writer (and b,s)
+
+wellFormedAction:: Env -> CreateActInfo -> Writer String Bool
+wellFormedAction env cai = 
+ let xs = [ tmp | tmp <- tempsInfo env, fst tmp == caiId cai]
+ in if null xs
+    then writer (False, "Error: In an action create, the template " ++ caiId cai ++ " does not exist.\n")
+    else let tempArgs = snd $ head $ xs
+             ys       = splitTempArgs (zip tempArgs (caiArgs cai)) emptyTargs
+         in if length tempArgs /= length (caiArgs cai)
+            then writer (False, "Error: In an action create, the amount of arguments does not match the arguments in template "
+                                ++ caiId cai ++ ".\n")
+            else case runWriter $ checkTempArgs ys env of
+                      (xs,s) -> if and xs
+                                then return True
+                                else writer (False,s)
+
+splitTempArgs :: [(Args,Act.Args)] -> TempArgs -> TempArgs
+splitTempArgs [] targs         = targs
+splitTempArgs (arg:args) targs = 
+ case getArgsType (fst arg) of
+      "Action"     -> splitTempArgs args (targs {targAct = snd arg : targAct targs})
+      "Condition"  -> splitTempArgs args (targs {targCond = snd arg : targCond targs})
+      "Trigger"    -> splitTempArgs args (targs {targTr = snd arg : targTr targs})
+      "MethodName" -> splitTempArgs args (targs {targMN = snd arg : targMN targs})
+      "HTriple"    -> splitTempArgs args (targs {targHT = snd arg : targHT targs})
+      _            -> splitTempArgs args (targs {targRef = snd arg : targRef targs})
+
+checkTempArgs :: TempArgs -> Env -> Writer String [Bool]
+checkTempArgs targs env = 
+ sequence [ checkTempArgsActions (targAct targs)
+          , checkTempArgsHTriples (targHT targs) (htsNames env)
+          ]
+
+checkTempArgsActions :: [Act.Args] -> Writer String Bool
+checkTempArgsActions []    = return True
+checkTempArgsActions targs = 
+ let (xs,ys) = partitionErr $ map (ParAct.parse . (\xs -> xs ++ ";") . PrintAct.printTree) targs
+ in if null xs 
+    then return True
+    else writer (False, "Error: In an action create: " ++ (unlines $ map fromBad xs))
+
+checkTempArgsHTriples :: [Act.Args] -> [HTName] -> Writer String Bool
+checkTempArgsHTriples [] _      = return True
+checkTempArgsHTriples targs hts = 
+ let xs = [ h | h <- map showActArgs targs, not (elem h hts)]
+ in if null xs
+    then return True 
+    else writer (False, "Error: In an action create, the Hoare triple(s) [" ++ addComma xs ++ "] does not exist.\n")
+
+showActArgs :: Act.Args -> String
+showActArgs (Act.ArgsId (Act.IdAct id))                  = id
+showActArgs (Act.ArgsS s)                                = s
+showActArgs (Act.ArgsNew (Act.Prog (Act.IdAct id) args)) = "new " ++ id ++ PrintAct.printTree args
+ahowActArgs act                                          = PrintAct.printTree act
 
 -----------------
 -- CInvariants --
@@ -1174,10 +1231,8 @@ data Env = Env
  , varsInPPD       :: Variables
  , methodsInFiles  :: [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])]
                       --[(path_to_class,class_name,[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body)])]
- , oldExpTypes     :: OldExprM
- , tempsInfo       :: [(Id,[Args])]
- , triggersInTemps :: [Trigger] --is used to check whether the triggers in the transitions of the templates are  
-                                --defined in the triggers of the ppDATE
+ , oldExpTypes     :: OldExprM --types of the old expressions
+ , tempsInfo       :: [(Id,[Args])]--[(name_template, args_of_template)]
  , propInForeach   :: [(PropertyName, ClassInfo, String)]-- is used to avoid ambigous reference to variable id in foreaches
  , actes           :: [Id] --list of all defined action events
  , allCreateAct    :: [CreateActInfo]--list of all actions \create used in the transitions of the ppDATE
@@ -1195,7 +1250,6 @@ emptyEnv = Env { forsVars        = []
                , methodsInFiles  = []
                , oldExpTypes     = Map.empty
                , tempsInfo       = []
-               , triggersInTemps = []
                , propInForeach   = []
                , actes           = []
                , allCreateAct    = []

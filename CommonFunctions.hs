@@ -227,6 +227,7 @@ filterRefTypes (arg:args) =
       "Condition"  -> filterRefTypes args
       "Trigger"    -> filterRefTypes args
       "MethodName" -> filterRefTypes args
+      "HTriple"    -> filterRefTypes args
       _            -> arg:filterRefTypes args
 
 ---------------------------------------

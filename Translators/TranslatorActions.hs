@@ -17,10 +17,10 @@ translateAction env (ActBlock acts)                        = ActBlock (translate
 translateAction _ (ActBang (IdAct id))                     = ActProg (Prog (IdAct (id++".send")) [])
 translateAction _ (ActLog s parms)                         = ActProg (Prog (IdAct "System.out.printf") (ArgsS s:fromParm2Arg parms))
 translateAction env act@(ActCreate (Temp (IdAct id)) args) = 
- let creates    = allCreateAct env    
-     (_,_,ch,_) = fromJust $ getChannel act creates
-     args'      = head [xs | (id',xs) <- tempsInfo env, id == id']
-     fargs      = map fst $ filterRefTypes $ zip args args'
+ let creates = allCreateAct env    
+     ch      = T.caiCh $ fromJust $ getChannel act creates
+     args'   = head [xs | (id',xs) <- tempsInfo env, id == id']
+     fargs   = map fst $ filterRefTypes $ zip args args'
  in ActProg (Prog (IdAct (ch++".send")) ([ArgsNew (Prog (IdAct ("Tmp_"++id)) fargs)]))
 translateAction _ act                                      = act
 
@@ -29,12 +29,12 @@ fromParm2Arg ParamsNil   = []
 fromParm2Arg (Params xs) = map (\(Param id) -> ArgsId id) xs
 
 getChannel :: Action -> [T.CreateActInfo] -> Maybe T.CreateActInfo
-getChannel act@(ActCreate (Temp (IdAct id)) args) []                       = Nothing
-getChannel act@(ActCreate (Temp (IdAct id)) args) (val@(_,_,ch,act'):acts) = 
- if act == act'
- then Just val
+getChannel act@(ActCreate (Temp (IdAct id)) args) []         = Nothing
+getChannel act@(ActCreate (Temp (IdAct id)) args) (cai:acts) = 
+ if act == (T.caiAct cai)
+ then Just cai
  else getChannel act acts
-getChannel _ _                                                             = Nothing
+getChannel _ _                                               = Nothing
 
 filterRefTypes :: [(Args,T.Args)] -> [(Args,T.Args)]
 filterRefTypes []         = []

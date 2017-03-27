@@ -148,6 +148,18 @@ data Template = Template
 updateTemplateProp :: Template -> Property -> Template
 updateTemplateProp (Template id bs vars ies trs prop) prop' = Template id bs vars ies trs prop'
 
+data TempArgs = TArgs --Arguments used to instantiate a template
+ { targTr   :: [Act.Args]--triggers
+ , targAct  :: [Act.Args]--actions
+ , targCond :: [Act.Args]--conditions
+ , targHT   :: [Act.Args]--Hoare triples
+ , targRef  :: [Act.Args]--reference types
+ , targMN   :: [Act.Args]--method names
+ } deriving (Show,Eq)
+
+emptyTargs :: TempArgs
+emptyTargs = TArgs [] [] [] [] [] []
+
 --------------
 -- Methods  --
 --------------
@@ -288,7 +300,13 @@ data TriggersInfo =
     , tiOver    :: Overloading
     } deriving (Show,Eq)
 
-type CreateActInfo = (Id,[Act.Args],Channel,Act.Action)
+data CreateActInfo = 
+ CAI { caiId    :: Id
+     , caiArgs  :: [Act.Args]
+     , caiCh    :: Channel
+     , caiAct   :: Act.Action
+     , caiScope :: Scope
+     } deriving (Show,Eq)
 
 --------------
 -- PROPERTY --

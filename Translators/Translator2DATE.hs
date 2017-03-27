@@ -71,7 +71,7 @@ writeVariables vars [] [] [] =
  else "VARIABLES {\n" ++ writeVariables' vars ++ "}\n\n"
 writeVariables vars consts acts creates = 
  let actChann    = if (null acts) then "" else concatMap makeChannelsAct (removeDuplicates acts) 
-     createChann = if (null creates) then "" else concatMap (makeChannelsAct . (\(_,_,x,_) -> x)) creates
+     createChann = if (null creates) then "" else concatMap (makeChannelsAct.caiCh) creates
      constsChann = if (null consts) then "" else makeChannels (length consts) "h"
      extraChann  = actChann ++ createChann ++ constsChann
  in if (null vars) 
@@ -597,7 +597,7 @@ writeTemplates TempNil _        = ""
 writeTemplates (Temp temps) env = 
  let creates = removeDuplicates $ allCreateAct env
      skell   = map generateRAtmp temps
-     xs      = [ instantiateTemp for id args ch | (id,args,for) <- skell , (id',_,ch,_) <- creates, id == id' ] 
+     xs      = [ instantiateTemp for id args (caiCh cai) | (id,args,for) <- skell , cai <- creates, id == caiId cai ] 
  in writeForeach xs [] env
 
 generateRAtmp :: Template -> (Id, [Args], Foreach)

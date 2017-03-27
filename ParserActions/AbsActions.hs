@@ -50,7 +50,12 @@ data Args
     = ArgsId IdAct
     | ArgsS String
     | ArgsNew Program
-    | ArgsAct String Params
+    | ArgsActLog String Params
+    | ArgsActIF [IdAct] Action
+    | ArgsActProg Program
+    | ArgsActBang IdAct
+    | ArgsActAss Ass
+    | ArgsActBlock Actions
   deriving (Eq, Ord, Show, Read)
 
 data Params = ParamsNil | Params [Param]
