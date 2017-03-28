@@ -641,7 +641,7 @@ addTriggerDef args cai env =
  let targs = targTr $ splitTempArgs (zip args (caiArgs cai)) emptyTargs
      scope = caiScope cai
      trs   = allTriggers env 
-     xs    = [ fromJust $ tiTrDef tr | tr <- trs, tiScope tr == scope, targ <- targs, (showActArgs $ snd targ) == tiTN tr]
+     xs    = [ (fromJust $ tiTrDef tr) { whereClause = ""} | tr <- trs, tiScope tr == scope, targ <- targs, (showActArgs $ snd targ) == tiTN tr]
  in xs
 
 instantiateProp :: Property -> [Args] -> CreateActInfo -> Property
