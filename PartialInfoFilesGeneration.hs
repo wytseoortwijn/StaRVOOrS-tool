@@ -18,7 +18,7 @@ import Data.List
 
 htsJavaFileGen :: UpgradePPD PPDATE -> FilePath -> IO ()
 htsJavaFileGen ppd output_add = 
- let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      imp           = importsGet ppdate
      global        = globalGet ppdate
      consts        = htsGet ppdate
@@ -46,7 +46,7 @@ htsJavaFileGen ppd output_add =
             if (null consts) then return () else appendFile address body
             appendFile address "\n}"
                         where foo env = \(x,y) -> (goo env x, goo env y)
-                              goo env = \ x -> fst $ (\(Ok x) -> x) $ runStateT x env
+                              goo env = \ x -> fst $ fromOK $ runStateT x env
 
 joinInfo :: ((String, String), String, String) -> String
 joinInfo ((pre_s, post_s), opf, ope) = 
@@ -174,7 +174,7 @@ idGen =
 
 oldExprFileGen :: FilePath -> UpgradePPD PPDATE -> IO ()
 oldExprFileGen output_add ppd = 
- let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      consts        = htsGet ppdate      
      oldExpM       = oldExpTypes env 
      consts'       = [c | c <- consts, noOldExprInHT $ Map.lookup (htName c) oldExpM]    
@@ -292,7 +292,7 @@ cloningGen =
 
 templatesFileGen :: FilePath -> UpgradePPD PPDATE -> IO ()
 templatesFileGen output_add ppd = 
- let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      temps         = templatesGet ppdate 
      imps          = getImports $ importsGet ppdate
  in case temps of

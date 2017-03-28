@@ -11,6 +11,13 @@ import Data.Maybe
 import Data.List
 import Language.Java.Syntax hiding(VarDecl)
 import qualified AbsActions as Act
+import qualified AbsJml as Jml
+import qualified ParserAct as ParAct
+import qualified ParserJML as ParJML
+import qualified PrintActions as PrintAct
+import qualified PrintJml as PrintJML
+import TranslatorActions
+
 
 translate :: UpgradePPD PPDATE -> FilePath -> IO ()
 translate ppd fpath =
@@ -57,7 +64,7 @@ writeGlobal ppdate env =
     ++ writeProperties prop consts env
     ++ writeForeach fors consts env
     ++ generateReplicatedAutomata consts trs env  
-    ++ writeTemplates temps env
+    ++ writeTemplates temps env consts
     ++ "}\n" 
  
 ---------------
@@ -592,13 +599,13 @@ generatePropNonRec c n es env =
 -- Templates --
 ---------------
 
-writeTemplates :: Templates -> Env -> String
-writeTemplates TempNil _        = ""
-writeTemplates (Temp temps) env = 
+writeTemplates :: Templates -> Env -> HTriples -> String
+writeTemplates TempNil _ _             = ""
+writeTemplates (Temp temps) env consts = 
  let creates = removeDuplicates $ allCreateAct env
      skell   = map generateRAtmp temps
-     xs      = [ instantiateTemp for id args (caiCh cai) | (id,args,for) <- skell , cai <- creates, id == caiId cai ] 
- in writeForeach xs [] env
+     xs      = [ instantiateTemp for id args cai env | (id,args,for) <- skell , cai <- creates, id == caiId cai ] 
+ in writeForeach xs consts env
 
 generateRAtmp :: Template -> (Id, [Args], Foreach)
 generateRAtmp temp = (tempId temp, tempBinds temp, Foreach (filterRefTypes $ tempBinds temp) (generateCtxtForTemp temp) (ForId (tempId temp)))
@@ -606,19 +613,48 @@ generateRAtmp temp = (tempId temp, tempBinds temp, Foreach (filterRefTypes $ tem
 generateCtxtForTemp :: Template -> Context
 generateCtxtForTemp temp = Ctxt (tempVars temp) (tempActEvents temp) (tempTriggers temp) (tempProp temp) []
 
-instantiateTemp :: Foreach -> Id -> [Args] -> Channel -> Foreach
-instantiateTemp for id args ch = 
- let ctxt   = getCtxtForeach for 
-     ctxt'  = updateCtxtTrs ctxt ((genTriggerForCreate id ch args):triggers ctxt)
-     ctxt'' = updateCtxtProps ctxt' (instantiateProp (property ctxt) args ch)
+instantiateTemp :: Foreach -> Id -> [Args] -> CreateActInfo -> Env -> Foreach
+instantiateTemp for id args cai env = 
+ let ch     = caiCh cai
+     trs    = addTriggerDef args cai env
+     ctxt   = getCtxtForeach for 
+     targs  = splitTempArgs (zip args (caiArgs cai)) emptyTargs  
+     trs'   = (genTriggerForCreate id ch args):triggers ctxt ++ trs
+     ctxt'  = updateCtxtTrs ctxt (instantiateTrs trs' (makeMap $ targRef targs ++ targMN targs))
+     ctxt'' = updateCtxtProps ctxt' (instantiateProp (property ctxt) args cai)
  in Foreach (getArgsForeach for) ctxt'' (ForId (show (getIdForeach for) ++ ch))
 
-instantiateProp :: Property -> [Args] -> Channel -> Property
-instantiateProp PNIL _ _                              = PNIL
-instantiateProp (Property id sts trans props) args ch =  
- let sts'   = addNewInitState sts
-     trans' = (Transition "start" (Arrow ("r"++ch) "" "") (head $ map getNameState $ getStarting sts)):trans
- in Property (id++"_"++ch) sts' trans' props
+instantiateTrs :: Triggers -> Map.Map Id String -> Triggers
+instantiateTrs [] _        = []
+instantiateTrs (tr:trs) mp = tr { compTrigger = instantiateCE (compTrigger tr) mp } : instantiateTrs trs mp
+
+instantiateCE :: CompoundTrigger -> Map.Map Id String -> CompoundTrigger
+instantiateCE (NormalEvent (BindingVar (BindId id')) id bs tv) mp = 
+ NormalEvent (BindingVar (BindId (instantiateArg mp id'))) (instantiateArg mp id) bs tv
+instantiateCE (NormalEvent bind id bs tv) mp =  NormalEvent bind (instantiateArg mp id) bs tv
+instantiateCE (ClockEvent id n) mp           = ClockEvent (instantiateArg mp id) n
+instantiateCE (OnlyId id) mp                 = OnlyId (instantiateArg mp id)
+instantiateCE (OnlyIdPar id) mp              = OnlyIdPar (instantiateArg mp id)
+
+
+addTriggerDef :: [Args] -> CreateActInfo -> Env -> Triggers
+addTriggerDef args cai env = 
+ let targs = targTr $ splitTempArgs (zip args (caiArgs cai)) emptyTargs
+     scope = caiScope cai
+     trs   = allTriggers env 
+     xs    = [ fromJust $ tiTrDef tr | tr <- trs, tiScope tr == scope, targ <- targs, (showActArgs $ snd targ) == tiTN tr]
+ in xs
+
+instantiateProp :: Property -> [Args] -> CreateActInfo -> Property
+instantiateProp PNIL _ _                               = PNIL
+instantiateProp (Property id sts trans props) args cai =  
+ let ch      = caiCh cai
+     sts'    = addNewInitState sts
+     trans'  = (Transition "start" (Arrow ("r"++ch) "" "") (head $ map getNameState $ getStarting sts)):trans
+     targs   = splitTempArgs (zip args (caiArgs cai)) emptyTargs
+     sts''   = instantiateHT (makeMap $ targHT targs) sts'
+     trans'' = instantiateTrans (makeMap $ (targTr targs ++ targCond targs ++ targAct targs)) trans
+ in Property (id++"_"++ch) sts'' trans'' props
 
 genTriggerForCreate :: Id -> Channel -> [Args] -> TriggerDef
 genTriggerForCreate id ch args = 
@@ -630,3 +666,80 @@ genTriggerForCreate id ch args =
 
 addNewInitState :: States -> States
 addNewInitState (States start accep bad norm) = States [State "start" InitNil []] accep bad (norm++start)
+
+instantiateTrans :: Map.Map Id String -> Transitions -> Transitions
+instantiateTrans mp trans = 
+ if null mp
+ then trans
+ else map (instantiateTran mp) trans
+
+instantiateTran :: Map.Map Id String -> Transition -> Transition
+instantiateTran mp tran = Transition (fromState tran) (instantiateArrow mp $ arrow tran) (toState tran)
+
+instantiateArrow :: Map.Map Id String -> Arrow -> Arrow
+instantiateArrow mp arrow = 
+ Arrow (instantiateArg mp (trigger arrow)) 
+       (prepareCond mp $ cond arrow) 
+       (prepareAct mp $ action arrow)
+
+prepareCond :: Map.Map Id String -> Cond -> Cond
+prepareCond _ []    = []
+prepareCond mp cond = PrintJML.printTree $ instantiateCond mp $ fromOK . ParJML.parse $ cond
+
+instantiateCond :: Map.Map Id String -> Jml.JML -> Jml.JML
+instantiateCond mp cond = 
+ case cond of
+      Jml.JMLAnd jml jml'       -> Jml.JMLAnd (instantiateCond mp jml) (instantiateCond mp jml')
+      Jml.JMLOr jml jml'        -> Jml.JMLOr (instantiateCond mp jml) (instantiateCond mp jml')
+      Jml.JMLImp jml jml'       -> Jml.JMLImp (instantiateCond mp jml) (instantiateCond mp jml')
+      Jml.JMLIff jml jml'       -> Jml.JMLIff (instantiateCond mp jml) (instantiateCond mp jml')
+      Jml.JMLForallRT t id body -> Jml.JMLForallRT t id body
+      Jml.JMLExistsRT t id body -> Jml.JMLExistsRT t id body
+      Jml.JMLPar jml            -> Jml.JMLPar (instantiateCond mp jml)
+      Jml.JMLExp exps           -> Jml.JMLExp $ map (instantiateExps mp) exps
+
+instantiateExps :: Map.Map Id String -> Jml.Expression -> Jml.Expression
+instantiateExps mp (Jml.Exp (Jml.IdJml id)) = Jml.Exp (Jml.IdJml (instantiateArg mp id))
+instantiateExps mp (Jml.ExpPar exps)        = Jml.ExpPar (map (instantiateExps mp) exps)
+instantiateExps mp jml                      = jml
+
+prepareAct :: Map.Map Id String -> Action -> Action
+prepareAct mp []  = []
+prepareAct mp act = PrintAct.printTree $ instantiateActs mp $ fromOK . ParAct.parse $ act
+
+instantiateActs :: Map.Map Id String -> Act.Actions -> Act.Actions
+instantiateActs mp (Act.Actions acts) = Act.Actions (map (instantiateAct mp) acts)
+
+instantiateAct :: Map.Map Id String -> Act.Action -> Act.Action
+instantiateAct mp act =
+ case act of
+      Act.ActBlock acts                       -> Act.ActBlock $ instantiateActs mp acts
+      Act.ActCond xs act'                     -> Act.ActCond xs $ instantiateAct mp act'
+      Act.ActArith (Act.Arith (Act.IdAct id)) -> Act.ActArith (Act.Arith (Act.IdAct (checkAct $ instantiateArg mp id)))
+      _                                       -> act
+
+checkAct :: String -> String
+checkAct []  = []
+checkAct act = init.cleanBack $ PrintAct.printTree $ (\act -> translateAct act emptyEnv) $ fromOK . ParAct.parse $ (act++";")
+
+instantiateHT :: Map.Map Id String -> States -> States
+instantiateHT mp sts = 
+ if null mp
+ then sts
+ else States (instantiateStates (getStarting sts) mp) 
+             (instantiateStates (getAccepting sts) mp)
+             (instantiateStates (getBad sts) mp) 
+             (instantiateStates (getNormal sts) mp)  
+
+instantiateStates :: [State] -> Map.Map Id String -> [State]
+instantiateStates [] _      = []
+instantiateStates (s:ss) mp = updateHTns s (map (instantiateArg mp) $ getCNList s) : instantiateStates ss mp
+
+instantiateArg :: Map.Map Id String -> Id -> String
+instantiateArg mp id = 
+ case Map.lookup id mp of
+      Nothing -> id
+      Just s  -> s
+
+makeMap :: [(Args,Act.Args)] -> Map.Map Id String
+makeMap = Map.fromList . map (\(x,y) -> (getArgsId x, showActArgs y))

@@ -26,6 +26,9 @@ clean = dropWhile (\ c -> isSpace c || c == '{' || c == '}')
 trim :: String -> String
 trim = reverse . clean . reverse . clean
 
+cleanBack :: String -> String
+cleanBack = reverse . clean . reverse
+
 splitAtIdentifier :: Char -> String -> (String, String)
 splitAtIdentifier iden s = (takeWhile (\c -> not (c == iden)) s, dropWhile (\c -> not (c == iden)) s)
 

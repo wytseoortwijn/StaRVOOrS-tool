@@ -7,22 +7,22 @@ import qualified Types as T
 import Data.Maybe
 
 translateAct :: Actions -> Env -> Actions
-translateAct (Actions acts) env = Actions $ map (translateAction env) acts
+translateAct (Actions acts) env = Actions $ map (translateAction' env) acts
 
 
 
-translateAction :: Env -> Action -> Action
-translateAction env (ActCond conds act)                    = ActCond conds (translateAction env act)
-translateAction env (ActBlock acts)                        = ActBlock (translateAct acts env)
-translateAction _ (ActBang (IdAct id))                     = ActProg (Prog (IdAct (id++".send")) [])
-translateAction _ (ActLog s parms)                         = ActProg (Prog (IdAct "System.out.printf") (ArgsS s:fromParm2Arg parms))
-translateAction env act@(ActCreate (Temp (IdAct id)) args) = 
+translateAction' :: Env -> Action -> Action
+translateAction' env (ActCond conds act)                    = ActCond conds (translateAction' env act)
+translateAction' env (ActBlock acts)                        = ActBlock (translateAct acts env)
+translateAction' _ (ActBang (IdAct id))                     = ActProg (Prog (IdAct (id++".send")) [])
+translateAction' _ (ActLog s parms)                         = ActProg (Prog (IdAct "System.out.printf") (ArgsS s:fromParm2Arg parms))
+translateAction' env act@(ActCreate (Temp (IdAct id)) args) = 
  let creates = allCreateAct env    
      ch      = T.caiCh $ fromJust $ getChannel act creates
      args'   = head [xs | (id',xs) <- tempsInfo env, id == id']
      fargs   = map fst $ filterRefTypes $ zip args args'
  in ActProg (Prog (IdAct (ch++".send")) ([ArgsNew (Prog (IdAct ("Tmp_"++id)) fargs)]))
-translateAction _ act                                      = act
+translateAction' _ act                                      = act
 
 fromParm2Arg :: Params -> [Args]
 fromParm2Arg ParamsNil   = []

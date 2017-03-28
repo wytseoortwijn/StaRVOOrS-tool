@@ -149,12 +149,12 @@ updateTemplateProp :: Template -> Property -> Template
 updateTemplateProp (Template id bs vars ies trs prop) prop' = Template id bs vars ies trs prop'
 
 data TempArgs = TArgs --Arguments used to instantiate a template
- { targTr   :: [Act.Args]--triggers
- , targAct  :: [Act.Args]--actions
- , targCond :: [Act.Args]--conditions
- , targHT   :: [Act.Args]--Hoare triples
- , targRef  :: [Act.Args]--reference types
- , targMN   :: [Act.Args]--method names
+ { targTr   :: [(Args,Act.Args)]--triggers
+ , targAct  :: [(Args,Act.Args)]--actions
+ , targCond :: [(Args,Act.Args)]--conditions
+ , targHT   :: [(Args,Act.Args)]--Hoare triples
+ , targRef  :: [(Args,Act.Args)]--reference types
+ , targMN   :: [(Args,Act.Args)]--method names
  } deriving (Show,Eq)
 
 emptyTargs :: TempArgs
@@ -328,6 +328,9 @@ data State = State NameState InitialCode [HTName] deriving (Eq,Read)
 
 getNameState :: State -> NameState
 getNameState (State nm _ _) = nm
+
+updateHTns :: State -> [HTName] -> State
+updateHTns (State nm i hts) hts' = State nm i hts'
 
 instance Show State where
  show (State ns initc hts) = ns ++ show initc ++ foo hts ++ "; "

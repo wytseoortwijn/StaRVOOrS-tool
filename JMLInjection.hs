@@ -16,7 +16,7 @@ import System.IO
 
 generateTmpFilesAllConsts :: UpgradePPD PPDATE -> HTjml -> FilePath -> FilePath -> IO ()
 generateTmpFilesAllConsts ppd consts_jml output_add jpath =
- do let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
     let imports       = importsGet ppdate
     let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
     let ys = map makeAddFile imports'
@@ -98,7 +98,7 @@ lookForConstructorDef mn (xs:xss) =
 
 updateTmpFilesCInvs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 updateTmpFilesCInvs ppd output_add jpath = 
- do let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ do let (ppdate, env) =  fromOK $ runStateT ppd emptyEnv
     let imports       = importsGet ppdate
     let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
     sequence $ map (\ i -> updateTmpFileCInv i output_add jpath (varsInFiles env)) imports'
@@ -142,7 +142,7 @@ annotateNullable (type', v) (xs:xss) =
 
 generateTmpFilesCInvs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 generateTmpFilesCInvs ppd output_add jpath = 
- let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      imports       = importsGet ppdate
      cinvs         = cinvariantsGet ppdate
      xs            = splitCInvariants cinvs []
@@ -205,7 +205,7 @@ getCInvs' ((cl', cinvs):xs) cl = if (cl' == cl)
 
 generateDummyBoolVars :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 generateDummyBoolVars ppd output_add jpath = 
- let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      imports       = importsGet ppdate
      consts        = htsGet ppdate
      xs            = splitClassHT consts

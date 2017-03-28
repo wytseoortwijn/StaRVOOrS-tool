@@ -715,20 +715,20 @@ splitTempArgs :: [(Args,Act.Args)] -> TempArgs -> TempArgs
 splitTempArgs [] targs         = targs
 splitTempArgs (arg:args) targs = 
  case getArgsType (fst arg) of
-      "Action"     -> splitTempArgs args (targs {targAct = snd arg : targAct targs})
-      "Condition"  -> splitTempArgs args (targs {targCond = snd arg : targCond targs})
-      "Trigger"    -> splitTempArgs args (targs {targTr = snd arg : targTr targs})
-      "MethodName" -> splitTempArgs args (targs {targMN = snd arg : targMN targs})
-      "HTriple"    -> splitTempArgs args (targs {targHT = snd arg : targHT targs})
-      _            -> splitTempArgs args (targs {targRef = snd arg : targRef targs})
+      "Action"     -> splitTempArgs args (targs {targAct = arg : targAct targs})
+      "Condition"  -> splitTempArgs args (targs {targCond = arg : targCond targs})
+      "Trigger"    -> splitTempArgs args (targs {targTr = arg : targTr targs})
+      "MethodName" -> splitTempArgs args (targs {targMN = arg : targMN targs})
+      "HTriple"    -> splitTempArgs args (targs {targHT = arg : targHT targs})
+      _            -> splitTempArgs args (targs {targRef = arg : targRef targs})
 
 checkTempArgs :: TempArgs -> Env -> Scope -> Writer String [Bool]
 checkTempArgs targs env scope = 
- sequence [ checkTempArgsActions (targAct targs)
-          , checkTempArgsHTriples (targHT targs) (htsNames env)
-          , checkTempArgsConditions (targCond targs)
-          , checkTempArgsTriggers (targTr targs) (allTriggers env) scope
-          , checkMethodNames (targMN targs) (methodsInFiles env)
+ sequence [ checkTempArgsActions (map snd $ targAct targs)
+          , checkTempArgsHTriples (map snd $ targHT targs) (htsNames env)
+          , checkTempArgsConditions (map snd $ targCond targs)
+          , checkTempArgsTriggers (map snd $ targTr targs) (allTriggers env) scope
+          , checkMethodNames (map snd $ targMN targs) (methodsInFiles env)
           ]
 
 checkTempArgsActions :: [Act.Args] -> Writer String Bool
@@ -1318,10 +1318,10 @@ put = CM.put
 runStateT = CM.runStateT
 
 getValue :: UpgradePPD a -> a
-getValue uppd = fst . (\(Ok x) -> x) $ runStateT uppd emptyEnv
+getValue uppd = fst . fromOK $ runStateT uppd emptyEnv
 
 getEnvVal :: UpgradePPD a -> Env
-getEnvVal uppd = snd . (\(Ok x) -> x) $ runStateT uppd emptyEnv
+getEnvVal uppd = snd . fromOK $ runStateT uppd emptyEnv
 
 getHTNamesEnv :: UpgradePPD a -> [HTName]
 getHTNamesEnv ppd = let env = CM.execStateT ppd emptyEnv
