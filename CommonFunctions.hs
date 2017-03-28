@@ -55,17 +55,23 @@ checkIfParseErrors es = let (ls, rs) = partitionEithers es
                            then Left ls
                            else Right rs
 
-lookForEntryTrigger :: [TriggersInfo] -> MethodCN -> [Trigger]
-lookForEntryTrigger [] _           = []
-lookForEntryTrigger (tinfo:es) mnc = 
+lookForEntryTrigger :: [TriggersInfo] -> MethodCN -> Scope -> [Trigger]
+lookForEntryTrigger [] _ _               = []
+lookForEntryTrigger (tinfo:es) mnc scope = 
  let mn = mname mnc
      ci = clinf mnc
      ov = overl mnc
  in case (tiTrvar tinfo) of
-        EVEntry -> if (mn == (tiMN tinfo) && ci == (tiCI tinfo) && (cmpOverloading ov (tiOver tinfo) || ov == OverNil))
-                   then (tiTN tinfo):lookForEntryTrigger es mnc
-                   else lookForEntryTrigger es mnc
-        _       -> lookForEntryTrigger es mnc
+        EVEntry -> if (mn == (tiMN tinfo) && ci == (tiCI tinfo) && scope == (tiScope tinfo)
+                      && (cmpOverloading ov (tiOver tinfo) || ov == OverNil))
+                   then (tiTN tinfo):lookForEntryTrigger es mnc scope
+                   else lookForEntryTrigger es mnc scope
+        _       -> lookForEntryTrigger es mnc scope
+
+cmpScope :: Scope -> Scope -> Bool
+cmpScope (InFor (ForId id')) (InTemp id) = isInfixOf id id' 
+cmpScope (InTemp id') (InFor (ForId id)) = cmpScope (InFor (ForId id)) (InTemp id')
+cmpScope scope scope' = scope == scope'
 
 cmpOverloading :: Overloading -> Overloading -> Bool
 cmpOverloading ov ov' = ov == ov' || ov == OverNil

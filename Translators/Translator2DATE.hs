@@ -61,7 +61,7 @@ writeGlobal ppdate env =
      temps  = templatesGet ppdate            
  in "GLOBAL {\n\n" ++ writeVariables vars consts acts (allCreateAct env)
     ++ writeTriggers trs consts acts env
-    ++ writeProperties prop consts env
+    ++ writeProperties prop consts env TopLevel
     ++ writeForeach fors consts env
     ++ generateReplicatedAutomata consts trs env  
     ++ writeTemplates temps env consts
@@ -223,21 +223,18 @@ getClassInfo e env =
 -- Properties --
 ----------------
 
-writeProperties :: Property -> HTriples -> Env -> String
-writeProperties PNIL _ _        = ""
-writeProperties prop consts env = getProperties prop consts env
+writeProperties :: Property -> HTriples -> Env -> Scope -> String
+writeProperties PNIL _ _ _            = ""
+writeProperties prop consts env scope = writeProperty prop consts env scope
 
-getProperties :: Property -> HTriples -> Env -> String
-getProperties = writeProperty
-
-writeProperty :: Property -> HTriples -> Env -> String
-writeProperty PNIL _ _                                   = ""
-writeProperty (Property name states trans props) cs  env =
+writeProperty :: Property -> HTriples -> Env -> Scope -> String
+writeProperty PNIL _ _ _                                       = ""
+writeProperty (Property name states trans props) cs  env scope =
   "PROPERTY " ++ name ++ " \n{\n\n"
   ++ writeStates states
-  ++ writeTransitions name trans cs states env
+  ++ writeTransitions name trans cs states env scope
   ++ "}\n\n"
-  ++ writeProperty props cs env
+  ++ writeProperty props cs env scope
 
 writeStates :: States -> String
 writeStates (States start acc bad normal) =
@@ -267,14 +264,14 @@ getInitCode' (InitProg java) = "{" ++ init java ++ "}"
 
 --HTriples [] -> Replicated Automata
 --HTriples non-empty -> Property transitions instrumentation
-writeTransitions :: PropertyName -> Transitions -> HTriples -> States -> Env -> String
-writeTransitions _ ts [] _ env =
+writeTransitions :: PropertyName -> Transitions -> HTriples -> States -> Env -> Scope -> String
+writeTransitions _ ts [] _ env scope =
  "TRANSITIONS \n{ \n"
  ++ concat (map (getTransition env) ts)
  ++ "}\n\n"
-writeTransitions pn ts (c:cs) states env =
+writeTransitions pn ts (c:cs) states env scope =
  "TRANSITIONS \n{ \n"
-  ++ (concat (map (getTransition env) (getTransitionsGeneral (c:cs) states ts env pn)))
+  ++ (concat (map (getTransition env) (getTransitionsGeneral (c:cs) states ts env pn scope)))
   ++ "}\n\n"
 
 getTransition :: Env -> Transition -> String
@@ -284,39 +281,40 @@ getTransition env (Transition q (Arrow e c act) q') =
           else e
  in q ++ " -> " ++ q' ++ " [" ++ e' ++ " \\ "  ++ c ++ " \\ " ++ (concat.lines) act ++ "]\n"
 
-getTransitionsGeneral :: HTriples -> States -> Transitions -> Env -> PropertyName -> Transitions
-getTransitionsGeneral cs (States star acc bad nor) ts env pn =
- let ts1 = generateAllTransitions star cs ts env pn
-     ts2 = generateAllTransitions acc cs ts1 env pn
-     ts3 = generateAllTransitions bad cs ts2 env pn
-     ts4 = generateAllTransitions nor cs ts3 env pn
+getTransitionsGeneral :: HTriples -> States -> Transitions -> Env -> PropertyName -> Scope -> Transitions
+getTransitionsGeneral cs (States star acc bad nor) ts env pn scope =
+ let ts1 = generateAllTransitions star cs ts env pn scope
+     ts2 = generateAllTransitions acc cs ts1 env pn scope
+     ts3 = generateAllTransitions bad cs ts2 env pn scope
+     ts4 = generateAllTransitions nor cs ts3 env pn scope
  in ts4
 
-generateAllTransitions :: [State] -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
-generateAllTransitions [] _ ts _ _                             = ts
-generateAllTransitions ((State ns ic []):xs) cs ts env pn      = generateAllTransitions xs cs ts env pn
-generateAllTransitions ((State ns ic l@(_:_)):xs) cs ts env pn = 
- let ts' = accumTransitions l ns cs ts env pn
- in generateAllTransitions xs cs ts' env pn
+generateAllTransitions :: [State] -> HTriples -> Transitions -> Env -> PropertyName -> Scope -> Transitions
+generateAllTransitions [] _ ts _ _ _                                 = ts
+generateAllTransitions ((State ns ic []):xs) cs ts env pn scope      = generateAllTransitions xs cs ts env pn scope
+generateAllTransitions ((State ns ic l@(_:_)):xs) cs ts env pn scope = 
+ let ts' = accumTransitions l ns cs ts env pn scope
+ in generateAllTransitions xs cs ts' env pn scope
 
-accumTransitions :: [HTName] -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
-accumTransitions [] _ _ ts _ _                = ts
-accumTransitions (cn:cns) ns consts ts env pn =
- let (nonlts,gentrans,lts) = generateTransitions cn ns consts ts env pn
-     instrans = instrumentTransitions cn ns consts lts env pn
- in accumTransitions cns ns consts (nonlts++instrans) env pn ++ gentrans
+accumTransitions :: [HTName] -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Scope -> Transitions
+accumTransitions [] _ _ ts _ _ _                    = ts
+accumTransitions (cn:cns) ns consts ts env pn scope =
+ let (nonlts,gentrans,lts) = generateTransitions cn ns consts ts env pn scope
+     instrans = instrumentTransitions cn ns consts lts env pn scope
+ in accumTransitions cns ns consts (nonlts++instrans) env pn scope ++ gentrans
 
-generateTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> (Transitions,Transitions,Transitions)
-generateTransitions p ns cs ts env pn = 
+generateTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Scope -> (Transitions,Transitions,Transitions)
+generateTransitions p ns cs ts env pn scope = 
  let c             = lookForHT p cs ns
      mn            = mname $ methodCN c
-     entrs         = lookForEntryTrigger (allTriggers env) (methodCN c)
+     entrs         = lookForEntryTrigger (allTriggers env) (methodCN c) scope
      entrs'        = [tr | tr <- entrs, not(isInfixOf (mn++"_ppden") tr)]
+     entrs''       = [tr | tr <- entrs, isInfixOf (mn++"_ppden") tr ]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
  in if null entrs
     then error $ "Translation: Missing entry trigger for method " ++ mn ++ ".\n"
     else if (null lts)
-         then (ts,makeTransitionAlg1 ns c env pn mn entrs,[])
+         then (ts,makeTransitionAlg1 ns c env pn mn entrs'',[])
          else let ext  = map (\e -> makeExtraTransitionAlg2 lts c e ns env pn) entrs'
                   ext' = map fromJust $ filter (\c -> c /= Nothing) ext
               in (nonlts,ext',lts)            
@@ -398,11 +396,11 @@ avoidTriviallyFalseCond :: Transitions -> Transitions
 avoidTriviallyFalseCond = filter (check.trim.cond.arrow)
                                     where check = \ t -> t /= "true" && (not.null.trim) t
 
-instrumentTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Transitions
-instrumentTransitions p ns cs ts env pn = 
+instrumentTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Scope -> Transitions
+instrumentTransitions p ns cs ts env pn scope = 
  let c             = lookForHT p cs ns
      mn            = mname $ methodCN c
-     entrs         = lookForEntryTrigger (allTriggers env) (methodCN c)
+     entrs         = lookForEntryTrigger (allTriggers env) (methodCN c) scope
      entrs'        = [tr | tr <- entrs, not(isInfixOf (mn++"_ppden") tr)]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
  in if null entrs
@@ -460,7 +458,7 @@ writeForeach (foreach:fors) consts env =
  in "FOREACH (" ++ getForeachArgs args ++ ") {\n\n"
     ++ writeVariables vars [] [] []
     ++ writeTriggers es consts [] env
-    ++ writeProperties prop consts env
+    ++ writeProperties prop consts env (InFor $ getIdForeach foreach)
     ++ writeForeach fors' consts env
     ++ "}\n\n"
     ++ writeForeach fors consts env
@@ -574,7 +572,7 @@ generateRAString es env c n rec =
       cn = pName ra
   in ("PROPERTY " ++ cn ++ "\n{\n\n"
      ++ writeStates (pStates ra)
-     ++ writeTransitions cn (pTransitions ra) [] (States [] [] [] []) emptyEnv
+     ++ writeTransitions cn (pTransitions ra) [] (States [] [] [] []) emptyEnv (InFor (ForId cn))
      ++ "}\n\n",cn)
 
 --Optimisation: If the method is not recursive, then use optimised automaton
@@ -619,10 +617,11 @@ instantiateTemp for id args cai env =
      trs    = addTriggerDef args cai env
      ctxt   = getCtxtForeach for 
      targs  = splitTempArgs (zip args (caiArgs cai)) emptyTargs  
-     trs'   = (genTriggerForCreate id ch args):triggers ctxt ++ trs
-     ctxt'  = updateCtxtTrs ctxt (instantiateTrs trs' (makeMap $ targRef targs ++ targMN targs))
+     trs'   = (genTriggerForCreate id ch args): instantiateTrs (triggers ctxt) mp
+     mp     = Map.union (makeRefTypeMap $ targRef targs) (makeMap $ targMN targs)
+     ctxt'  = updateCtxtTrs ctxt (trs' ++ trs)
      ctxt'' = updateCtxtProps ctxt' (instantiateProp (property ctxt) args cai)
- in Foreach (getArgsForeach for) ctxt'' (ForId (show (getIdForeach for) ++ ch))
+ in Foreach (getArgsForeach for) ctxt'' (ForId (show (getIdForeach for) ++ "_"++ch))
 
 instantiateTrs :: Triggers -> Map.Map Id String -> Triggers
 instantiateTrs [] _        = []
@@ -743,3 +742,6 @@ instantiateArg mp id =
 
 makeMap :: [(Args,Act.Args)] -> Map.Map Id String
 makeMap = Map.fromList . map (\(x,y) -> (getArgsId x, showActArgs y))
+
+makeRefTypeMap :: [(Args,Act.Args)] -> Map.Map Id String
+makeRefTypeMap args = Map.fromList [ (getArgsId x,show x) | (x,y) <- args]

@@ -69,7 +69,7 @@ getCtxt (Abs.Ctxt vars ies Abs.TriggersNil prop foreaches) scope =
  getCtxt (Abs.Ctxt vars ies (Abs.TriggersDef []) prop foreaches) scope
 getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
  do vars' <- getVars vars
-    trigs' <- getTriggers trigs scope
+    trigs' <- getTriggers trigs scope []
     env <- get
     let prop' = getProperty prop (map tiTN (allTriggers env)) env scope
     let cns   = htsNames env
@@ -154,11 +154,11 @@ getActEvents (Abs.ActEventsDef ies) = map (\(Abs.ActEvent ie) -> ActEvent (getId
 
 -- Triggers --
 
-getTriggers :: Abs.Triggers -> Scope -> UpgradePPD Triggers
-getTriggers Abs.TriggersNil _          = return []
-getTriggers (Abs.TriggersDef es) scope =
+getTriggers :: Abs.Triggers -> Scope -> [Args] -> UpgradePPD Triggers
+getTriggers Abs.TriggersNil _ _             = return []
+getTriggers (Abs.TriggersDef es) scope args =
  do env <- get
-    let xs = map (getTrigger' scope) es
+    let xs = map (\ tr -> getTrigger' scope tr args) es
     let (ls, rs) = partitionErr (map (\e -> CM.evalStateT e env) xs)
     if (null ls)
     then sequence xs
@@ -168,8 +168,8 @@ joinBad :: Err a -> String -> String
 joinBad (Bad s1) s2 = s1 ++ s2
 joinBad _ _         = error "ppDATE refinement failure: joinBad \n"
 
-getTrigger' :: Scope -> Abs.Trigger -> UpgradePPD TriggerDef
-getTrigger' scope (Abs.Trigger id binds ce wc) =
+getTrigger' :: Scope -> Abs.Trigger -> [Args] -> UpgradePPD TriggerDef
+getTrigger' scope (Abs.Trigger id binds ce wc) args =
  do env  <- get
     let id'' = getIdAbs id
     let xs   = [ x | x <- allTriggers env, id'' == tiTN x, tiScope x == scope ]
@@ -208,7 +208,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                                                  then show bind
                                                                                  else s''
                                                                      let ov = generateOverloading bs (getCTArgs ce')
-                                                                     (ci,cinm) <- getClassVarName id'' mn bs bind s'' scope
+                                                                     (ci,cinm) <- getClassVarName id'' mn bs bind s'' scope args
                                                                      let tr = TriggerDef { tName = id''
                                                                                          , args  = bs
                                                                                          , compTrigger = ce'
@@ -231,7 +231,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) =
                                                               (b',s'') -> 
                                                                 if (b' && (checkRetVar rs argss))
                                                                 then if (not.null) err1 then fail err1 else
-                                                                     do (ci,cinm) <- getClassVarName id'' mn bs bind s'' scope
+                                                                     do (ci,cinm) <- getClassVarName id'' mn bs bind s'' scope args
                                                                         let ov = generateOverloading bs (getCTArgs ce')
                                                                         let tr = TriggerDef { tName = id''
                                                                                             , args  = bs
@@ -624,7 +624,7 @@ genTemplates (Abs.Temps xs) =
 
 genTemplate :: Abs.Template -> UpgradePPD Template
 genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) = 
- do trigs' <- getTriggers trs (InTemp (getIdAbs id))
+ do trigs' <- getTriggers trs (InTemp (getIdAbs id)) (map ((uncurry makeArgs).getArgsAbs) args)
     env <- get
     let cns   = htsNames env
     let prop' = getProperty prop (map tName trigs') env (InTemp (getIdAbs id))
@@ -638,7 +638,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                                          else "" 
                   in if ((not.null) s')
                      then fail s'
-                     else do put env' { actes           = actes env' ++ map show (getActEvents ies)}
+                     else do put env' { actes = actes env' ++ map show (getActEvents ies)}
                              return $ Template { tempId        = getIdAbs id
                                                , tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
                                                , tempVars      = getValue $ getVars vars
@@ -658,7 +658,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                       temptrs = splitOnIdentifier "," $ fst s
                   in if ((not.null) s')
                      then fail s'
-                     else do put env' { actes           = actes env' ++ map show (getActEvents ies)}
+                     else do put env' { actes = actes env' ++ map show (getActEvents ies)}
                              return $ Template { tempId        = getIdAbs id
                                                , tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
                                                , tempVars      = getValue $ getVars vars
@@ -1282,15 +1282,18 @@ emptyEnv = Env { forsVars        = []
                , allCreateAct    = []
                }
 
-getClassVarName :: Trigger -> MethodName -> [Bind] -> Bind -> String -> Scope -> UpgradePPD (ClassInfo,String)
-getClassVarName _ _ args BindStar _ _          = return ("*","")
-getClassVarName _ _ args (BindType t id) _ _   = return (t,id)
-getClassVarName tr mn args (BindId id) s scope = 
+getClassVarName :: Trigger -> MethodName -> [Bind] -> Bind -> String -> Scope -> [Args] -> UpgradePPD (ClassInfo,String)
+getClassVarName _ _ args BindStar _ _ _                 = return ("*","")
+getClassVarName _ _ args (BindType t id) _ _ _          = return (t,id)
+getClassVarName tr mn args (BindId id) s scope argsTemp = 
  let ts' = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
      ts  = if (null ts') then prepareValUpd mn s id s else ts'
  in if (length ts /= 1)
     then if tempScope scope
-         then return ("",id)
+         then let xs = [ getArgsType arg | arg <- argsTemp, getArgsId arg == id]
+              in if null xs 
+                 then return ("",id)
+                 else return (head xs,id)
          else fail $ "The trigger " ++ tr ++ " does not include a class variable declaration.\n" 
     else return (head ts,id)
  
