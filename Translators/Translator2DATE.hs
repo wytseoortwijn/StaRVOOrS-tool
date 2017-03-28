@@ -668,7 +668,7 @@ addNewInitState (States start accep bad norm) = States [State "start" InitNil []
 
 instantiateTrans :: Map.Map Id String -> Transitions -> Transitions
 instantiateTrans mp trans = 
- if null mp
+ if Map.null mp
  then trans
  else map (instantiateTran mp) trans
 
@@ -723,7 +723,7 @@ checkAct act = init.cleanBack $ PrintAct.printTree $ (\act -> translateAct act e
 
 instantiateHT :: Map.Map Id String -> States -> States
 instantiateHT mp sts = 
- if null mp
+ if Map.null mp
  then sts
  else States (instantiateStates (getStarting sts) mp) 
              (instantiateStates (getAccepting sts) mp)

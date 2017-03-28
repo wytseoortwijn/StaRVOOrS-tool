@@ -62,7 +62,7 @@ lookForEntryTrigger (tinfo:es) mnc scope =
      ci = clinf mnc
      ov = overl mnc
  in case (tiTrvar tinfo) of
-        EVEntry -> if (mn == (tiMN tinfo) && ci == (tiCI tinfo) && scope == (tiScope tinfo)
+        EVEntry -> if (mn == (tiMN tinfo) && ci == (tiCI tinfo) && cmpScope scope (tiScope tinfo)
                       && (cmpOverloading ov (tiOver tinfo) || ov == OverNil))
                    then (tiTN tinfo):lookForEntryTrigger es mnc scope
                    else lookForEntryTrigger es mnc scope
