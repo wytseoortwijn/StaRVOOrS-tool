@@ -17,7 +17,7 @@ import JavaLanguage
 -- creates new files with methods instrumented
 methodsInstrumentation :: UpgradePPD T.PPDATE -> FilePath -> FilePath -> IO ()
 methodsInstrumentation ppd jpath output_add =
- do let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
     let consts        = T.htsGet ppdate
     if (null consts)
     then return ()
@@ -25,7 +25,7 @@ methodsInstrumentation ppd jpath output_add =
 
 methodsInstrumentation' :: UpgradePPD T.PPDATE -> FilePath -> FilePath -> IO ()
 methodsInstrumentation' ppd jpath output_add =
-  do let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
+  do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      let consts        = T.htsGet ppdate
      let imp           = T.importsGet ppdate
      sequence [ instrumentFile i consts jpath output_add
@@ -107,7 +107,7 @@ addMethodInFile (id,methodaux,method) (xs:xss) =
 --Adds to the upgraded ppDATE's env the variables of all the java files involved in the verification process
 programVariables :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
 programVariables ppd jpath = 
- do let imports = T.importsGet (fst . (\(Ok x) -> x) $ runStateT ppd emptyEnv)
+ do let imports = T.importsGet (fst . fromOK $ runStateT ppd emptyEnv)
     vars <- sequence [ getVariables i jpath
                      | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
                      ]
@@ -130,7 +130,7 @@ getVariables i jpath =
 --Adds to the upgraded ppDATE's env the method declarations of all the java files involved in the verification process
 programMethods :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
 programMethods ppd jpath = 
- do let imports = T.importsGet (fst . (\(Ok x) -> x) $ runStateT ppd emptyEnv)
+ do let imports = T.importsGet (fst . fromOK $ runStateT ppd emptyEnv)
     ms <- sequence [ getMethods i jpath
                    | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
                    ]

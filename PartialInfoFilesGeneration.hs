@@ -1,4 +1,4 @@
-module PartialInfoFilesGeneration (htsJavaFileGen, idFileGen, oldExprFileGen,messagesFileGen,cloningFileGen) where
+module PartialInfoFilesGeneration (htsJavaFileGen, idFileGen, oldExprFileGen,messagesFileGen,cloningFileGen,templatesFileGen) where
 
 import Types
 import System.Directory
@@ -18,7 +18,7 @@ import Data.List
 
 htsJavaFileGen :: UpgradePPD PPDATE -> FilePath -> IO ()
 htsJavaFileGen ppd output_add = 
- let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      imp           = importsGet ppdate
      global        = globalGet ppdate
      consts        = htsGet ppdate
@@ -46,7 +46,7 @@ htsJavaFileGen ppd output_add =
             if (null consts) then return () else appendFile address body
             appendFile address "\n}"
                         where foo env = \(x,y) -> (goo env x, goo env y)
-                              goo env = \ x -> fst $ (\(Ok x) -> x) $ runStateT x env
+                              goo env = \ x -> fst $ fromOK $ runStateT x env
 
 joinInfo :: ((String, String), String, String) -> String
 joinInfo ((pre_s, post_s), opf, ope) = 
@@ -172,15 +172,15 @@ idGen =
 -- OldExpr Files --
 -------------------
 
-oldExprFileGen :: FilePath -> UpgradePPD PPDATE -> IO [()]
+oldExprFileGen :: FilePath -> UpgradePPD PPDATE -> IO ()
 oldExprFileGen output_add ppd = 
- let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      consts        = htsGet ppdate      
      oldExpM       = oldExpTypes env 
      consts'       = [c | c <- consts, noOldExprInHT $ Map.lookup (htName c) oldExpM]    
  in if Map.null oldExpM
-    then return [()]
-    else sequence [writeFile (output_add ++ (snd $ oldExpGen c oldExpM)) (fst $ oldExpGen c oldExpM) | c <- consts']
+    then return ()
+    else sequence_ [writeFile (output_add ++ (snd $ oldExpGen c oldExpM)) (fst $ oldExpGen c oldExpM) | c <- consts']
                      where noOldExprInHT v = v /= Nothing && (not.null.fromJust) v 
 
 oldExpGen :: HT -> OldExprM -> (String,String)
@@ -211,11 +211,11 @@ constructorOldExpr ((t,exp):xs) = "    " ++ "this." ++ exp ++ " = " ++ exp ++ ";
 -- Messages to send over the channels --
 ----------------------------------------
 
-messagesFileGen :: FilePath -> Env -> IO [()]
+messagesFileGen :: FilePath -> Env -> IO ()
 messagesFileGen output_add env = 
  let files    = [(output_add ++ "MessagesPPD.java") , (output_add ++ "MessagesOld.java")]
      xs       = [messagesGen , messageOldExpGen]
- in sequence $ map (uncurry writeFile) $ zip files xs
+ in sequence_ $ map (uncurry writeFile) $ zip files xs
     
 messagesGen :: String
 messagesGen =
@@ -286,3 +286,39 @@ cloningGen =
   ++ "  }\n\n"
   ++ "}\n"
 
+---------------------
+-- Templates Files --
+---------------------
+
+templatesFileGen :: FilePath -> UpgradePPD PPDATE -> IO ()
+templatesFileGen output_add ppd = 
+ let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
+     temps         = templatesGet ppdate 
+     imps          = getImports $ importsGet ppdate
+ in case temps of
+         TempNil -> return ()
+         Temp xs -> sequence_ $ [writeFile (output_add ++ (snd val)) (fst val) | val <- map (tempGen imps) xs]
+
+tempGen :: String -> Template -> (String,String)
+tempGen imps temp = 
+ let id = tempId temp
+     nameClass = "Tmp_" ++ id
+     args      = filterRefTypes $ tempBinds temp
+ in ("package ppArtifacts;\n\n"
+    ++ imps ++ "\n\n"
+    ++ "public class " ++ nameClass ++ " {\n\n"
+    ++ varDeclTemp args
+    ++ "  public " ++ nameClass ++ "() { }\n\n"
+    ++ "  public " ++ nameClass ++ "(" ++ addComma (map (\arg -> getArgsType arg ++ " " ++ getArgsId arg) args) ++ ") {\n"
+    ++ constructorTemp args 
+    ++ "  }\n\n"
+    ++ "}\n", nameClass ++ ".java") 
+
+varDeclTemp :: [Args] -> String
+varDeclTemp []       = "\n"
+varDeclTemp (arg:xs) = 
+ "  public " ++ getArgsType arg ++ " " ++ getArgsId arg ++ ";\n" ++ varDeclTemp xs
+ 
+constructorTemp :: [Args] -> String
+constructorTemp []       = ""
+constructorTemp (arg:xs) = "    " ++ "this." ++ getArgsId arg ++ " = " ++ getArgsId arg ++ ";\n" ++ constructorTemp xs

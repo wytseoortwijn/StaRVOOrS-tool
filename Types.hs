@@ -5,6 +5,7 @@ import System.FilePath
 import System.Console.GetOpt
 import Data.Maybe ( fromMaybe )
 import Language.Java.Syntax hiding(Type,VarDecl)
+import qualified AbsActions as Act
 
 ------------
 -- ppDATE --
@@ -147,6 +148,18 @@ data Template = Template
 updateTemplateProp :: Template -> Property -> Template
 updateTemplateProp (Template id bs vars ies trs prop) prop' = Template id bs vars ies trs prop'
 
+data TempArgs = TArgs --Arguments used to instantiate a template
+ { targTr   :: [(Args,Act.Args)]--triggers
+ , targAct  :: [(Args,Act.Args)]--actions
+ , targCond :: [(Args,Act.Args)]--conditions
+ , targHT   :: [(Args,Act.Args)]--Hoare triples
+ , targRef  :: [(Args,Act.Args)]--reference types
+ , targMN   :: [(Args,Act.Args)]--method names
+ } deriving (Show,Eq)
+
+emptyTargs :: TempArgs
+emptyTargs = TArgs [] [] [] [] [] []
+
 --------------
 -- Methods  --
 --------------
@@ -169,10 +182,17 @@ data Foreach =
 updCtxtForeach :: Foreach -> Context -> Foreach
 updCtxtForeach (Foreach args ctxt id) ctxt' = Foreach args ctxt' id
 
-data ForId = ForId Id deriving (Eq,Show,Read)
+data ForId = ForId Id deriving (Eq,Read)
+
+instance Show ForId where
+ show (ForId id) = id
 
 --Type used to know where a trigger is defined
 data Scope = TopLevel | InFor ForId | InTemp Id deriving (Eq,Show,Read)
+
+tempScope :: Scope -> Bool
+tempScope (InTemp _) = True
+tempScope _          = False
 
 data Args =
  Args { getArgsType :: Type
@@ -266,6 +286,8 @@ type HTjml = [(MethodName, ClassInfo, Overloading, String)]
 
 type MethodInvocations = [Exp]
 
+type Channel = String
+
 data TriggersInfo = 
  TI { tiTN      :: Trigger --trigger_name
     , tiMN      :: MethodName --method_name
@@ -277,6 +299,14 @@ data TriggersInfo =
     , tiScope   :: Scope
     , tiOver    :: Overloading
     } deriving (Show,Eq)
+
+data CreateActInfo = 
+ CAI { caiId    :: Id
+     , caiArgs  :: [Act.Args]
+     , caiCh    :: Channel
+     , caiAct   :: Act.Action
+     , caiScope :: Scope
+     } deriving (Show,Eq)
 
 --------------
 -- PROPERTY --
@@ -295,6 +325,12 @@ type PropertyName = String
 type NameState = String
 
 data State = State NameState InitialCode [HTName] deriving (Eq,Read)
+
+getNameState :: State -> NameState
+getNameState (State nm _ _) = nm
+
+updateHTns :: State -> [HTName] -> State
+updateHTns (State nm i hts) hts' = State nm i hts'
 
 instance Show State where
  show (State ns initc hts) = ns ++ show initc ++ foo hts ++ "; "
@@ -401,6 +437,9 @@ data CompoundTrigger =
  | OnlyIdPar Id
  | Collection TriggerList
   deriving (Eq,Read)
+
+updCEne :: CompoundTrigger -> Binding -> CompoundTrigger
+updCEne (NormalEvent bind id bs tv) bind' = NormalEvent bind' id bs tv
 
 instance Show CompoundTrigger where
  show (NormalEvent b id binds tv) = show b ++ "." ++ id ++ "(" ++ addComma' (map show binds) ++ ")" ++ show tv

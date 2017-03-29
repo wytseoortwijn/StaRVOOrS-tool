@@ -101,19 +101,21 @@ run flags java_fn_add ppdate_fn output_add =
                               Bad s -> putStrLn s
                               Ok _  -> do ppd' <- programVariables ppd java_fn_add'
                                           ppdate <- programMethods ppd' java_fn_add'
-                                          onlyRV flags
-                                          ppdate' <- staticAnalysis java_fn_add' ppdate output_add' ppdate_fn flags
-                                          putStrLn "Initiating monitor files generation."
-                                          let larva_fn  = generateLarvaFileName ppdate_fn
-                                          let larva_add = output_addr ++ "out/" ++ larva_fn
-                                          writeFile larva_add ""
-                                          translate ppdate' larva_add
-                                          putStrLn "Running LARVA..."
-                                          let mode = if elem NoneVerbose flags then "" else "-v"
-                                          rawSystem "java" ["-jar","larva.jar",larva_add,mode,"-o",output_add']
-                                          putStrLn "Monitor files generation completed."
-                                          removeDirectoryRecursive (output_add' ++ "/workspace") 
-                                          putStrLn "StaRVOOrS has finished successfully.\n"
+                                          if null (wellFormedActions ppdate)
+                                          then do onlyRV flags
+                                                  ppdate' <- staticAnalysis java_fn_add' ppdate output_add' ppdate_fn flags
+                                                  putStrLn "Initiating monitor files generation."
+                                                  let larva_fn  = generateLarvaFileName ppdate_fn
+                                                  let larva_add = output_addr ++ "out/" ++ larva_fn
+                                                  writeFile larva_add ""
+                                                  translate ppdate' larva_add
+                                                  putStrLn "Running LARVA..."
+                                                  let mode = if elem NoneVerbose flags then "" else "-v"
+                                                  rawSystem "java" ["-jar","larva.jar",larva_add,mode,"-o",output_add']
+                                                  putStrLn "Monitor files generation completed."
+                                                  removeDirectoryRecursive (output_add' ++ "/workspace") 
+                                                  putStrLn "StaRVOOrS has finished successfully.\n"
+                                          else putStrLn (wellFormedActions ppdate)
 
 -------------------------
 -- Auxiliary Functions --

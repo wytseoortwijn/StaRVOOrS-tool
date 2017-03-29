@@ -15,7 +15,7 @@ import Data.List
 
 operationalizeOldResultBind :: UpgradePPD PPDATE -> Map.Map HTName [(String,Type)] -> UpgradePPD PPDATE
 operationalizeOldResultBind ppd oldExprTypesM =
- let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ let (ppdate, env) =  fromOK $ runStateT ppd emptyEnv
      global   = globalGet ppdate
      consts   = htsGet ppdate
      mfiles   = methodsInFiles env
@@ -29,7 +29,7 @@ operationalizeOldResultBind ppd oldExprTypesM =
  in if (not.null) xs'
     then error $ unlines xs'
     else ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ updateHTsPP (updateGlobalPP ppdate global') consts')
-                 where goo env = \ x -> fst $ (\(Ok x) -> x) $ runStateT x env
+                 where goo env = \ x -> fst $ fromOK $ runStateT x env
 
 
 operationalizePrePostORB :: HT -> [(String, ClassInfo, [(Type, Id)])] -> Triggers -> [(String, ClassInfo, [String])] -> Map.Map HTName [(String,Type)] -> UpgradePPD (HT,OldExprM)

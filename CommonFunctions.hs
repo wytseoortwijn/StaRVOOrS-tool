@@ -26,6 +26,9 @@ clean = dropWhile (\ c -> isSpace c || c == '{' || c == '}')
 trim :: String -> String
 trim = reverse . clean . reverse . clean
 
+cleanBack :: String -> String
+cleanBack = reverse . clean . reverse
+
 splitAtIdentifier :: Char -> String -> (String, String)
 splitAtIdentifier iden s = (takeWhile (\c -> not (c == iden)) s, dropWhile (\c -> not (c == iden)) s)
 
@@ -52,17 +55,23 @@ checkIfParseErrors es = let (ls, rs) = partitionEithers es
                            then Left ls
                            else Right rs
 
-lookForEntryTrigger :: [TriggersInfo] -> MethodCN -> [Trigger]
-lookForEntryTrigger [] _           = []
-lookForEntryTrigger (tinfo:es) mnc = 
+lookForEntryTrigger :: [TriggersInfo] -> MethodCN -> Scope -> [Trigger]
+lookForEntryTrigger [] _ _               = []
+lookForEntryTrigger (tinfo:es) mnc scope = 
  let mn = mname mnc
      ci = clinf mnc
      ov = overl mnc
  in case (tiTrvar tinfo) of
-        EVEntry -> if (mn == (tiMN tinfo) && ci == (tiCI tinfo) && (cmpOverloading ov (tiOver tinfo) || ov == OverNil))
-                   then (tiTN tinfo):lookForEntryTrigger es mnc
-                   else lookForEntryTrigger es mnc
-        _       -> lookForEntryTrigger es mnc
+        EVEntry -> if (mn == (tiMN tinfo) && ci == (tiCI tinfo) && cmpScope scope (tiScope tinfo)
+                      && (cmpOverloading ov (tiOver tinfo) || ov == OverNil))
+                   then (tiTN tinfo):lookForEntryTrigger es mnc scope
+                   else lookForEntryTrigger es mnc scope
+        _       -> lookForEntryTrigger es mnc scope
+
+cmpScope :: Scope -> Scope -> Bool
+cmpScope (InFor (ForId id')) (InTemp id) = isInfixOf id id' 
+cmpScope (InTemp id') (InFor (ForId id)) = cmpScope (InFor (ForId id)) (InTemp id')
+cmpScope scope scope' = scope == scope'
 
 cmpOverloading :: Overloading -> Overloading -> Bool
 cmpOverloading ov ov' = ov == ov' || ov == OverNil
@@ -214,6 +223,21 @@ flattenArgs :: [Args] -> String
 flattenArgs []               = ""
 flattenArgs [(Args t id)]    = t ++ " " ++ id
 flattenArgs ((Args t id):xs) = t ++ " " ++ id ++ "," ++ flattenArgs xs
+
+getImports :: Imports -> String
+getImports []            = ""
+getImports (Import s:xs) = "import " ++ s ++ ";\n" ++ getImports xs
+
+filterRefTypes :: [Args] -> [Args]
+filterRefTypes []         = []
+filterRefTypes (arg:args) = 
+ case getArgsType arg of
+      "Action"     -> filterRefTypes args
+      "Condition"  -> filterRefTypes args
+      "Trigger"    -> filterRefTypes args
+      "MethodName" -> filterRefTypes args
+      "HTriple"    -> filterRefTypes args
+      _            -> arg:filterRefTypes args
 
 ---------------------------------------
 -- Manipulating the parsed .xml file --
