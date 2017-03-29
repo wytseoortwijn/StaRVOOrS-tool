@@ -438,6 +438,9 @@ data CompoundTrigger =
  | Collection TriggerList
   deriving (Eq,Read)
 
+updCEne :: CompoundTrigger -> Binding -> CompoundTrigger
+updCEne (NormalEvent bind id bs tv) bind' = NormalEvent bind' id bs tv
+
 instance Show CompoundTrigger where
  show (NormalEvent b id binds tv) = show b ++ "." ++ id ++ "(" ++ addComma' (map show binds) ++ ")" ++ show tv
  show (ClockEvent id n)           = id ++ "@" ++ show n

@@ -614,35 +614,74 @@ generateCtxtForTemp temp = Ctxt (tempVars temp) (tempActEvents temp) (tempTrigge
 instantiateTemp :: Foreach -> Id -> [Args] -> CreateActInfo -> Env -> Foreach
 instantiateTemp for id args cai env = 
  let ch     = caiCh cai
-     trs    = addTriggerDef args cai env
+     mp     = Map.union (makeRefTypeMap $ targRef targs) (makeMap $ targMN targs)
+     trs    = addTriggerDef args cai env mp
      ctxt   = getCtxtForeach for 
      targs  = splitTempArgs (zip args (caiArgs cai)) emptyTargs  
      trs'   = (genTriggerForCreate id ch args): instantiateTrs (triggers ctxt) mp
-     mp     = Map.union (makeRefTypeMap $ targRef targs) (makeMap $ targMN targs)
      ctxt'  = updateCtxtTrs ctxt (trs' ++ trs)
      ctxt'' = updateCtxtProps ctxt' (instantiateProp (property ctxt) args cai)
  in Foreach (getArgsForeach for) ctxt'' (ForId (show (getIdForeach for) ++ "_"++ch))
 
 instantiateTrs :: Triggers -> Map.Map Id String -> Triggers
 instantiateTrs [] _        = []
-instantiateTrs (tr:trs) mp = tr { compTrigger = instantiateCE (compTrigger tr) mp } : instantiateTrs trs mp
+instantiateTrs (tr:trs) mp = 
+ let ce   = instantiateCE (compTrigger tr) mp
+     tr'  = tr { compTrigger = fst $ ce }
+     tr'' = if (snd ce) == Nothing then tr' else tr' { whereClause = (whereClause tr') ++ newWhereClause (fromJust $ snd ce)}
+ in tr'' : instantiateTrs trs mp
 
-instantiateCE :: CompoundTrigger -> Map.Map Id String -> CompoundTrigger
+instantiateCE :: CompoundTrigger -> Map.Map Id String -> (CompoundTrigger, Maybe String)
 instantiateCE (NormalEvent (BindingVar (BindId id')) id bs tv) mp = 
- NormalEvent (BindingVar (BindId (instantiateArg mp id'))) (instantiateArg mp id) bs tv
-instantiateCE (NormalEvent bind id bs tv) mp =  NormalEvent bind (instantiateArg mp id) bs tv
-instantiateCE (ClockEvent id n) mp           = ClockEvent (instantiateArg mp id) n
-instantiateCE (OnlyId id) mp                 = OnlyId (instantiateArg mp id)
-instantiateCE (OnlyIdPar id) mp              = OnlyIdPar (instantiateArg mp id)
+ let nid = instantiateArg mp id'
+ in if nid == id' 
+    then (NormalEvent (BindingVar (BindId nid)) (instantiateArg mp id) bs tv,Nothing)
+    else (NormalEvent (BindingVar (BindId (nid++"_tmp"))) (instantiateArg mp id) bs tv, Just $ nid++"_tmp")
+instantiateCE (NormalEvent bind id bs tv) mp = (NormalEvent bind (instantiateArg mp id) bs tv, Nothing)
+instantiateCE (ClockEvent id n) mp           = (ClockEvent (instantiateArg mp id) n, Nothing)
+instantiateCE (OnlyId id) mp                 = (OnlyId (instantiateArg mp id),Nothing)
+instantiateCE (OnlyIdPar id) mp              = (OnlyIdPar (instantiateArg mp id),Nothing)
 
+newWhereClause :: String -> WhereClause
+newWhereClause s = 
+ let xs = words $ head $ splitOnIdentifier "_tmp" s
+     ys = (head.tail) xs
+ in ys ++ " = " ++ ys ++ "_tmp" ++ " ;"
 
-addTriggerDef :: [Args] -> CreateActInfo -> Env -> Triggers
-addTriggerDef args cai env = 
- let targs = targTr $ splitTempArgs (zip args (caiArgs cai)) emptyTargs
+addTriggerDef :: [Args] -> CreateActInfo -> Env -> Map.Map Id String -> Triggers
+addTriggerDef args cai env mp = 
+ let refs  = targRef $ splitTempArgs (zip args (caiArgs cai)) emptyTargs
+     targs = targTr $ splitTempArgs (zip args (caiArgs cai)) emptyTargs
      scope = caiScope cai
      trs   = allTriggers env 
-     xs    = [ (fromJust $ tiTrDef tr) { whereClause = ""} | tr <- trs, tiScope tr == scope, targ <- targs, (showActArgs $ snd targ) == tiTN tr]
- in xs
+ in [ adaptTrigger (fromJust $ tiTrDef tr) refs mp (tiCI tr) | tr <- trs, tiScope tr == scope, targ <- targs, (showActArgs $ snd targ) == tiTN tr]
+
+adaptTrigger :: TriggerDef -> [(Args,Act.Args)] -> Map.Map Id String -> ClassInfo -> TriggerDef
+adaptTrigger tr [] _ _      = tr { whereClause = ""}
+adaptTrigger tr targs mp ci = 
+ case compTrigger tr of
+      NormalEvent bind _ _ _ -> 
+         case bind of 
+              BindingVar (BindId id)     -> 
+                   let xs = [ arg | arg <- args tr, ci == getBindTypeType arg, id == getBindTypeId arg]
+                       ys = [ arg | arg <- args tr, not (elem arg xs) ]
+                       zs = [ getBindTypeId arg | arg <- xs]
+                   in if null zs 
+                      then tr { whereClause = ""}
+                      else let tr' = tr { args = ys, compTrigger = updCEne (compTrigger tr) (BindingVar (BindId (head zs))) }
+                           in head $ instantiateTrs [tr'] mp
+              BindingVar (BindType t id) -> 
+                   let xs = [ getArgsId arg | arg <- map fst targs, t == getArgsType arg]
+                   in if null xs 
+                      then tr { whereClause = ""}
+                      else let tr' = tr { compTrigger = updCEne (compTrigger tr) (BindingVar (BindId (head xs))) }
+                           in head $ instantiateTrs [tr'] mp                           
+              BindingVar BindStar        -> tr { whereClause = ""}
+      _                      -> tr { whereClause = ""} 
+
+adaptArgs :: TriggerDef -> [Args] -> TriggerDef
+adaptArgs tr []     = tr
+adaptArgs tr (x:xs) = undefined
 
 instantiateProp :: Property -> [Args] -> CreateActInfo -> Property
 instantiateProp PNIL _ _                               = PNIL
