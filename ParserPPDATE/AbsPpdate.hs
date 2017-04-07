@@ -164,16 +164,16 @@ data HTriples = HTriples [HT] | HTempty
 data HT = HT Id Pre Method Post Assignable
   deriving (Eq, Ord, Show, Read)
 
-data Pre = Pre JML
+data Pre = Pre JML | PreNil
   deriving (Eq, Ord, Show, Read)
 
 data Method = Method Id Id Overloading
   deriving (Eq, Ord, Show, Read)
 
-data Post = Post JML
+data Post = Post JML | PostNil
   deriving (Eq, Ord, Show, Read)
 
-data Assignable = Assignable [Assig]
+data Assignable = Assignable [Assig] | AssigNil
   deriving (Eq, Ord, Show, Read)
 
 data Assig = AssigJML JML | AssigE | AssigN

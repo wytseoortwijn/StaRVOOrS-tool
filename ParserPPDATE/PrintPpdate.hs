@@ -353,6 +353,7 @@ instance Print HT where
 instance Print Pre where
   prt i e = case e of
     Pre jml -> prPrec i 0 (concatD [doc (showString "PRE"), doc (showString "{"), prt 0 jml, doc (showString "}")])
+    PreNil -> prPrec i 0 (concatD [])
 
 instance Print Method where
   prt i e = case e of
@@ -361,10 +362,12 @@ instance Print Method where
 instance Print Post where
   prt i e = case e of
     Post jml -> prPrec i 0 (concatD [doc (showString "POST"), doc (showString "{"), prt 0 jml, doc (showString "}")])
+    PostNil -> prPrec i 0 (concatD [])
 
 instance Print Assignable where
   prt i e = case e of
     Assignable assigs -> prPrec i 0 (concatD [doc (showString "ASSIGNABLE"), doc (showString "{"), prt 0 assigs, doc (showString "}")])
+    AssigNil -> prPrec i 0 (concatD [])
 
 instance Print Assig where
   prt i e = case e of

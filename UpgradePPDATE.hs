@@ -808,7 +808,7 @@ genHTs Abs.HTempty _          = return []
 genHTs (Abs.HTriples cs) imps = checkOverl $ sequence $ map (getHT imps) cs
 
 getHT :: Imports -> Abs.HT -> UpgradePPD HT
-getHT imps (Abs.HT id pre' method post' (Abs.Assignable ass)) =
+getHT imps (Abs.HT id pre' method post' ass) =
  do let mcn = MCN { clinf = getMethodClassInfo method, mname = getMethodMethodName method, overl = getMethodOverloading method }
     env <- get
     case checkImports (clinf mcn) imps of
@@ -817,18 +817,30 @@ getHT imps (Abs.HT id pre' method post' (Abs.Assignable ass)) =
          (x:xs) -> if (not.null) xs 
                    then fail $ "Error: Multiple imports for class " ++ clinf mcn
                    else do let cns = htsNames env
-                           let ys  = map checkJML $ [getPre pre',getPost post'] ++ (map assig ass)
+                           let ys  = map checkJML $ [getPre pre',getPost post'] ++ checkAssig ass
                            joinErrorJML ys (getIdAbs id)
                            put env { htsNames = (getIdAbs id):(htsNames env) }
                            return (HT { htName   = getIdAbs id
                                   , methodCN     = mcn
-                                  , pre          = filter (/='\n') $ getJMLExp $ getPre pre'
-                                  , post         = filter (/='\n') $ getJMLExp $ getPost post'
-                                  , assignable   = joinAssignable $ map (getJMLExp.assig) ass
+                                  , pre          = genPre pre'
+                                  , post         = genPost post'
+                                  , assignable   = genAssig ass
                                   , optimized    = []
                                   , chGet        = 0
                                   , path2it      = ""
                                   })
+
+genPre :: Abs.Pre -> Pre
+genPre Abs.PreNil = "true"
+genPre pre        = filter (/='\n') $ getJMLExp $ getPre pre
+
+genPost :: Abs.Post -> Post
+genPost Abs.PostNil = "true"
+genPost post        = filter (/='\n') $ getJMLExp $ getPost post
+
+genAssig :: Abs.Assignable -> Assignable
+genAssig Abs.AssigNil         = "\\everything"
+genAssig (Abs.Assignable ass) = joinAssignable $ map (getJMLExp.assig) ass
 
 checkJML :: Writer String JMLExp -> Either JMLExp String
 checkJML wjml =
@@ -848,6 +860,10 @@ joinErrorJML xs str =
     if null ys 
     then return ()
     else fail $ concatMap (\s -> s ++ " of Hoare triple " ++ str ++ ".\n") ys 
+
+checkAssig :: Abs.Assignable -> [Writer String JMLExp]
+checkAssig Abs.AssigNil         = [return "\\everything"]
+checkAssig (Abs.Assignable ass) = map assig ass
 
 assig :: Abs.Assig -> Writer String JMLExp
 assig (Abs.AssigJML jml) = return $ printTree jml
@@ -1167,13 +1183,12 @@ getOverloading :: Abs.Overloading -> Overloading
 getOverloading Abs.OverNil = OverNil
 getOverloading (Abs.Over xs) = Over $ map getTypeAbs xs
 
-getAssig :: Abs.Assig -> Abs.JML
-getAssig (Abs.AssigJML jml) = jml
-
 getPre :: Abs.Pre -> Writer String JMLExp
+getPre Abs.PreNil    = return "true"
 getPre (Abs.Pre pre) = getJML pre "precondition"
 
 getPost :: Abs.Post -> Writer String JMLExp
+getPost Abs.PostNil     = return "true"
 getPost (Abs.Post post) = getJML post "postcondition"
 
 -------------------------

@@ -190,15 +190,18 @@ transHT x = case x of
 transPre :: Pre -> Result
 transPre x = case x of
   Pre jml -> failure x
+  PreNil -> failure x
 transMethod :: Method -> Result
 transMethod x = case x of
   Method id1 id2 overloading -> failure x
 transPost :: Post -> Result
 transPost x = case x of
   Post jml -> failure x
+  PostNil -> failure x
 transAssignable :: Assignable -> Result
 transAssignable x = case x of
   Assignable assigs -> failure x
+  AssigNil -> failure x
 transAssig :: Assig -> Result
 transAssig x = case x of
   AssigJML jml -> failure x
