@@ -2,6 +2,10 @@ module Types where
 
 import qualified Data.Map as Map
 import System.FilePath
+import System.Console.GetOpt
+import Data.Maybe ( fromMaybe )
+import Language.Java.Syntax hiding(Type,VarDecl)
+import qualified AbsActions as Act
 
 ------------
 -- ppDATE --
@@ -50,8 +54,24 @@ type MethodName = String
 type Pre        = JMLExp
 type Post       = JMLExp
 type Assignable = String
-type MethodCN   = (ClassInfo, MethodName)
+data MethodCN   = 
+ MCN { clinf :: ClassInfo
+     , mname :: MethodName
+     , overl :: Overloading
+     } deriving (Show,Eq)
 
+data Overloading = Over [Type] | OverNil
+  deriving (Ord, Read)
+
+instance Eq Overloading where
+ OverNil == OverNil     = True
+ (Over xs) == (Over ys) = xs == ys
+ _ == _                 = False
+
+instance Show Overloading where
+ show OverNil   = "nil"
+ show (Over []) = "()"
+ show (Over xs) = "(" ++ foldr1 (\x xs -> x ++ "," ++ xs) xs ++ ")"
 
 data HT = HT
   { htName :: HTName
@@ -128,6 +148,18 @@ data Template = Template
 updateTemplateProp :: Template -> Property -> Template
 updateTemplateProp (Template id bs vars ies trs prop) prop' = Template id bs vars ies trs prop'
 
+data TempArgs = TArgs --Arguments used to instantiate a template
+ { targTr   :: [(Args,Act.Args)]--triggers
+ , targAct  :: [(Args,Act.Args)]--actions
+ , targCond :: [(Args,Act.Args)]--conditions
+ , targHT   :: [(Args,Act.Args)]--Hoare triples
+ , targRef  :: [(Args,Act.Args)]--reference types
+ , targMN   :: [(Args,Act.Args)]--method names
+ } deriving (Show,Eq)
+
+emptyTargs :: TempArgs
+emptyTargs = TArgs [] [] [] [] [] []
+
 --------------
 -- Methods  --
 --------------
@@ -140,23 +172,35 @@ type Methods = String
 
 type Foreaches = [Foreach]
 
-data Foreach = Foreach [Args] Context deriving (Eq,Show, Read)
+--ForId is introduced to keep track of the scope where a trigger is defined
+data Foreach = 
+ Foreach { getArgsForeach :: [Args]
+         , getCtxtForeach :: Context
+         , getIdForeach :: ForId 
+         } deriving (Eq,Show, Read)
 
-getArgsForeach :: Foreach -> [Args]
-getArgsForeach (Foreach args _) = args
+updCtxtForeach :: Foreach -> Context -> Foreach
+updCtxtForeach (Foreach args ctxt id) ctxt' = Foreach args ctxt' id
+
+data ForId = ForId Id deriving (Eq,Read)
+
+instance Show ForId where
+ show (ForId id) = id
+
+--Type used to know where a trigger is defined
+data Scope = TopLevel | InFor ForId | InTemp Id deriving (Eq,Show,Read)
+
+tempScope :: Scope -> Bool
+tempScope (InTemp _) = True
+tempScope _          = False
 
 data Args =
-   Args Type Id
-  deriving (Eq,Ord,Read)
+ Args { getArgsType :: Type
+      , getArgsId :: Id
+      } deriving (Eq,Ord,Read)
 
 instance Show Args where
  show (Args t id) = t ++ " " ++ id
-
-getArgsId :: Args -> Id
-getArgsId (Args t id) = id
-
-getArgsType :: Args -> Type
-getArgsType (Args t id) = t
 
 makeArgs :: Type -> Id -> Args
 makeArgs t id = Args t id
@@ -171,9 +215,11 @@ bindToArgs _               = error "bindToArgs.\n"
 
 type Variables = [Variable]
 
-data Variable =
-   Var VarModifier Type [VarDecl]
-  deriving (Eq,Ord,Read)
+data Variable = 
+ Var { getVarMod     :: VarModifier
+     , getTypeVar    :: Type
+     , getVarDeclVar :: [VarDecl]
+     } deriving (Eq,Ord,Read)
 
 instance Show Variable where
  show (Var modif t vdecls) = show modif ++ t ++ " " ++ addComma' (map show vdecls) ++ " ;"
@@ -188,8 +234,9 @@ instance Show VarModifier where
  show VarModifierNil   = ""
 
 data VarDecl =
-   VarDecl Id VariableInitializer
-  deriving (Eq,Ord,Read)
+ VarDecl { varDecId   :: Id
+         , varDecInit :: VariableInitializer
+         } deriving (Eq,Ord,Read)
 
 instance Show VarDecl where
  show (VarDecl id varinit) = id ++ show varinit
@@ -235,6 +282,32 @@ type ErrorMsg = String
 
 type JMLExp = String
 
+type HTjml = [(MethodName, ClassInfo, Overloading, String)]
+
+type MethodInvocations = [Exp]
+
+type Channel = String
+
+data TriggersInfo = 
+ TI { tiTN      :: Trigger --trigger_name
+    , tiMN      :: MethodName --method_name
+    , tiCI      :: ClassInfo --class_type
+    , tiCVar    :: String --class_variable_name
+    , tiTrvar   :: TriggerVariation
+    , tiBinds   :: [Bind]
+    , tiTrDef   :: Maybe TriggerDef
+    , tiScope   :: Scope
+    , tiOver    :: Overloading
+    } deriving (Show,Eq)
+
+data CreateActInfo = 
+ CAI { caiId    :: Id
+     , caiArgs  :: [Act.Args]
+     , caiCh    :: Channel
+     , caiAct   :: Act.Action
+     , caiScope :: Scope
+     } deriving (Show,Eq)
+
 --------------
 -- PROPERTY --
 --------------
@@ -252,6 +325,12 @@ type PropertyName = String
 type NameState = String
 
 data State = State NameState InitialCode [HTName] deriving (Eq,Read)
+
+getNameState :: State -> NameState
+getNameState (State nm _ _) = nm
+
+updateHTns :: State -> [HTName] -> State
+updateHTns (State nm i hts) hts' = State nm i hts'
 
 instance Show State where
  show (State ns initc hts) = ns ++ show initc ++ foo hts ++ "; "
@@ -359,6 +438,9 @@ data CompoundTrigger =
  | Collection TriggerList
   deriving (Eq,Read)
 
+updCEne :: CompoundTrigger -> Binding -> CompoundTrigger
+updCEne (NormalEvent bind id bs tv) bind' = NormalEvent bind' id bs tv
+
 instance Show CompoundTrigger where
  show (NormalEvent b id binds tv) = show b ++ "." ++ id ++ "(" ++ addComma' (map show binds) ++ ")" ++ show tv
  show (ClockEvent id n)           = id ++ "@" ++ show n
@@ -368,6 +450,9 @@ instance Show CompoundTrigger where
 
 getCTVariation :: CompoundTrigger -> TriggerVariation
 getCTVariation (NormalEvent _ _ _ tv) = tv
+
+getCTArgs :: CompoundTrigger -> [Bind]
+getCTArgs (NormalEvent _ _ bs _) = bs
 
 data TriggerVariation =
    EVEntry
@@ -506,4 +591,27 @@ data OExpr = OExpr
  { expr      :: String
  , inferType :: String
  } deriving (Show,Eq)
+
+
+-----------
+-- Flags --
+-----------
+
+data Flag = Version 
+ | OnlyParse
+ | NoneVerbose
+ | XML
+ | Help
+ | OnlyRV
+    deriving (Show,Eq)
+
+options :: [OptDescr Flag]
+options =
+    [ Option "v" ["version"] (NoArg Version) "Show version number"
+    , Option "n" ["none_verbose"] (NoArg NoneVerbose) "None verbose monitor generation"
+    , Option "p" ["only_parse"] (NoArg OnlyParse) "Only parse the ppDATE file"    
+    , Option "x" ["xml"] (NoArg XML) ".xml file generated by KeY is not removed"
+    , Option "h" ["help"] (NoArg Help) "Describes the different options"
+    , Option "r" ["only_rv"] (NoArg OnlyRV) "Monitor generation without performing static verification"
+    ]
 

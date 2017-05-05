@@ -8,6 +8,15 @@ import UpgradePPDATE
 import ErrM
 import qualified Data.Map as Map
 import Data.Maybe
+import Data.List
+import Language.Java.Syntax hiding(VarDecl)
+import qualified AbsActions as Act
+import qualified AbsJml as Jml
+import qualified ParserAct as ParAct
+import qualified ParserJML as ParJML
+import qualified PrintActions as PrintAct
+import qualified PrintJml as PrintJML
+import TranslatorActions
 
 
 translate :: UpgradePPD PPDATE -> FilePath -> IO ()
@@ -30,10 +39,6 @@ assocChannel2HTs n (c:cs) = updateCH c n:assocChannel2HTs (n+1) cs
 -- IMPORTS section --
 ---------------------
 
-getImports :: Imports -> String
-getImports []            = ""
-getImports (Import s:xs) = "import " ++ s ++ ";\n" ++ getImports xs
-
 writeImports :: Imports -> HTriples -> String
 writeImports xss const = let newImp = "import ppArtifacts.*;\n"
                          in if null const 
@@ -49,45 +54,38 @@ writeGlobal ppdate env =
  let global = ctxtGet $ globalGet ppdate
      consts = htsGet ppdate
      vars   = variables global
-     acts   = actevents global
-     es     = triggers global
+     acts   = actes env
+     trs    = triggers global
      prop   = property global
-     fors   = foreaches global                      
- in case prop of
-    PNIL -> 
-       "GLOBAL {\n\n"
-       ++ writeVariables vars consts acts
-       ++ writeTriggers es consts acts
-       ++ writeProperties prop consts es env
-       ++ writeForeach fors consts env 0 (generateReplicatedAutomata consts (forsVars env) es env)
-       ++ "}\n"
-    _    ->
-       case fors of
-          [] -> "GLOBAL {\n\n"
-                ++ writeVariables vars consts acts
-                ++ writeTriggers es consts acts
-                ++ writeProperties prop consts es env
-                ++ generateReplicatedAutomata consts [] es env  
-                ++ "}\n" 
-          _  -> "GLOBAL {\n\n"
-                ++ writeVariables vars consts acts
-                ++ writeTriggers es consts acts
-                ++ writeProperties prop consts es env
-                ++ writeForeach fors consts env 1 (generateReplicatedAutomata consts [] es env)
-                ++ "}\n" 
-
+     fors   = foreaches global         
+     temps  = templatesGet ppdate            
+ in "GLOBAL {\n\n" ++ writeVariables vars consts acts (allCreateAct env)
+    ++ writeTriggers trs consts acts env
+    ++ writeProperties prop consts env TopLevel
+    ++ writeForeach fors consts env
+    ++ generateReplicatedAutomata consts trs env  
+    ++ writeTemplates temps env consts
+    ++ "}\n" 
+ 
 ---------------
 -- Variables --
 ---------------
 
-writeVariables :: Variables -> HTriples -> ActEvents -> String
-writeVariables vars consts acts = 
- let actChann = if (null acts) then "" else concatMap (makeChannelsAct.show) acts in
- if (null consts)
- then if (null vars) 
-      then "" 
-      else "VARIABLES {\n" ++ actChann ++ writeVariables' vars ++ "}\n\n"
- else "VARIABLES {\n" ++ makeChannels (length consts) "h" ++ actChann ++ writeVariables' vars ++ "}\n\n"
+writeVariables :: Variables -> HTriples -> [Id] -> [CreateActInfo] -> String
+writeVariables vars [] [] [] = 
+ if null vars
+ then ""
+ else "VARIABLES {\n" ++ writeVariables' vars ++ "}\n\n"
+writeVariables vars consts acts creates = 
+ let actChann    = if (null acts) then "" else concatMap makeChannelsAct (removeDuplicates acts) 
+     createChann = if (null creates) then "" else concatMap (makeChannelsAct.caiCh) creates
+     constsChann = if (null consts) then "" else makeChannels (length consts) "h"
+     extraChann  = actChann ++ createChann ++ constsChann
+ in if (null vars) 
+    then if (null extraChann)
+         then ""
+         else "VARIABLES {\n" ++ extraChann ++ "}\n\n"
+    else "VARIABLES {\n" ++ extraChann ++ writeVariables' vars ++ "}\n\n"
 
 writeVariables' :: Variables -> String
 writeVariables' []     = ""
@@ -126,18 +124,18 @@ makeChannelsAct s = " Channel " ++ s ++ " = new Channel();\n"
 -- Triggers --
 --------------
 
-writeTriggers :: Triggers -> HTriples -> ActEvents -> String
-writeTriggers [] _ _         = ""
-writeTriggers es consts acts = 
+writeTriggers :: Triggers -> HTriples -> [Id] -> Env -> String
+writeTriggers [] _ _ _           = ""
+writeTriggers es consts acts env = 
  "EVENTS {\n"
  ++ writeTriggersActs acts
- ++ writeAllTriggers (instrumentTriggers es consts)
+ ++ writeAllTriggers (instrumentTriggers es consts env)
  ++ "}\n\n"
 
-writeTriggersActs :: ActEvents -> String
+writeTriggersActs :: [Id] -> String
 writeTriggersActs []         = "" 
 writeTriggersActs (act:acts) =
- 'r':show act ++ "() = {" ++ show act ++ ".receive()}" ++ "\n" ++ writeTriggersActs acts 
+ 'r':show act ++ "() = {" ++ act ++ ".receive()}" ++ "\n" ++ writeTriggersActs acts 
 
 
 writeAllTriggers :: Triggers -> String
@@ -197,43 +195,46 @@ auxGetTriggerVariation' [BindId ret] = ret
 
 
 
--- Checks if the trigger to control has to be the auxiliary one (in case of optimization by key)
-instrumentTriggers :: Triggers -> HTriples -> Triggers
-instrumentTriggers [] cs     = []
-instrumentTriggers (e:es) cs = let (b,mn,bs) = lookupHTForTrigger e cs in
-                             if b
-                             then let e'  = updateMethodCallName e (mn++"Aux")
-                                      e'' = updateTriggerArgs e' ((args e') ++ [BindType "Integer" "id"])
-                                  in updateMethodCallBody e'' (bs++[BindId "id"]):instrumentTriggers es cs
-                             else e:instrumentTriggers es cs
+-- Checks if the trigger to control has to be the auxiliary one (in case of optimisation by key)
+instrumentTriggers :: Triggers -> HTriples -> Env -> Triggers
+instrumentTriggers [] cs _       = []
+instrumentTriggers (e:es) cs env = 
+ let (b,mn,bs) = lookupHTForTrigger e (getClassInfo e env) cs 
+ in if b
+    then let e'  = updateMethodCallName e (mn++"Aux")
+             e'' = updateTriggerArgs e' ((args e') ++ [BindType "Integer" "id"])
+         in updateMethodCallBody e'' (bs++[BindId "id"]):instrumentTriggers es cs env
+    else e:instrumentTriggers es cs env
 
-lookupHTForTrigger :: TriggerDef -> HTriples -> (Bool, MethodName, [Bind])
-lookupHTForTrigger e []     = (False,"", [])
-lookupHTForTrigger e (c:cs) = case compTrigger e of
-                                       NormalEvent _ id bs _ -> if (id == snd (methodCN c))
-                                                                then (True, id, bs)
-                                                                else lookupHTForTrigger e cs
-                                       otherwise             -> lookupHTForTrigger e cs
+lookupHTForTrigger :: TriggerDef -> ClassInfo -> HTriples -> (Bool, MethodName, [Bind])
+lookupHTForTrigger _ _ []      = (False,"", [])
+lookupHTForTrigger e ci (c:cs) = case compTrigger e of
+                                      NormalEvent _ id bs _ -> if (id == mname (methodCN c) && clinf (methodCN c) == ci)
+                                                               then (True, id, bs)
+                                                               else lookupHTForTrigger e ci cs
+                                      _                     -> lookupHTForTrigger e ci cs
+
+getClassInfo :: TriggerDef -> Env -> ClassInfo
+getClassInfo e env = 
+ let trs = [tr | tr <- allTriggers env, tiTN tr == tName e]
+ in head $ map tiCI trs
 
 ----------------
 -- Properties --
 ----------------
 
-writeProperties :: Property -> HTriples -> Triggers -> Env -> String
-writeProperties PNIL _ _ _         = ""
-writeProperties prop consts es env = getProperties prop consts es env
+writeProperties :: Property -> HTriples -> Env -> Scope -> String
+writeProperties PNIL _ _ _            = ""
+writeProperties prop consts env scope = writeProperty prop consts env scope
 
-getProperties :: Property -> HTriples -> Triggers -> Env -> String
-getProperties = writeProperty
-
-writeProperty :: Property -> HTriples -> Triggers -> Env -> String
-writeProperty PNIL _ _ _                                   = ""
-writeProperty (Property name states trans props) cs es env =
+writeProperty :: Property -> HTriples -> Env -> Scope -> String
+writeProperty PNIL _ _ _                                       = ""
+writeProperty (Property name states trans props) cs  env scope =
   "PROPERTY " ++ name ++ " \n{\n\n"
   ++ writeStates states
-  ++ writeTransitions name trans cs states es env
+  ++ writeTransitions name trans cs states env scope
   ++ "}\n\n"
-  ++ writeProperty props cs es env
+  ++ writeProperty props cs env scope
 
 writeStates :: States -> String
 writeStates (States start acc bad normal) =
@@ -263,14 +264,14 @@ getInitCode' (InitProg java) = "{" ++ init java ++ "}"
 
 --HTriples [] -> Replicated Automata
 --HTriples non-empty -> Property transitions instrumentation
-writeTransitions :: PropertyName -> Transitions -> HTriples -> States -> Triggers -> Env -> String
-writeTransitions _ ts [] _ _ env =
+writeTransitions :: PropertyName -> Transitions -> HTriples -> States -> Env -> Scope -> String
+writeTransitions _ ts [] _ env scope =
  "TRANSITIONS \n{ \n"
  ++ concat (map (getTransition env) ts)
  ++ "}\n\n"
-writeTransitions pn ts (c:cs) states es env =
+writeTransitions pn ts (c:cs) states env scope =
  "TRANSITIONS \n{ \n"
-  ++ (concat (map (getTransition env) (getTransitionsGeneral (c:cs) states ts es env pn)))
+  ++ (concat (map (getTransition env) (getTransitionsGeneral (c:cs) states ts env pn scope)))
   ++ "}\n\n"
 
 getTransition :: Env -> Transition -> String
@@ -280,55 +281,63 @@ getTransition env (Transition q (Arrow e c act) q') =
           else e
  in q ++ " -> " ++ q' ++ " [" ++ e' ++ " \\ "  ++ c ++ " \\ " ++ (concat.lines) act ++ "]\n"
 
-getTransitionsGeneral :: HTriples -> States -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
-getTransitionsGeneral cs (States star acc bad nor) ts es env pn =
- let ts1 = generateTransitions star cs ts es env pn
-     ts2 = generateTransitions acc cs ts1 es env pn
-     ts3 = generateTransitions bad cs ts2 es env pn
-     ts4 = generateTransitions nor cs ts3 es env pn
+getTransitionsGeneral :: HTriples -> States -> Transitions -> Env -> PropertyName -> Scope -> Transitions
+getTransitionsGeneral cs (States star acc bad nor) ts env pn scope =
+ let ts1 = generateAllTransitions star cs ts env pn scope
+     ts2 = generateAllTransitions acc cs ts1 env pn scope
+     ts3 = generateAllTransitions bad cs ts2 env pn scope
+     ts4 = generateAllTransitions nor cs ts3 env pn scope
  in ts4
 
-generateTransitions :: [State] -> HTriples -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
-generateTransitions [] _ ts _ _ _                              = ts
-generateTransitions ((State ns ic []):xs) cs ts es env pn      = generateTransitions xs cs ts es env pn
-generateTransitions ((State ns ic l@(_:_)):xs) cs ts es env pn = let ts' = accumTransitions l ns cs ts es env pn
-                                                                 in generateTransitions xs cs ts' es env pn
+generateAllTransitions :: [State] -> HTriples -> Transitions -> Env -> PropertyName -> Scope -> Transitions
+generateAllTransitions [] _ ts _ _ _                                 = ts
+generateAllTransitions ((State ns ic []):xs) cs ts env pn scope      = generateAllTransitions xs cs ts env pn scope
+generateAllTransitions ((State ns ic l@(_:_)):xs) cs ts env pn scope = 
+ let ts' = accumTransitions l ns cs ts env pn scope
+ in generateAllTransitions xs cs ts' env pn scope
 
-accumTransitions :: [HTName] -> NameState -> HTriples -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
-accumTransitions [] _ _ ts _ _ _                 = ts
-accumTransitions (cn:cns) ns consts ts es env pn =
- let ts' = generateTransition cn ns consts ts es env pn
- in accumTransitions cns ns consts ts' es env pn
+accumTransitions :: [HTName] -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Scope -> Transitions
+accumTransitions [] _ _ ts _ _ _                    = ts
+accumTransitions (cn:cns) ns consts ts env pn scope =
+ let (nonlts,gentrans,lts) = generateTransitions cn ns consts ts env pn scope
+     instrans = instrumentTransitions cn ns consts lts env pn scope
+ in accumTransitions cns ns consts (nonlts++instrans) env pn scope ++ gentrans
 
-generateTransition :: HTName -> NameState -> HTriples -> Transitions -> Triggers -> Env -> PropertyName -> Transitions
-generateTransition p ns cs ts es env pn = 
- let c             = lookForHT p cs
-     mn            = snd $ methodCN c
-     entrs         = lookForEntryTrigger (allTriggers env) mn
-     entrs'        = [tr | tr <- entrs, tr /= (mn++"_ppden")]
+generateTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Scope -> (Transitions,Transitions,Transitions)
+generateTransitions p ns cs ts env pn scope = 
+ let c             = lookForHT p cs ns
+     mn            = mname $ methodCN c
+     entrs         = lookForEntryTrigger (allTriggers env) (methodCN c) scope
+     entrs'        = [tr | tr <- entrs, not(isInfixOf (mn++"_ppden") tr)]
+     entrs''       = [tr | tr <- entrs, isInfixOf (mn++"_ppden") tr ]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
  in if null entrs
     then error $ "Translation: Missing entry trigger for method " ++ mn ++ ".\n"
     else if (null lts)
-         then ts ++ map (\e -> makeTransitionAlg1Cond ns e c env pn) entrs
-         else let ext = map (\e -> makeExtraTransitionAlg2 lts c e ns env pn) entrs'
-                  xs  = concat [map (\x -> instrumentTransitionAlg2 c x tr env pn) lts | tr <- entrs']
-              in nonlts ++ xs ++ ext
+         then (ts,makeTransitionAlg1 ns c env pn mn entrs'',[])
+         else let ext  = map (\e -> makeExtraTransitionAlg2 lts c e ns env pn) entrs'
+                  ext' = map fromJust $ filter (\c -> c /= Nothing) ext
+              in (nonlts,ext',lts)            
+
+-- Implementation of Algorithm 1 --
+
+makeTransitionAlg1 :: NameState -> HT -> Env -> PropertyName -> MethodName -> [Trigger] -> Transitions
+makeTransitionAlg1 ns c env pn mn entrs = 
+ let entrs' = [tr | tr <- entrs, isInfixOf (mn++"_ppden") tr]
+ in if null entrs'
+    then map (\e -> makeTransitionAlg1Cond ns e c env pn) entrs
+    else map (\e -> makeTransitionAlg1Cond ns e c env pn) entrs'
 
 
 makeTransitionAlg1Cond :: NameState -> Trigger -> HT -> Env -> PropertyName -> Transition
 makeTransitionAlg1Cond ns e c env pn =
  let cn      = htName c
      oldExpM = oldExpTypes env
-     esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
-     esinf'  = filter (/="") $ lookfor esinf e
-     arg     = if null esinf' 
-               then ""
-               else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
+     (_,arg) = getValue $ lookForAllEntryTriggerArgs env c 
      c'      = "HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")"
      zs      = getExpForOld oldExpM cn
      act     = " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
-     type_   = if null zs then "PPD" else "Old_" ++ cn
+     type_   = if null zs then "PPD" else "Old<Old_" ++ cn ++ ">"
      old     = if null zs then "" else "," ++ zs
      ident   = lookforClVar pn (propInForeach env)
      ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
@@ -348,60 +357,79 @@ initOldExpr oel cn =
  "new Old_" ++ cn ++ "(" ++ addComma (map (\(x,_,_) -> x) oel) ++ ")"
 
 
+-- Implementation of Algorithm 2 --
 
-makeExtraTransitionAlg2Cond :: Transitions -> PropertyName -> String
-makeExtraTransitionAlg2Cond [] _      = ""
-makeExtraTransitionAlg2Cond (t:ts) pn =
- let cond'  = cond $ arrow t
-     cond'' = if (null $ clean cond') then "true" else cond'
- in
- "!("++ cond'' ++ ") && " ++ makeExtraTransitionAlg2Cond ts pn
-
-makeExtraTransitionAlg2 :: Transitions -> HT -> Trigger -> NameState -> Env -> PropertyName -> Transition
+makeExtraTransitionAlg2 :: Transitions -> HT -> Trigger -> NameState -> Env -> PropertyName -> Maybe Transition
+makeExtraTransitionAlg2 [] _ _ _ _ _     = Nothing
 makeExtraTransitionAlg2 ts c e ns env pn = 
- let esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
-     oldExpM = oldExpTypes env
+ let oldExpM = oldExpTypes env
      cn      = htName c
      zs      = getExpForOld oldExpM cn
-     esinf'  = filter (/="") $ lookfor esinf e
-     arg     = if null esinf' 
-               then ""
-               else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
+     (_,arg) = getValue $ lookForAllEntryTriggerArgs env c 
      pre'    = "HoareTriplesPPD." ++ (htName c) ++ "_pre(" ++ arg ++ ")"
-     type_   = if null zs then "PPD" else "Old_" ++ cn
+     type_   = if null zs then "PPD" else "Old<Old_" ++ cn ++ ">"
      old     = if null zs then "" else "," ++ zs
      ident   = lookforClVar pn (propInForeach env)
      ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
      msg     = "new Messages" ++ type_ ++ ident' ++ old ++ ")"
      act     = " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
-     c'      = makeExtraTransitionAlg2Cond ts pn ++ pre'
- in Transition ns (Arrow e c' act) ns
+     c'      = makeExtraTransitionAlg2Cond ts 
+ in case c' of
+         Nothing  -> Nothing 
+         Just c'' -> Just $ Transition ns (Arrow e (c''++ pre') act) ns
 
+makeExtraTransitionAlg2Cond :: Transitions -> Maybe String
+makeExtraTransitionAlg2Cond ts = 
+ case avoidTriviallyFalseCond ts of 
+      [] -> Nothing 
+      xs -> Just $ getConditionsInTransitions xs
+
+getConditionsInTransitions :: Transitions -> String
+getConditionsInTransitions []     = ""
+getConditionsInTransitions (t:ts) =
+ let cond'  = cond $ arrow t
+     cond'' = if (null $ clean cond') then "true" else cond'
+ in "!("++ cond'' ++ ") && " ++ getConditionsInTransitions ts
+
+--Method used to avoid generating transitions with conditions trivially false
+avoidTriviallyFalseCond :: Transitions -> Transitions
+avoidTriviallyFalseCond = filter (check.trim.cond.arrow)
+                                    where check = \ t -> t /= "true" && (not.null.trim) t
+
+instrumentTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Scope -> Transitions
+instrumentTransitions p ns cs ts env pn scope = 
+ let c             = lookForHT p cs ns
+     mn            = mname $ methodCN c
+     entrs         = lookForEntryTrigger (allTriggers env) (methodCN c) scope
+     entrs'        = [tr | tr <- entrs, not(isInfixOf (mn++"_ppden") tr)]
+     (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
+ in if null entrs
+    then error $ "Translation: Missing entry trigger for method " ++ mn ++ ".\n"
+    else if (null lts)
+         then []
+         else concat [map (\x -> instrumentTransitionAlg2 c x tr env pn) lts | tr <- entrs']
 
 instrumentTransitionAlg2 :: HT -> Transition -> Trigger -> Env -> PropertyName -> Transition
 instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env pn =
  let cn      = htName c
      oldExpM = oldExpTypes env
-     esinf   = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
-     esinf'  = filter (/="") $ lookfor esinf e
-     arg     = if null esinf' 
-               then ""
-               else init $ foldr (\x xs -> x ++ "," ++ xs) "" $ map (head.tail.words) $ esinf'
-     semicol = if (act == "") then "" else ";"     
+     (_,arg) = getValue $ lookForAllEntryTriggerArgs env c 
      zs      = getExpForOld oldExpM cn
-     type_   = if null zs then "PPD" else "Old_" ++ cn
+     type_   = if null zs then "PPD" else "Old<Old_" ++ cn ++ ">"
      old     = if null zs then "" else "," ++ zs
      ident   = lookforClVar pn (propInForeach env)
      ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
      msg     = "new Messages" ++ type_ ++ ident' ++ old ++ ")"
-     act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "}"
- in Transition q (Arrow e' c' (act ++ semicol ++ act')) q'
+     act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "} ;"
+ in Transition q (Arrow e' c' (act ++ act')) q'
 
-lookForHT :: PropertyName -> HTriples -> HT
-lookForHT p []     = error $ "Wow! The impossible happened when checking the property "++ p ++ " on a state.\n"
-lookForHT p (c:cs) = if (htName c == p)
-                     then c
-                     else lookForHT p cs
+
+lookForHT :: PropertyName -> HTriples -> NameState -> HT
+lookForHT p []     ns = error $ "Error: Could not find property "++ p ++ " on state " ++ ns ++ ".\n"
+lookForHT p (c:cs) ns =
+ if (htName c == p)
+ then c
+ else lookForHT p cs ns
 
 lookForLeavingTransitions :: Trigger -> NameState -> Transitions -> (Transitions, Transitions)
 lookForLeavingTransitions e ns []                                        = ([],[])
@@ -417,24 +445,24 @@ lookForLeavingTransitions e ns (t@(Transition q (Arrow e' c act) q'):ts) =
 -- Foreach --
 -------------
 
-writeForeach :: Foreaches -> HTriples -> Env -> Integer -> String -> String
-writeForeach [] _ _ _ _                               = ""
-writeForeach (Foreach args ctxt:fors) consts env n ra =
- let vars   = variables ctxt
+writeForeach :: Foreaches -> HTriples -> Env -> String
+writeForeach [] _ _                    = ""
+writeForeach (foreach:fors) consts env =
+ let ctxt   = getCtxtForeach foreach
+     args   = getArgsForeach foreach 
+     vars   = variables ctxt
      es     = triggers ctxt
      prop   = property ctxt
      acts   = actevents ctxt
      fors'  = foreaches ctxt
  in "FOREACH (" ++ getForeachArgs args ++ ") {\n\n"
-    ++ writeVariables vars [] []
-    ++ writeTriggers es consts []
-    ++ writeProperties prop consts es env
-    ++ writeForeach fors' consts env 2 ra
-    ++ if (n == 0) then ra ++ "}\n"  else ""
+    ++ writeVariables vars [] [] []
+    ++ writeTriggers es consts [] env
+    ++ writeProperties prop consts env (InFor $ getIdForeach foreach)
+    ++ writeForeach fors' consts env
     ++ "}\n\n"
-    ++ writeForeach fors consts env 2 ra
-    ++ if (n == 1) then ra else ""
- 
+    ++ writeForeach fors consts env
+
 getForeachArgs :: [Args] -> String
 getForeachArgs []               = ""
 getForeachArgs [Args t id]      = t ++ " " ++ id
@@ -452,53 +480,307 @@ writeMethods methods = "\n" ++  methods
 -- Replicated Automata --
 -------------------------
 
-generateReplicatedAutomata :: HTriples -> [Id] -> Triggers -> Env -> String
-generateReplicatedAutomata cs fs es env = 
- let n      = length cs
-     ys     = zip cs [1..n]
-     esinf  = map fromJust $ filter (/= Nothing) $ map getInfoTrigger (allTriggers env)
-     props  = map (uncurry (generateRAString esinf es env)) ys
-     fors   = generateWhereInfo fs
-     triggers = generateTriggersRA fors (map (\(x,y) -> (htName x,y)) ys) env
-     eps      = zip triggers props
- in generateProp eps env
+generateReplicatedAutomata :: HTriples -> Triggers -> Env -> String
+generateReplicatedAutomata cs es env = 
+ let n        = length cs
+     ys       = zip cs [1..n]
+ in generateProp es ys env []
 
 
-generateProp :: [(String,(String,HTName))] -> Env -> String
-generateProp [] _               = ""
-generateProp ((es,ps):eps)  env = 
- let cn       = snd ps
+generateProp :: Triggers -> [(HT,Int)] -> Env -> [(MethodCN,Bool)] -> String
+generateProp _ [] _ _              = ""
+generateProp es ((c,n):ys) env acc = 
+ let (ra,acc') = genRA c n es env acc
+ in ra ++ generateProp es ys env acc'
+
+genRA :: HT -> Int -> Triggers -> Env -> [(MethodCN,Bool)] -> (String,[(MethodCN,Bool)])
+genRA c n es env acc = 
+ let (b,acc') = checkIfRec (methodCN c) env acc
+ in if True --TODO:replace by b once the optimisation is implemented
+    then (generatePropRec c n es env, acc')
+    else (generatePropNonRec c n es env, acc')
+
+--Generates automaton to control a postcondition
+generatePropRec :: HT -> Int -> Triggers -> Env -> String
+generatePropRec c n es env = 
+ let tr      = generateTriggerRA env c n ("idPPD = msgPPD.id;","idPPD = id;")
+     prop    = generateRAString es env c n Nothing
+     cn      = snd prop
+     oldExpM = oldExpTypes env
+     zs      = getOldExpr oldExpM cn
+     nvar    = if null zs then "" else "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n" 
+ in "FOREACH (Integer idPPD) {\n\n"
+    ++ "VARIABLES {\n" ++ " Integer idAuxPPD = new Integer(0);\n" ++ nvar ++ "}\n\n"
+    ++ "EVENTS {\n" ++ tr ++ "}\n\n"
+    ++ fst prop
+    ++ "}\n\n"
+
+checkIfRec :: MethodCN -> Env -> [(MethodCN,Bool)] -> (Bool,[(MethodCN,Bool)])
+checkIfRec mcn env acc = 
+ let xs = [b | (mcn',b) <- acc , mcn == mcn']
+ in if null xs
+    then let minvs = getInvocationsInMethodBody mcn env
+             rec   = True
+         in if null minvs 
+            then (False,(mcn,False):acc)
+            else if directRec (mname mcn) minvs
+                 then (True,(mcn,True):acc)
+                 else (rec,(mcn,rec):acc)
+    else (head xs,acc)
+
+directRec :: MethodName -> [Exp] -> Bool
+directRec mn []           = False
+directRec mn (minv:minvs) = 
+ case minv of
+      MethodInv (MethodCall (Name [Ident id]) _)        -> id == mn
+      MethodInv (PrimaryMethodCall This _ (Ident id) _) -> id == mn
+      _                                                 -> directRec mn minvs
+
+{- case minv of
+      MethodCall name args                    -> undefined
+      PrimaryMethodCall exp _ (Ident id) args -> undefined
+      SuperMethodCall _ (Ident id) args       -> undefined
+      ClassMethodCall _ _ (Ident id) args     -> undefined
+      TypeMethodCall _ _ (Ident id) args      -> undefined
+-}
+
+getInvocationsInMethodBody :: MethodCN -> Env -> MethodInvocations
+getInvocationsInMethodBody mcn env = 
+ let mns = methodsInFiles env
+ in getMethodInvocations mcn mns
+
+generateTriggerRA :: Env -> HT -> Int -> (String,String) -> String
+generateTriggerRA env c n w =
+ let cn       = htName c
+     mnc      = methodCN c
+     mn       = mname mnc
+     ci       = clinf mnc
+     ov       = overl mnc
      oldExpM  = oldExpTypes env
      zs       = getOldExpr oldExpM cn
-     nvar     = if null zs then "" else "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n" 
- in "FOREACH (Integer idPPD) {\n\n"
-    ++ "VARIABLES {\n" ++ " Integer idAux = new Integer(0);\n " ++ nvar ++ "}\n\n"
-    ++ "EVENTS {\n" ++ es ++ "}\n\n"
-    ++ fst ps
-    ++ "}\n\n"
-    ++ generateProp eps env
+     nvar     = if null zs then "PPD" else "Old<Old_" ++ cn ++ ">"     
+     wtr      = if null (snd w) then "" else " where { " ++ snd w ++ "}\n"
+     ntr      = getTriggerDef ov c (allTriggers env)
+ in "rh" ++ show n ++ "(Messages" ++ nvar  
+    ++ " msgPPD) = {h"++ show n ++ ".receive(msgPPD)} where {" ++ fst w ++  "}\n"
+    ++ init (concatMap getTrigger (instrumentTriggers [ntr] [c] env)) ++ wtr
 
-generateWhereInfo :: [Id] -> String
-generateWhereInfo []     = ""
-generateWhereInfo (f:fs) = f ++ "=null;" ++ generateWhereInfo fs
 
-generateTriggersRA :: String -> [(HTName,Int)] -> Env -> [String]
-generateTriggersRA fs ns env = map (uncurry (generateTriggerRA fs env)) ns
-
-generateTriggerRA :: String -> Env -> HTName -> Int -> String
-generateTriggerRA fs env cn n =
- let oldExpM  = oldExpTypes env
-     zs       = getOldExpr oldExpM cn
-     nvar     = if null zs then "PPD" else "Old_" ++ cn
- in "rh" ++ show n ++ "(Messages" ++ nvar ++ " msg) = {h"++ show n ++ ".receive(msg)} where {idPPD=msg.id;"
-    ++ fs ++  "}\n"
-
-generateRAString :: [(Trigger, [String])] -> Triggers -> Env -> HT -> Int -> (String,HTName)
-generateRAString esinf es env c n =
-  let ra = generateRA c n env
+generateRAString :: Triggers -> Env -> HT -> Int -> Maybe () -> (String,HTName)
+generateRAString es env c n rec =
+  let ra = if rec == Nothing then generateRA c n env else generateRAOptimised c n env
       cn = pName ra
   in ("PROPERTY " ++ cn ++ "\n{\n\n"
      ++ writeStates (pStates ra)
-     ++ writeTransitions cn (pTransitions ra) [] (States [] [] [] []) [] emptyEnv
+     ++ writeTransitions cn (pTransitions ra) [] (States [] [] [] []) emptyEnv (InFor (ForId cn))
      ++ "}\n\n",cn)
 
+--Optimisation: If the method is not recursive, then use optimised automaton
+generatePropNonRec :: HT -> Int -> Triggers -> Env -> String
+generatePropNonRec c n es env = 
+ let tr      = generateTriggerRA env c n ("idPPD"++ show n ++ " = null;","idPPD"++ show n ++ " = null;")
+     prop    = generateRAString es env c n (Just ())
+     cn      = snd prop
+     oldExpM = oldExpTypes env
+     zs      = getOldExpr oldExpM cn
+     nvar    = "VARIABLES {\n"
+     nvar'   = if null zs 
+               then "" 
+               else nvar ++ "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n}\n\n"
+ in "FOREACH (Integer idPPD" ++ show n ++ ") {\n\n"
+    ++ nvar'
+    ++ "EVENTS {\n" ++ tr ++ "}\n\n"
+    ++ fst prop
+    ++ "}\n\n"
+
+---------------
+-- Templates --
+---------------
+
+writeTemplates :: Templates -> Env -> HTriples -> String
+writeTemplates TempNil _ _             = ""
+writeTemplates (Temp temps) env consts = 
+ let creates = removeDuplicates $ allCreateAct env
+     skell   = map generateRAtmp temps
+     xs      = [ instantiateTemp for id args cai env | (id,args,for) <- skell , cai <- creates, id == caiId cai ] 
+ in writeForeach xs consts env
+
+generateRAtmp :: Template -> (Id, [Args], Foreach)
+generateRAtmp temp = (tempId temp, tempBinds temp, Foreach (filterRefTypes $ tempBinds temp) (generateCtxtForTemp temp) (ForId (tempId temp)))
+
+generateCtxtForTemp :: Template -> Context
+generateCtxtForTemp temp = Ctxt (tempVars temp) (tempActEvents temp) (tempTriggers temp) (tempProp temp) []
+
+instantiateTemp :: Foreach -> Id -> [Args] -> CreateActInfo -> Env -> Foreach
+instantiateTemp for id args cai env = 
+ let ch     = caiCh cai
+     mp     = Map.union (makeRefTypeMap $ targRef targs) (makeMap $ targMN targs)
+     trs    = addTriggerDef args cai env mp
+     ctxt   = getCtxtForeach for 
+     targs  = splitTempArgs (zip args (caiArgs cai)) emptyTargs  
+     trs'   = (genTriggerForCreate id ch args): instantiateTrs (triggers ctxt) mp
+     ctxt'  = updateCtxtTrs ctxt (trs' ++ trs)
+     ctxt'' = updateCtxtProps ctxt' (instantiateProp (property ctxt) args cai)
+ in Foreach (getArgsForeach for) ctxt'' (ForId (show (getIdForeach for) ++ "_"++ch))
+
+instantiateTrs :: Triggers -> Map.Map Id String -> Triggers
+instantiateTrs [] _        = []
+instantiateTrs (tr:trs) mp = 
+ let ce   = instantiateCE (compTrigger tr) mp
+     tr'  = tr { compTrigger = fst $ ce }
+     tr'' = if (snd ce) == Nothing then tr' else tr' { whereClause = (whereClause tr') ++ newWhereClause (fromJust $ snd ce)}
+ in tr'' : instantiateTrs trs mp
+
+instantiateCE :: CompoundTrigger -> Map.Map Id String -> (CompoundTrigger, Maybe String)
+instantiateCE (NormalEvent (BindingVar (BindId id')) id bs tv) mp = 
+ let nid = instantiateArg mp id'
+ in if nid == id' 
+    then (NormalEvent (BindingVar (BindId nid)) (instantiateArg mp id) bs tv,Nothing)
+    else (NormalEvent (BindingVar (BindId (nid++"_tmp"))) (instantiateArg mp id) bs tv, Just $ nid++"_tmp")
+instantiateCE (NormalEvent bind id bs tv) mp = (NormalEvent bind (instantiateArg mp id) bs tv, Nothing)
+instantiateCE (ClockEvent id n) mp           = (ClockEvent (instantiateArg mp id) n, Nothing)
+instantiateCE (OnlyId id) mp                 = (OnlyId (instantiateArg mp id),Nothing)
+instantiateCE (OnlyIdPar id) mp              = (OnlyIdPar (instantiateArg mp id),Nothing)
+
+newWhereClause :: String -> WhereClause
+newWhereClause s = 
+ let xs = words $ head $ splitOnIdentifier "_tmp" s
+     ys = (head.tail) xs
+ in ys ++ " = " ++ ys ++ "_tmp" ++ " ;"
+
+addTriggerDef :: [Args] -> CreateActInfo -> Env -> Map.Map Id String -> Triggers
+addTriggerDef args cai env mp = 
+ let refs  = targRef $ splitTempArgs (zip args (caiArgs cai)) emptyTargs
+     targs = targTr $ splitTempArgs (zip args (caiArgs cai)) emptyTargs
+     scope = caiScope cai
+     trs   = allTriggers env 
+ in [ adaptTrigger (fromJust $ tiTrDef tr) refs mp (tiCI tr) | tr <- trs, tiScope tr == scope, targ <- targs, (showActArgs $ snd targ) == tiTN tr]
+
+adaptTrigger :: TriggerDef -> [(Args,Act.Args)] -> Map.Map Id String -> ClassInfo -> TriggerDef
+adaptTrigger tr [] _ _      = tr { whereClause = ""}
+adaptTrigger tr targs mp ci = 
+ case compTrigger tr of
+      NormalEvent bind _ _ _ -> 
+         case bind of 
+              BindingVar (BindId id)     -> 
+                   let xs = [ arg | arg <- args tr, ci == getBindTypeType arg, id == getBindTypeId arg]
+                       ys = [ arg | arg <- args tr, not (elem arg xs) ]
+                       zs = [ getBindTypeId arg | arg <- xs]
+                   in if null zs 
+                      then tr { whereClause = ""}
+                      else let tr' = tr { args = ys, compTrigger = updCEne (compTrigger tr) (BindingVar (BindId (head zs))) }
+                           in head $ instantiateTrs [tr'] mp
+              BindingVar (BindType t id) -> 
+                   let xs = [ getArgsId arg | arg <- map fst targs, t == getArgsType arg]
+                   in if null xs 
+                      then tr { whereClause = ""}
+                      else let tr' = tr { compTrigger = updCEne (compTrigger tr) (BindingVar (BindId (head xs))) }
+                           in head $ instantiateTrs [tr'] mp                           
+              BindingVar BindStar        -> tr { whereClause = ""}
+      _                      -> tr { whereClause = ""} 
+
+adaptArgs :: TriggerDef -> [Args] -> TriggerDef
+adaptArgs tr []     = tr
+adaptArgs tr (x:xs) = undefined
+
+instantiateProp :: Property -> [Args] -> CreateActInfo -> Property
+instantiateProp PNIL _ _                               = PNIL
+instantiateProp (Property id sts trans props) args cai =  
+ let ch      = caiCh cai
+     sts'    = addNewInitState sts
+     trans'  = (Transition "start" (Arrow ("r"++ch) "" "") (head $ map getNameState $ getStarting sts)):trans
+     targs   = splitTempArgs (zip args (caiArgs cai)) emptyTargs
+     sts''   = instantiateHT (makeMap $ targHT targs) sts'
+     trans'' = instantiateTrans (makeMap $ (targTr targs ++ targCond targs ++ targAct targs)) trans
+ in Property (id++"_"++ch) sts'' trans'' props
+
+genTriggerForCreate :: Id -> Channel -> [Args] -> TriggerDef
+genTriggerForCreate id ch args = 
+ let tr    = "r"++ch
+     args' = BindType ("Tmp_"++id) "obj"
+     ce    = NormalEvent (BindingVar (BindId ch)) "receive" [BindId "obj"] EVEntry
+     w     = concat [ getArgsId arg ++ " = obj." ++ getArgsId arg ++ "; " | arg <- filterRefTypes args ] 
+ in TriggerDef tr [args'] ce w
+
+addNewInitState :: States -> States
+addNewInitState (States start accep bad norm) = States [State "start" InitNil []] accep bad (norm++start)
+
+instantiateTrans :: Map.Map Id String -> Transitions -> Transitions
+instantiateTrans mp trans = 
+ if Map.null mp
+ then trans
+ else map (instantiateTran mp) trans
+
+instantiateTran :: Map.Map Id String -> Transition -> Transition
+instantiateTran mp tran = Transition (fromState tran) (instantiateArrow mp $ arrow tran) (toState tran)
+
+instantiateArrow :: Map.Map Id String -> Arrow -> Arrow
+instantiateArrow mp arrow = 
+ Arrow (instantiateArg mp (trigger arrow)) 
+       (prepareCond mp $ cond arrow) 
+       (prepareAct mp $ action arrow)
+
+prepareCond :: Map.Map Id String -> Cond -> Cond
+prepareCond _ []    = []
+prepareCond mp cond = PrintJML.printTree $ instantiateCond mp $ fromOK . ParJML.parse $ cond
+
+instantiateCond :: Map.Map Id String -> Jml.JML -> Jml.JML
+instantiateCond mp cond = 
+ case cond of
+      Jml.JMLAnd jml jml'       -> Jml.JMLAnd (instantiateCond mp jml) (instantiateCond mp jml')
+      Jml.JMLOr jml jml'        -> Jml.JMLOr (instantiateCond mp jml) (instantiateCond mp jml')
+      Jml.JMLImp jml jml'       -> Jml.JMLImp (instantiateCond mp jml) (instantiateCond mp jml')
+      Jml.JMLIff jml jml'       -> Jml.JMLIff (instantiateCond mp jml) (instantiateCond mp jml')
+      Jml.JMLForallRT t id body -> Jml.JMLForallRT t id body
+      Jml.JMLExistsRT t id body -> Jml.JMLExistsRT t id body
+      Jml.JMLPar jml            -> Jml.JMLPar (instantiateCond mp jml)
+      Jml.JMLExp exps           -> Jml.JMLExp $ map (instantiateExps mp) exps
+
+instantiateExps :: Map.Map Id String -> Jml.Expression -> Jml.Expression
+instantiateExps mp (Jml.Exp (Jml.IdJml id)) = Jml.Exp (Jml.IdJml (instantiateArg mp id))
+instantiateExps mp (Jml.ExpPar exps)        = Jml.ExpPar (map (instantiateExps mp) exps)
+instantiateExps mp jml                      = jml
+
+prepareAct :: Map.Map Id String -> Action -> Action
+prepareAct mp []  = []
+prepareAct mp act = PrintAct.printTree $ instantiateActs mp $ fromOK . ParAct.parse $ act
+
+instantiateActs :: Map.Map Id String -> Act.Actions -> Act.Actions
+instantiateActs mp (Act.Actions acts) = Act.Actions (map (instantiateAct mp) acts)
+
+instantiateAct :: Map.Map Id String -> Act.Action -> Act.Action
+instantiateAct mp act =
+ case act of
+      Act.ActBlock acts                       -> Act.ActBlock $ instantiateActs mp acts
+      Act.ActCond xs act'                     -> Act.ActCond xs $ instantiateAct mp act'
+      Act.ActArith (Act.Arith (Act.IdAct id)) -> Act.ActArith (Act.Arith (Act.IdAct (checkAct $ instantiateArg mp id)))
+      _                                       -> act
+
+checkAct :: String -> String
+checkAct []  = []
+checkAct act = init.cleanBack $ PrintAct.printTree $ (\act -> translateAct act emptyEnv) $ fromOK . ParAct.parse $ (act++";")
+
+instantiateHT :: Map.Map Id String -> States -> States
+instantiateHT mp sts = 
+ if Map.null mp
+ then sts
+ else States (instantiateStates (getStarting sts) mp) 
+             (instantiateStates (getAccepting sts) mp)
+             (instantiateStates (getBad sts) mp) 
+             (instantiateStates (getNormal sts) mp)  
+
+instantiateStates :: [State] -> Map.Map Id String -> [State]
+instantiateStates [] _      = []
+instantiateStates (s:ss) mp = updateHTns s (map (instantiateArg mp) $ getCNList s) : instantiateStates ss mp
+
+instantiateArg :: Map.Map Id String -> Id -> String
+instantiateArg mp id = 
+ case Map.lookup id mp of
+      Nothing -> id
+      Just s  -> s
+
+makeMap :: [(Args,Act.Args)] -> Map.Map Id String
+makeMap = Map.fromList . map (\(x,y) -> (getArgsId x, showActArgs y))
+
+makeRefTypeMap :: [(Args,Act.Args)] -> Map.Map Id String
+makeRefTypeMap args = Map.fromList [ (getArgsId x,show x) | (x,y) <- args]

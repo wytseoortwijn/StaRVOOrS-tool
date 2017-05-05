@@ -1,21 +1,22 @@
 module JMLInjection(generateTmpFilesAllConsts,generateTmpFilesCInvs,updateTmpFilesCInvs,generateDummyBoolVars) where
 
 import Types
-import JMLGenerator as PJML
+import JMLGenerator
 import CommonFunctions
 import System.Directory
 import Data.Char
 import UpgradePPDATE
 import ErrM
 import JavaLanguage
+import System.IO
 
 -------------------------------------------------
 -- Injecting JML annotations for Hoare triples --
 -------------------------------------------------
 
-generateTmpFilesAllConsts :: UpgradePPD PPDATE -> [(MethodName, ClassInfo, String)] -> FilePath -> FilePath -> IO ()
+generateTmpFilesAllConsts :: UpgradePPD PPDATE -> HTjml -> FilePath -> FilePath -> IO ()
 generateTmpFilesAllConsts ppd consts_jml output_add jpath =
- do let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
     let imports       = importsGet ppdate
     let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
     let ys = map makeAddFile imports'
@@ -28,9 +29,9 @@ generateTmpFilesAllConsts ppd consts_jml output_add jpath =
              ]
     return ()
 
-genTmpFilesConst :: (String, ClassInfo) -> FilePath -> [(MethodName, ClassInfo, String)] -> String -> IO ()
-genTmpFilesConst (main, cl) output_add [] r                   = writeFile (output_add ++ "/" ++ main ++ "/" ++ (cl ++ ".java")) r
-genTmpFilesConst (main, cl) output_add ((mn, cl', jml):xs)  r = 
+genTmpFilesConst :: (String, ClassInfo) -> FilePath -> HTjml -> String -> IO ()
+genTmpFilesConst (main, cl) output_add [] r                      = writeFile (output_add ++ "/" ++ main ++ "/" ++ (cl ++ ".java")) r
+genTmpFilesConst (main, cl) output_add ((mn, cl', ov,jml):xs)  r = 
  do 
     if (cl == cl') 
     then do 
@@ -39,30 +40,42 @@ genTmpFilesConst (main, cl) output_add ((mn, cl', jml):xs)  r =
             let tmp  = output_add'' ++ "/" ++ (cl ++ ".java")
             let (ys, zs) = if (mn == cl)
                            then lookForConstructorDef mn (lines r)
-                           else lookForMethodDef mn (lines r)
+                           else lookForMethodDef mn ov (lines r)
             let r' = ((unlines ys) ++ jml ++ (unlines zs))
             genTmpFilesConst (main, cl') output_add xs r'
     else genTmpFilesConst (main, cl) output_add xs  r
 
 
-lookForMethodDef :: MethodName -> [String] -> ([String], [String])
-lookForMethodDef mn []       = error $ "Something went wrong when checking the method " ++ mn ++ ".\n"
-lookForMethodDef mn (xs:xss) = 
+lookForMethodDef :: MethodName -> Overloading -> [String] -> ([String], [String])
+lookForMethodDef mn _ []        = error $ "Something went wrong when annotating the method " ++ mn ++ ".\n"
+lookForMethodDef mn ov (xs:xss) = 
  let ys = splitOnIdentifier mn xs
  in if (length ys == 1)
-    then (xs:a, b)
+    then (xs:a, b) --method name does not appear in the line
     else let zs     = (clean.head.tail) ys 
              beginl = (words.head) ys 
          in if ((head zs) == '(')
             then if (length beginl == 1)
-                 then (xs:a, b)
+                 then (xs:a, b) --not a method definition (does not have modifier or type)
                  else let ws = (clean.head) beginl
                       in if (elem ws javaModifiers)
-                         then ([], xs:xss)
-                         else (xs:a, b)
-            else (xs:a, b)
-                where (a, b) = lookForMethodDef mn xss
-  
+                         then let ts = splitOnIdentifier "," $ fst $ splitAtClosingParen 0 $ tail zs in
+                              if checkArguments ov ts
+                              then ([], xs:xss)
+                              else (xs:a, b) --not the intended method (overloading)
+                         else (xs:a, b) --not a method definition (does not start with modifier)
+            else (xs:a, b) --not referring to a method
+                where (a, b) = lookForMethodDef mn ov xss
+
+checkArguments :: Overloading -> [String] -> Bool
+checkArguments _ []           = False
+checkArguments OverNil _      = True
+checkArguments (Over []) [[]] = True
+checkArguments (Over []) _    = False
+checkArguments (Over ts) [[]] = False
+checkArguments (Over ts) ts'  =  
+ let types = map (head.words) ts'
+ in ts == types
 
 lookForConstructorDef :: MethodName -> [String] -> ([String], [String])
 lookForConstructorDef mn []       = error $ "Something went wrong when checking the constructor " ++ mn ++ ".\n"
@@ -85,7 +98,7 @@ lookForConstructorDef mn (xs:xss) =
 
 updateTmpFilesCInvs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 updateTmpFilesCInvs ppd output_add jpath = 
- do let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ do let (ppdate, env) =  fromOK $ runStateT ppd emptyEnv
     let imports       = importsGet ppdate
     let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
     sequence $ map (\ i -> updateTmpFileCInv i output_add jpath (varsInFiles env)) imports'
@@ -129,7 +142,7 @@ annotateNullable (type', v) (xs:xss) =
 
 generateTmpFilesCInvs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 generateTmpFilesCInvs ppd output_add jpath = 
- let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      imports       = importsGet ppdate
      cinvs         = cinvariantsGet ppdate
      xs            = splitCInvariants cinvs []
@@ -192,13 +205,13 @@ getCInvs' ((cl', cinvs):xs) cl = if (cl' == cl)
 
 generateDummyBoolVars :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 generateDummyBoolVars ppd output_add jpath = 
- let (ppdate, env) =  (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      imports       = importsGet ppdate
      consts        = htsGet ppdate
      xs            = splitClassHT consts
      join_xs       = joinClassHT xs []
      imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
-  in sequence $ map (\ i -> generateDBMFile i output_add jpath join_xs) imports'
+ in sequence $ map (\ i -> generateDBMFile i output_add jpath join_xs) imports'
 
 
 generateDBMFile :: Import -> FilePath -> FilePath -> [(ClassInfo, [HTName])] -> IO ()
@@ -214,6 +227,7 @@ generateDBMFile i output_add jpath xs =
      let (ys, zs) = lookForClassBeginning cl (lines r)
      writeFile tmp ((unlines ys) ++ concat dummy_vars ++ (unlines zs)) 
 
+
 genDummyVarJava :: HTName -> String
 genDummyVarJava cn = "  public static final boolean " ++ cn ++ " = true;\n"
 
@@ -225,7 +239,7 @@ lookForConstsNames cn ((cn', cs):xs) = if (cn == cn')
 
 splitClassHT :: HTriples -> [(ClassInfo, HTName)]
 splitClassHT []     = []
-splitClassHT (c:cs) = (fst $ methodCN c, htName c) : splitClassHT cs
+splitClassHT (c:cs) = (clinf $ methodCN c, htName c) : splitClassHT cs
 
 joinClassHT :: [(ClassInfo, HTName)] -> [(ClassInfo, [HTName])] -> [(ClassInfo, [HTName])]
 joinClassHT [] jcc     = jcc

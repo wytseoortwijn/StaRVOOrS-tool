@@ -1,4 +1,4 @@
-module PartialInfoFilesGeneration (htsJavaFileGen, idFileGen, oldExprFileGen,messagesFileGen,cloningFileGen) where
+module PartialInfoFilesGeneration (htsJavaFileGen, idFileGen, oldExprFileGen,messagesFileGen,cloningFileGen,templatesFileGen) where
 
 import Types
 import System.Directory
@@ -10,6 +10,7 @@ import ErrM
 import Data.List
 import qualified Data.Map as Map
 import Data.Maybe
+import Data.List
 
 -----------------------
 -- HoareTriples.java --
@@ -17,25 +18,35 @@ import Data.Maybe
 
 htsJavaFileGen :: UpgradePPD PPDATE -> FilePath -> IO ()
 htsJavaFileGen ppd output_add = 
- let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      imp           = importsGet ppdate
      global        = globalGet ppdate
      consts        = htsGet ppdate
      oldExpM       = oldExpTypes env
-     forallop      = map (\c -> genMethodsForConstForall c env oldExpM) consts
+     forallop'     = map (\c -> genMethodsForConstForall c env oldExpM) consts
+     forallop      = map (goo env) forallop'
      new_methods   = map snd forallop
      consts'       = map fst forallop
-     existsop      = map (\c -> genMethodsForConstExists c env oldExpM) consts'
+     existsop'     = map (\c -> genMethodsForConstExists c env oldExpM) consts'
+     existsop      = map (goo env) existsop'
      new_methods'  = map snd existsop
      consts''      = map fst existsop
      methods       = map (\ c -> (methodForPre c env, methodForPost c env oldExpM)) consts''
-     body          = concat $ map joinInfo $ zip3 methods new_methods new_methods'
- in do 
-       let address = output_add ++ "HoareTriplesPPD.java"
-       writeFile address (genPackageInfo ++ genImports' imp ++ "\n\n")
-       appendFile address "public class HoareTriplesPPD {\n\n  HoareTriplesPPD () {}\n\n"
-       if (null consts) then return () else appendFile address body       
-       appendFile address "\n}"
+     body          = concatMap joinInfo $ zip3 (map (\x -> foo env x) methods) new_methods new_methods'
+     pre_xs        = map (\(Bad s) -> s) $ filter isBad $ map ((\x -> runStateT x env).fst) methods
+     post_xs       = map (\(Bad s) -> s) $ filter isBad $ map ((\x -> runStateT x env).snd) methods
+     mforall       = map (\(Bad s) -> s) $ filter isBad $ map (\x -> runStateT x env) forallop'
+     mexists       = map (\(Bad s) -> s) $ filter isBad $ map (\x -> runStateT x env) existsop'
+     errs          = unlines $ pre_xs ++ post_xs ++ mforall ++ mexists
+ in if (not.null) errs
+    then error $ errs
+    else do let address = output_add ++ "HoareTriplesPPD.java"
+            writeFile address (genPackageInfo ++ genImports' imp ++ "\n\n")
+            appendFile address "public class HoareTriplesPPD {\n\n  HoareTriplesPPD () {}\n\n"
+            if (null consts) then return () else appendFile address body
+            appendFile address "\n}"
+                        where foo env = \(x,y) -> (goo env x, goo env y)
+                              goo env = \ x -> fst $ fromOK $ runStateT x env
 
 joinInfo :: ((String, String), String, String) -> String
 joinInfo ((pre_s, post_s), opf, ope) = 
@@ -57,28 +68,28 @@ genImports' :: Imports -> String
 genImports' xss = getImports' xss
 
 -- Hoare triples methods
-genMethodsForConstForall :: HT -> Env -> OldExprM -> (HT, String)
+genMethodsForConstForall :: HT -> Env -> OldExprM -> UpgradePPD (HT, String)
 genMethodsForConstForall c env oldExpM =
- let (body_pre, body_post) = operationalizeForall c env oldExpM
-     newpre  = flattenBody body_pre
-     newpost = flattenBody body_post
-     pre_opmethods  = concat $ extracMethodDefinitions body_pre
-     post_opmethods = concat $ extracMethodDefinitions body_post
-     c'  = updatePre c newpre
-     c'' = updatePost c' newpost
- in (c'', pre_opmethods ++ post_opmethods)
+ do (body_pre, body_post) <- operationalizeForall c env oldExpM
+    let newpre  = flattenBody body_pre
+    let newpost = flattenBody body_post
+    let pre_opmethods  = concat $ extracMethodDefinitions body_pre
+    let post_opmethods = concat $ extracMethodDefinitions body_post
+    let c'  = updatePre c newpre
+    let c'' = updatePost c' newpost
+    return (c'', pre_opmethods ++ post_opmethods)
 
 
-genMethodsForConstExists :: HT -> Env -> OldExprM -> (HT, String)
+genMethodsForConstExists :: HT -> Env -> OldExprM -> UpgradePPD (HT, String)
 genMethodsForConstExists c env oldExpM =
- let (body_pre, body_post) = operationalizeExists c env oldExpM
-     newpre  = flattenBody body_pre
-     newpost = flattenBody body_post
-     pre_opmethods  = concat $ extracMethodDefinitions body_pre
-     post_opmethods = concat $ extracMethodDefinitions body_post
-     c'  = updatePre c newpre
-     c'' = updatePost c' newpost
- in (c'', pre_opmethods ++ post_opmethods)
+ do (body_pre, body_post) <- operationalizeExists c env oldExpM
+    let newpre  = flattenBody body_pre
+    let newpost = flattenBody body_post
+    let pre_opmethods  = concat $ extracMethodDefinitions body_pre
+    let post_opmethods = concat $ extracMethodDefinitions body_post
+    let c'  = updatePre c newpre
+    let c'' = updatePost c' newpost
+    return (c'', pre_opmethods ++ post_opmethods)
 
 
 auxNewVars :: Variables -> [String]
@@ -86,35 +97,37 @@ auxNewVars []                          = []
 auxNewVars (Var _ t [VarDecl id _]:xs) = (t ++ " " ++ id):auxNewVars xs
 
 
-methodForPost :: HT -> Env -> OldExprM -> String
+methodForPost :: HT -> Env -> OldExprM -> UpgradePPD String
 methodForPost c env oldExpM =
- let (argsPost, argsPostwt) = lookForAllExitTriggerArgs env (fst $ methodCN c) (snd $ methodCN c)
-     tnvs      = getConstTnv c oldExpM
-     tnvs'     = auxNewVars tnvs
-     newargs   = addComma tnvs'
-     nargs     = if (null tnvs) then "" else "," ++ newargs
-     args      = addComma $ map unwords $ map (\s -> if isInfixOf "ret_ppd" (head $ tail s) then (head s):["ret"] else s) $ map words $ splitOnIdentifier "," (argsPost ++ nargs)
- in 
-  "  // " ++ (htName c) ++ "\n"
-  ++ "  public static boolean " ++ (htName c) ++ "_post(" ++ args ++ ") {\n"
-  ++ "    return " ++ (post c) ++ ";\n" 
-  ++ "  }\n\n"
+ do (argsPost, argsPostwt) <- lookForAllExitTriggerArgs env c
+    let tnvs      = getConstTnv c oldExpM
+    let tnvs'     = auxNewVars tnvs
+    let newargs   = addComma tnvs'
+    let nargs     = if (null tnvs) then "" else "," ++ newargs
+    let args      = addComma $ map unwords $ map (\s -> if isInfixOf "ret_ppd" (head $ tail s) then (head s):["ret"] else s)
+                    $ map words $ splitOnIdentifier "," (argsPost ++ nargs)
+    return $ "  // " ++ (htName c) ++ "\n"
+             ++ "  public static boolean " ++ (htName c) ++ "_post(" ++ args ++ ") {\n"
+             ++ "    return " ++ (post c) ++ ";\n" 
+             ++ "  }\n\n"
 
 --check opt for new predicates for the precondition due to partial proof
-methodForPre :: HT -> Env -> String
+methodForPre :: HT -> Env -> UpgradePPD String
 methodForPre c env =
- let (argsPre, _) = lookForAllEntryTriggerArgs env (fst $ methodCN c) (snd $ methodCN c)     
- in 
-  "  // " ++ (htName c) ++ "\n"
-  ++ "  public static boolean " ++ (htName c) ++ "_pre(" ++ argsPre ++ ") {\n" 
-  ++ "    return " ++ pre c ++ addNewPre c ++ ";\n"
-  ++ "  }\n\n"
+ do (argsPre, _) <- lookForAllEntryTriggerArgs env c
+    return $ "  // " ++ (htName c) ++ "\n"
+             ++ "  public static boolean " ++ (htName c) ++ "_pre(" ++ argsPre ++ ") {\n" 
+             ++ "    return " ++ pre c ++ addNewPre c ++ ";\n"
+             ++ "  }\n\n"
 
 
 addNewPre :: HT -> String
-addNewPre c = if (null (optimized c))
-              then ""
-              else " && " ++ (head.optimized) c
+addNewPre c = 
+ if (null (optimized c))
+ then ""
+ else if (head.optimized) c == "(true)"
+      then ""
+      else " && " ++ (head.optimized) c
 
 extracMethodDefinitions :: [Either (String,String) String] -> [String]
 extracMethodDefinitions []             = []
@@ -159,15 +172,15 @@ idGen =
 -- OldExpr Files --
 -------------------
 
-oldExprFileGen :: FilePath -> UpgradePPD PPDATE -> IO [()]
+oldExprFileGen :: FilePath -> UpgradePPD PPDATE -> IO ()
 oldExprFileGen output_add ppd = 
- let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
+ let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      consts        = htsGet ppdate      
      oldExpM       = oldExpTypes env 
      consts'       = [c | c <- consts, noOldExprInHT $ Map.lookup (htName c) oldExpM]    
  in if Map.null oldExpM
-    then return [()]
-    else sequence [writeFile (output_add ++ (snd $ oldExpGen c oldExpM)) (fst $ oldExpGen c oldExpM) | c <- consts']
+    then return ()
+    else sequence_ [writeFile (output_add ++ (snd $ oldExpGen c oldExpM)) (fst $ oldExpGen c oldExpM) | c <- consts']
                      where noOldExprInHT v = v /= Nothing && (not.null.fromJust) v 
 
 oldExpGen :: HT -> OldExprM -> (String,String)
@@ -198,13 +211,11 @@ constructorOldExpr ((t,exp):xs) = "    " ++ "this." ++ exp ++ " = " ++ exp ++ ";
 -- Messages to send over the channels --
 ----------------------------------------
 
-messagesFileGen :: FilePath -> Env -> IO [()]
+messagesFileGen :: FilePath -> Env -> IO ()
 messagesFileGen output_add env = 
- let oldExpM  = oldExpTypes env
-     cns      = map ("Old_"++) [x | (x,y) <- Map.toList oldExpM, (not.null) y]
-     files    = (output_add ++ "MessagesPPD.java") : map (\s -> output_add ++ "Messages" ++ s ++ ".java") cns
-     xs       = messagesGen : map messageOldExpGen cns
- in sequence $ map (uncurry writeFile) $ zip files xs
+ let files    = [(output_add ++ "MessagesPPD.java") , (output_add ++ "MessagesOld.java")]
+     xs       = [messagesGen , messageOldExpGen]
+ in sequence_ $ map (uncurry writeFile) $ zip files xs
     
 messagesGen :: String
 messagesGen =
@@ -219,20 +230,19 @@ messagesGen =
   ++ "  }\n"
   ++ "}\n"
  
-messageOldExpGen :: String -> String
-messageOldExpGen t =
+messageOldExpGen :: String
+messageOldExpGen =
  "package ppArtifacts;\n\n"
-  ++ "public class Messages" ++ t ++ " extends MessagesPPD  {\n\n"
-  ++ "  public " ++ t ++ " oldExpr; \n\n"
-  ++ "  public Messages" ++ t ++ " (Integer id, " ++ t ++ " oldExpr) { \n"
+  ++ "public class MessagesOld<T> extends MessagesPPD  {\n\n"
+  ++ "  public T oldExpr; \n\n"
+  ++ "  public MessagesOld (Integer id, T oldExpr) { \n"
   ++ "     super(id); \n" 
   ++ "     this.oldExpr = oldExpr; \n" 
   ++ "  }\n\n"  
-  ++ "  public static " ++ t ++ " getOldExpr(Messages" ++ t ++ " m) {\n"
-  ++ "     return m.oldExpr;\n"
+  ++ "  public T getOldExpr() {\n"
+  ++ "     return oldExpr;\n"
   ++ "  }\n"
   ++ "}\n"
-
 
 ------------------------------------
 -- Cloning reference type objects --
@@ -276,3 +286,39 @@ cloningGen =
   ++ "  }\n\n"
   ++ "}\n"
 
+---------------------
+-- Templates Files --
+---------------------
+
+templatesFileGen :: FilePath -> UpgradePPD PPDATE -> IO ()
+templatesFileGen output_add ppd = 
+ let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
+     temps         = templatesGet ppdate 
+     imps          = getImports $ importsGet ppdate
+ in case temps of
+         TempNil -> return ()
+         Temp xs -> sequence_ $ [writeFile (output_add ++ (snd val)) (fst val) | val <- map (tempGen imps) xs]
+
+tempGen :: String -> Template -> (String,String)
+tempGen imps temp = 
+ let id = tempId temp
+     nameClass = "Tmp_" ++ id
+     args      = filterRefTypes $ tempBinds temp
+ in ("package ppArtifacts;\n\n"
+    ++ imps ++ "\n\n"
+    ++ "public class " ++ nameClass ++ " {\n\n"
+    ++ varDeclTemp args
+    ++ "  public " ++ nameClass ++ "() { }\n\n"
+    ++ "  public " ++ nameClass ++ "(" ++ addComma (map (\arg -> getArgsType arg ++ " " ++ getArgsId arg) args) ++ ") {\n"
+    ++ constructorTemp args 
+    ++ "  }\n\n"
+    ++ "}\n", nameClass ++ ".java") 
+
+varDeclTemp :: [Args] -> String
+varDeclTemp []       = "\n"
+varDeclTemp (arg:xs) = 
+ "  public " ++ getArgsType arg ++ " " ++ getArgsId arg ++ ";\n" ++ varDeclTemp xs
+ 
+constructorTemp :: [Args] -> String
+constructorTemp []       = ""
+constructorTemp (arg:xs) = "    " ++ "this." ++ getArgsId arg ++ " = " ++ getArgsId arg ++ ";\n" ++ constructorTemp xs

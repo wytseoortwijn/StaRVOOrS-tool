@@ -5,11 +5,11 @@ import Types
 import System.IO ( stdin, hGetContents )
 import System.Environment ( getArgs, getProgName )
 
-import Lexjml
-import Parjml
-import Skeljml
-import Printjml
-import Absjml
+import LexJml
+import ParJml
+import SkelJml
+import PrintJml
+import AbsJml
 import ErrM
 
 type ParseFun a = [Token] -> Err a

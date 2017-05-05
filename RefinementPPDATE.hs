@@ -1,4 +1,4 @@
-module RefinementPPDATE (refinePPDATE, getClassVar,generateNewTriggers,filterDefinedTriggers) where
+module RefinementPPDATE (refinePPDATE, getClassVar,generateNewTriggers) where
 
 import Types
 import CommonFunctions
@@ -6,6 +6,7 @@ import DL2JML
 import qualified Data.Map as Map
 import UpgradePPDATE
 import Data.List
+import Data.Maybe
 
 -----------------------
 -- ppDATE refinement --
@@ -14,6 +15,7 @@ import Data.List
 refinePPDATE :: UpgradePPD PPDATE -> [Proof] -> UpgradePPD PPDATE
 refinePPDATE ppd proofs = 
  let ppdate    = getValue ppd 
+     env       = getEnvVal ppd
      consts    = htsGet ppdate
      nproved   = filter (\(x,y,z,t) -> (not.null) z) $ map getInfoFromProof proofs
      proved    = filter (\(x,y,z,t) -> (null z)) $ map getInfoFromProof proofs
@@ -22,7 +24,7 @@ refinePPDATE ppd proofs =
      ppd'      = generateNewTriggers ppd consts'
      ppdate'   = getValue ppd'
      global    = globalGet ppdate'
-     triggers' = getAllTriggers global 
+     triggers' = getAllTriggers global env
      consts''  = updateHTs nproved consts' triggers'
      env'      = getEnvVal ppd'     
      global'   = optimizedProvenHTs cproved refinePropertyOptGlobal global
@@ -56,7 +58,7 @@ refineContext cn (Ctxt vars ies trigs prop fors) =
  in Ctxt vars ies trigs prop' (map (refineForeach cn) fors)
 
 refineForeach :: HTName -> Foreach -> Foreach
-refineForeach cn (Foreach args ctxt) = Foreach args (refineContext cn ctxt)
+refineForeach cn foreach = updCtxtForeach foreach (refineContext cn (getCtxtForeach foreach))
 
 removeStatesProp :: HTName -> Property -> Property
 removeStatesProp _ PNIL               = PNIL
@@ -91,11 +93,11 @@ updateHTs (x:xs) consts es = updateHTs xs (updateHT x consts es) es
 updateHT :: (MethodName, HTName, [Pre],String) -> HTriples -> Triggers -> HTriples
 updateHT (mn,cn,pres,path) [] _      = []
 updateHT (mn,cn,pres,path) (c:cs) es = 
- if (htName c == cn && (snd.methodCN) c == mn)
+ if (htName c == cn && (mname.methodCN) c == mn)
  then if (null pres)
       then c:updateHT (mn,cn,pres,path) cs es
       else let pres' = removeDuplicates pres
-               opt'  = map (addParenthesisNot.removeDLstrContent) pres'
+               opt'  = simplify $ map (addParenthesisNot.removeDLstrContent) pres'
                opt'' = '(':introduceOr opt' ++ [')']
                c'    = updatePath (updateOpt c [opt'']) path
                c''   = updatePre c' $ removeDLstrContent (pre c)
@@ -106,11 +108,25 @@ updateHT (mn,cn,pres,path) (c:cs) es =
 getClassVar :: HT -> Triggers -> TriggerVariation -> String
 getClassVar c es ev = lookupClassVar es c ev
 
+--Optimise generated preconditions
+simplify :: [String] -> [String]
+simplify = checkMiddleExcluded 
+
+--If middle excluded, then verify original precondition
+checkMiddleExcluded :: [String] -> [String]
+checkMiddleExcluded [xs,ys] = 
+ let xs' = "!(" ++ xs ++ ")"
+     ys' = "!(" ++ ys ++ ")"
+ in if ys == xs' || xs == ys'
+    then ["true"]
+    else [xs,ys]
+checkMiddleExcluded xss     = xss
+
 -- returns variable name used to instantiate the class in the ppDATE
 lookupClassVar :: Triggers -> HT -> TriggerVariation -> String
 lookupClassVar trs c ev = 
  let trs' = filterTriggers trs c ev
- in case getGeneratedExTr trs' of
+ in case getGeneratedExTr trs' c of
          []   -> getExTr trs' c ev
          [id] -> id
 
@@ -119,29 +135,32 @@ filterTriggers [] _ _      = []
 filterTriggers (e:es) c ev = 
  case (compTrigger e) of
       NormalEvent (BindingVar b) id _ ev' -> 
-                  if (id == snd (methodCN c) && compareEV ev ev')
-                  then e:filterTriggers es c ev
-                  else filterTriggers es c ev
+           let mn = mname (methodCN c) 
+               ov = overl (methodCN c)
+           in if (id == mn && compareEV ev ev'
+                 && checkArgsOver (args e) (getCTArgs (compTrigger e)) (overl $ methodCN c))
+              then e:filterTriggers es c ev
+              else filterTriggers es c ev
       _                                   -> filterTriggers es c ev
 
-getGeneratedExTr :: Triggers -> [String]
-getGeneratedExTr []       = []
-getGeneratedExTr (tr:trs) = 
+getGeneratedExTr :: Triggers -> HT -> [String]
+getGeneratedExTr [] _       = []
+getGeneratedExTr (tr:trs) c = 
   case (compTrigger tr) of
       NormalEvent (BindingVar b) id _ ev' -> 
-                  if (isSuffixOf "_ppdex" (tName tr))
+                  if (isInfixOf "_ppdex" (tName tr) && checkArgsOver (args tr) (getCTArgs (compTrigger tr)) (overl $ methodCN c)) 
                   then case b of
                             BindStar      -> []
                             BindType _ id -> [id]
                             BindId id     -> [id]
-                  else getGeneratedExTr trs
+                  else getGeneratedExTr trs c
 
 getExTr :: Triggers -> HT -> TriggerVariation -> String
 getExTr [] _ _      = ""
 getExTr (e:es) c ev = 
  case (compTrigger e) of
       NormalEvent (BindingVar b) id _ ev' -> 
-                  if (id == snd (methodCN c) && compareEV ev ev')
+                  if (id == mname (methodCN c) && compareEV ev ev')
                   then case b of
                             BindStar      -> ""
                             BindType _ id -> id
@@ -149,6 +168,12 @@ getExTr (e:es) c ev =
                   else getExTr es c ev
       _                                   -> getExTr es c ev
 
+checkArgsOver :: [Bind] -> [Bind] -> Overloading -> Bool
+checkArgsOver _ _ OverNil  = True
+checkArgsOver bs ceargs ov =
+ let ov' = generateOverloading bs ceargs
+ in ov == ov'
+ 
 
 compareEV :: TriggerVariation -> TriggerVariation -> Bool
 compareEV EVEntry EVEntry         = True
@@ -162,106 +187,92 @@ compareEV _ _                     = False
 --If trigger associated to *, it will be considered as defined even if the the class is wrong
 generateNewTriggers :: UpgradePPD PPDATE -> HTriples -> UpgradePPD PPDATE
 generateNewTriggers ppd consts =
-  do let env     = getEnvVal ppd
-     let ppdate  = getValue ppd     
-     let mfiles  = methodsInFiles env
-     let mns     = removeDuplicates [mn | mn <- map methodCN consts]
-     let entry   = filterDefinedTriggers (entryTriggersInfo env) env 0 mns
-     let exit    = filterDefinedTriggers (exitTriggersInfo env) env 1 mns
-     let entry'  = [(x,y,head $ filter (\(a,b,c) -> y == b) z) | (x,y) <- entry, (_,d,z) <- mfiles,d==x]
-     let exit'   = [(x,y,head $ filter (\(a,b,c) -> y == b) z) | (x,y) <- exit, (_,d,z) <- mfiles,d==x]
-     let (env',ppdate')   = addNewTriggerEntry env ppdate 0 entry'
-     let (env'',ppdate'') = addNewTriggerExit env' ppdate' (length entry') exit'
+  do let env    = getEnvVal ppd
+     let ppdate = getValue ppd     
+     let mfiles = methodsInFiles env
+     let mns    = removeDuplicates $ map methodCN consts
+     let entry  = filterDefEntryTriggers mns (allTriggers env) 
+     let entry' = [(mnc, checkOverloading (filter (\(_,mn,_,_) -> mname mnc == mn) z) (overl mnc)) | mnc <- entry, (_,d,z) <- mfiles,d == clinf mnc]
+     let exit   = [(mnc, checkOverloading (filter (\(_,mn,_,_) -> mname mnc == mn) z) (overl mnc)) | mnc <- mns, (_,d,z) <- mfiles,d == clinf mnc]
+     let scope  = properScope ppdate
+     let (env',ppdate') = addNewTriggerEntry env 0 entry' ppdate scope
+     let env''  = addNewTriggerExit env' (length entry') exit scope     
      put env''
-     return ppdate''
+     return ppdate'
+
+checkOverloading :: [(String,MethodName,[String],MethodInvocations)] -> Overloading -> (String,MethodName,[String],MethodInvocations)
+checkOverloading [] _                          = error "FUCK"
+checkOverloading (val@(_,_,args,_):xs) OverNil = val
+checkOverloading (val@(_,_,args,_):xs) ov      = 
+ if Over (map (getBindTypeType.makeBind) args) == ov
+ then val
+ else checkOverloading xs ov
+
+--Filter methods associated to entry triggers defined at top-level
+filterDefEntryTriggers :: [MethodCN] -> [TriggersInfo] -> [MethodCN]
+filterDefEntryTriggers [] _                                = []
+filterDefEntryTriggers (mnc@(MCN ci mn OverNil):mncs) ts   = 
+ if null [ t | t <- ts , tiCI t == ci, tiMN t == mn, tiTrvar t == EVEntry]
+ then mnc:filterDefEntryTriggers mncs ts
+ else filterDefEntryTriggers mncs ts
+filterDefEntryTriggers (mnc@(MCN ci mn (Over xs)):mncs) ts = 
+ if null [ t | t <- ts , tiCI t == ci, tiMN t == mn, tiTrvar t == EVEntry, tiOver t == (Over xs)]
+ then mnc:filterDefEntryTriggers mncs ts
+ else filterDefEntryTriggers mncs ts
+
+--Creates the info to be added in the environment
+createTriggerEntry :: (MethodCN,(String,MethodName,[String],MethodInvocations)) -> Int -> Scope -> TriggersInfo
+createTriggerEntry (mnc,(rt,mn',xs,_)) n scope = 
+ let mn = mname mnc
+     cn = clinf mnc 
+     ov = overl mnc
+ in if (mn == mn')
+    then let trnm = mn ++ "_ppden"++ (show n)
+             nvar = "cv" ++ "_" ++ (show n)
+             cn'  = cn ++ " " ++ nvar
+             cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words.remGenerics') xs) EVEntry
+             tr   = TriggerDef trnm (map ((\[x,y] -> BindType x y).words.remGenerics') xs) cpe ""
+             bs   = map ((\[x,y] -> BindType x y).words.remGenerics') xs             
+         in TI trnm mn cn nvar EVEntry bs (Just tr) scope ov
+    else error $ "Problem when creating an entry trigger. Mismatch between method names " ++ mn ++ " and " ++ mn' ++ ".\n"
+
+addNewTriggerEntry :: Env -> Int -> [(MethodCN,(String,MethodName,[String],MethodInvocations))] -> PPDATE -> Scope -> (Env,PPDATE)
+addNewTriggerEntry env _ [] ppd _         = (env,ppd)
+addNewTriggerEntry env n (x:xs) ppd scope =
+ let tinfo = createTriggerEntry x n scope
+     ppd'  = addTrigger2ppDATE (fromJust (tiTrDef tinfo)) ppd
+ in addNewTriggerEntry (env { allTriggers = tinfo:allTriggers env}) (n+1) xs ppd' scope
 
 
-filterDefinedTriggers :: Map.Map ClassInfo MapTrigger -> Env -> Integer -> [(ClassInfo,MethodName)] -> [(ClassInfo,MethodName)]
-filterDefinedTriggers _ _ _ []               = []
-filterDefinedTriggers mci env n ((ci,mn):xs) =
- if elem (ci,mn) (exitTriggersInTemps env) && n == 1
- then (ci,mn):filterDefinedTriggers mci env n xs
- else 
-   case Map.lookup ci mci of
-        Nothing -> case Map.lookup "*" mci of
-                        Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
-                        Just m'  -> case Map.lookup mn m' of
-                                         Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
-                                         Just _  -> filterDefinedTriggers mci env n xs
-        Just m  -> case Map.lookup mn m of
-                        Nothing -> case Map.lookup "*" mci of
-                                        Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
-                                        Just m'  -> case Map.lookup mn m' of
-                                                         Nothing -> (ci,mn):filterDefinedTriggers mci env n xs
-                                                         Just _  -> filterDefinedTriggers mci env n xs
-                        Just _  -> filterDefinedTriggers mci env n xs
-
---Creates the info to be added in the environment and the ppDATE about the new entry trigger
-createTriggerEntry :: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> ((ClassInfo,MethodName,(Id, String, [Args])),TriggerDef)
-createTriggerEntry (cn,mn,(rt,mn',xs)) n = 
- if (mn == mn')
- then let trnm = mn ++ "_ppden"
-          nvar = "cv" ++ "_" ++ (show n)
-          cn'  = cn ++ " " ++ nvar
-          cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) EVEntry
-          tr   = TriggerDef trnm (map ((\[x,y] -> BindType x y).words) xs) cpe ""
-      in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words) xs)),tr)
- else error $ "Problem when creating an entry trigger. Mismatch between method names " ++ mn ++ " and " ++ mn' ++ ".\n"
-
-addNewTriggerEntry :: Env -> PPDATE -> Int -> [(ClassInfo,MethodName,(String,MethodName,[String]))] -> (Env,PPDATE)
-addNewTriggerEntry env ppdate _ []     = (env,ppdate)
-addNewTriggerEntry env ppdate n (x:xs) =
- let (p,tr) = createTriggerEntry x n
-     cn     = (\(x,y,z) -> x) p 
-     mn     = (\(x,y,z) -> y) p 
-     v      = (\(x,y,z) -> z) p 
-     cl     = makeBind $ (\(x,y,z) -> y) v
-  in case Map.lookup cn (entryTriggersInfo env) of
-      Nothing -> let mapeinfo' =  Map.insert mn [v] Map.empty
-                     ppdate'   = addTrigger2ppDATE tr ppdate 
-                 in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
-                                            , allTriggers = (tName tr,mn,EVEntry,cl:args tr):allTriggers env}) ppdate' (n+1) xs
-      Just mapeinfo -> 
-           let mapeinfo' = updateInfo mapeinfo mn v 
-               ppdate'   = addTrigger2ppDATE tr ppdate 
-           in addNewTriggerEntry (env { entryTriggersInfo = Map.insert cn mapeinfo' (entryTriggersInfo env) 
-                                      , allTriggers = (tName tr,mn,EVEntry, cl:args tr):allTriggers env}) ppdate' (n+1) xs
-
---Creates the info to be added in the environment and the ppDATE about the new exit trigger
-createTriggerExit:: (ClassInfo,MethodName,(String,MethodName,[String])) -> Int -> ((ClassInfo,MethodName,(Id, String, [Args])), TriggerDef)
-createTriggerExit (cn,mn,(rt,mn',xs)) n = 
- let trnm = mn ++ "_ppdex" 
+--Creates the info to be added in the environment
+createTriggerExit:: (MethodCN,(String,MethodName,[String],MethodInvocations)) -> Int -> Scope -> TriggersInfo
+createTriggerExit (mnc,(rt,mn',xs',_)) n scope = 
+ let mn = mname mnc
+     cn = clinf mnc
+     ov = overl mnc
+     trnm = mn ++ "_ppdex"
      nvar = "cv" ++ "_" ++ (show n)
      cn'  = cn ++ " " ++ nvar
-     ret  = "ret_ppd" ++ (show n) in
+     ret  = "ret_ppd" ++ (show n)
+     xs   = map remGenerics' xs' in
  if (mn == mn')
  then if (rt == "void")
-      then let cpe  = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [])
-               tr   = TriggerDef trnm (map ((\[x,y] -> BindType x y).words) xs) cpe ""
-           in ((cn,mn,(trnm, cn', map ((\[x,y] -> Args x y).words) xs)), tr)
-      else let cpe = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words) xs) (EVExit [BindId ret]) 
-               tr  = TriggerDef trnm (map ((\[x,y] -> BindType x y).words) xs ++ [BindType rt ret]) cpe ""
-           in ((cn,mn,(trnm, cn', (map ((\[x,y] -> Args x y).words) xs) ++ [Args rt ret])),tr)
+      then let bs  = map ((\[x,y] -> BindType x y).words.remGenerics') xs
+               cpe = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words.remGenerics') xs) (EVExit [])
+               tr  = TriggerDef trnm bs cpe ""
+           in TI trnm mn cn nvar (EVExit []) bs (Just tr) scope ov
+      else let bs  = (map ((\[x,y] -> BindType x y).words) xs ++ [BindType rt ret])
+               cpe = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words.remGenerics') xs) (EVExit [BindId ret]) 
+               tr  = TriggerDef trnm bs cpe ""
+           in TI trnm mn cn nvar (EVExit [BindId ret]) bs (Just tr) scope ov
  else error $ "Problem when creating an exit trigger. Mismatch between method names " ++ mn ++ " and " ++ mn' ++ ".\n"
 
-addNewTriggerExit :: Env -> PPDATE -> Int -> [(ClassInfo,MethodName,(String,MethodName,[String]))] -> (Env, PPDATE)
-addNewTriggerExit env ppdate _ []     = (env,ppdate)
-addNewTriggerExit env ppdate n (x:xs) =
- let (p,tr) = createTriggerExit x n
-     cn     = (\(x,y,z) -> x) p 
-     mn     = (\(x,y,z) -> y) p 
-     v      = (\(x,y,z) -> z) p 
-     cl     = makeBind $ (\(x,y,z) -> y) v
- in case Map.lookup cn (exitTriggersInfo env) of
-      Nothing -> let mapeinfo' = Map.insert mn [v] Map.empty
-                     ppdate'   = addTrigger2ppDATE tr ppdate 
-                 in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
-                                           , allTriggers = (tName tr,mn, getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs
-      Just mapeinfo -> 
-           let mapeinfo' = updateInfo mapeinfo mn v 
-               ppdate'   = addTrigger2ppDATE tr ppdate 
-           in addNewTriggerExit (env { exitTriggersInfo = Map.insert cn mapeinfo' (exitTriggersInfo env)
-                                     , allTriggers = (tName tr,mn, getCTVariation (compTrigger tr),cl:args tr):allTriggers env }) ppdate' (n+1) xs
+addNewTriggerExit :: Env -> Int -> [(MethodCN,(String,MethodName,[String],MethodInvocations))] -> Scope -> Env
+addNewTriggerExit env _ [] _         = env
+addNewTriggerExit env n (x:xs) scope =
+ let tinfo  = createTriggerExit x n scope
+ in addNewTriggerExit (env { allTriggers = tinfo:allTriggers env }) (n+1) xs scope
+
 
 addTrigger2ppDATE :: TriggerDef -> PPDATE -> PPDATE
 addTrigger2ppDATE tr (PPDATE imp (Global (Ctxt [] [] [] PNIL (f:fs))) temps ci consts ms) =
@@ -270,8 +281,8 @@ addTrigger2ppDATE tr (PPDATE imp (Global (Ctxt vars ies trs p for)) temps ci con
  PPDATE imp (Global (Ctxt vars ies (tr:trs) p for)) temps ci consts ms
 
 addTrigger2Foreach :: Foreaches -> TriggerDef -> Foreaches
-addTrigger2Foreach [Foreach [Args t id] (Ctxt vars ies trs p for)] tr = 
- [Foreach [Args t id] (Ctxt vars ies (trs ++ [updateWhereTr tr (Args t id)]) p for)]
+addTrigger2Foreach [Foreach [Args t id] (Ctxt vars ies trs p for) id'] tr = 
+ [Foreach [Args t id] (Ctxt vars ies (trs ++ [updateWhereTr tr (Args t id)]) p for) id']
 
 updateWhereTr :: TriggerDef -> Args -> TriggerDef
 updateWhereTr (TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) w) (Args t id) = 
@@ -282,4 +293,27 @@ updateWhereTr (TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id'
 makeBind :: String -> Bind
 makeBind [] = error "Cannot make bind\n."
 makeBind s  = (\[x,y] -> BindType x y) $ words s
+
+--Removes generics from the type of the arguments
+remGenerics' :: String -> String
+remGenerics' s = 
+ let ys = splitAtIdentifier '<' s
+ in if (not.null.snd) ys 
+    then let xs = (splitAtIdentifier '>'.reverse.tail.snd) ys in
+         if (not.null.snd) xs
+         then fst ys ++ (reverse $ fst xs)
+         else error "Problem with generics.\n"
+    else s
+
+--Returns the scope where the generated triggers should be placed
+properScope :: PPDATE -> Scope
+properScope ppd = 
+ let global = ctxtGet $ globalGet ppd
+     vars   = variables global
+     actes  = actevents global
+     trs    = triggers global
+     props  = property global
+ in if and [null vars,null actes,null trs,PNIL == props]
+    then InFor (ForId "TopLevel")
+    else TopLevel
 

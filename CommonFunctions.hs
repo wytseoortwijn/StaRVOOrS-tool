@@ -7,6 +7,8 @@ import Data.Either
 import Types
 import ErrM
 import qualified Data.Map as Map
+import Data.Maybe (fromJust)
+
 
 readIdentifier :: String -> Err (String, String)
 readIdentifier text 
@@ -23,6 +25,9 @@ clean = dropWhile (\ c -> isSpace c || c == '{' || c == '}')
 
 trim :: String -> String
 trim = reverse . clean . reverse . clean
+
+cleanBack :: String -> String
+cleanBack = reverse . clean . reverse
 
 splitAtIdentifier :: Char -> String -> (String, String)
 splitAtIdentifier iden s = (takeWhile (\c -> not (c == iden)) s, dropWhile (\c -> not (c == iden)) s)
@@ -50,24 +55,26 @@ checkIfParseErrors es = let (ls, rs) = partitionEithers es
                            then Left ls
                            else Right rs
 
+lookForEntryTrigger :: [TriggersInfo] -> MethodCN -> Scope -> [Trigger]
+lookForEntryTrigger [] _ _               = []
+lookForEntryTrigger (tinfo:es) mnc scope = 
+ let mn = mname mnc
+     ci = clinf mnc
+     ov = overl mnc
+ in case (tiTrvar tinfo) of
+        EVEntry -> if (mn == (tiMN tinfo) && ci == (tiCI tinfo) && cmpScope scope (tiScope tinfo)
+                      && (cmpOverloading ov (tiOver tinfo) || ov == OverNil))
+                   then (tiTN tinfo):lookForEntryTrigger es mnc scope
+                   else lookForEntryTrigger es mnc scope
+        _       -> lookForEntryTrigger es mnc scope
 
-lookForExitTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> [Trigger]
-lookForExitTrigger [] mn                = []
-lookForExitTrigger ((tr,mn',e,_):es) mn = 
-    case e of
-        EVExit _ -> if (mn == mn')
-                    then tr:lookForExitTrigger es mn
-                    else lookForExitTrigger es mn
-        _        -> lookForExitTrigger es mn        
+cmpScope :: Scope -> Scope -> Bool
+cmpScope (InFor (ForId id')) (InTemp id) = isInfixOf id id' 
+cmpScope (InTemp id') (InFor (ForId id)) = cmpScope (InFor (ForId id)) (InTemp id')
+cmpScope scope scope' = scope == scope'
 
-lookForEntryTrigger :: [(Id,MethodName,TriggerVariation,[Bind])] -> MethodName -> [Trigger]
-lookForEntryTrigger [] mn                = []
-lookForEntryTrigger ((tr,mn',e,_):es) mn = 
-    case e of
-        EVEntry -> if (mn == mn')
-                   then tr:lookForEntryTrigger es mn
-                   else lookForEntryTrigger es mn
-        _       -> lookForEntryTrigger es mn  
+cmpOverloading :: Overloading -> Overloading -> Bool
+cmpOverloading ov ov' = ov == ov' || ov == OverNil
 
 openingBracket :: String -> Bool
 openingBracket "" = False
@@ -100,21 +107,38 @@ getListOfTypesAndVars cl ((main, cl',ts):xs) = if (cl == cl')
                                                then ts
                                                else getListOfTypesAndVars cl xs
 
-getListOfTypesAndMethods :: ClassInfo -> [(String, ClassInfo, [(Type, Id,[String])])] -> [(Type, Id)]
+getListOfTypesAndMethods :: ClassInfo -> [(String, ClassInfo, [(Type, Id,[String],MethodInvocations)])] -> [(Type, Id)]
 getListOfTypesAndMethods cl []                  = []
 getListOfTypesAndMethods cl ((main, cl',ts):xs) = if (cl == cl') 
-                                                  then [(x,y) | (x,y,_) <- ts]
+                                                  then [(x,y) | (x,y,_,_) <- ts]
                                                   else getListOfTypesAndMethods cl xs
 
-getListOfArgs :: MethodName -> [(Type, Id,[String])] -> [String]
-getListOfArgs mn []              = []
-getListOfArgs mn ((t,mn',ts):xs) = if (mn == mn') 
-                                   then ts
-                                   else getListOfArgs mn xs
+getMethodInvocations :: MethodCN -> [(String, ClassInfo, [(Type, Id,[String],MethodInvocations)])] -> MethodInvocations
+getMethodInvocations _ []                    = []
+getMethodInvocations mcn ((main, cl',ts):xs) = 
+ let mn  = mname mcn
+     cl  = clinf mcn
+     ov  = overl mcn
+ in if (cl == cl') 
+    then let ys = [ (t,id,args,minvs) | (t,id,args,minvs) <- ts, id==mn]
+         in if (not.null) ys
+            then case ov of 
+                 OverNil  -> (\(_,_,_,x) -> x) $ head ys 
+                 Over ovs -> let zs = [ minvs | (_,_,args,minvs) <- ys, map (head.words) args == ovs]
+                             in if null zs
+                                then getMethodInvocations mcn xs
+                                else head zs
+            else getMethodInvocations mcn xs
+    else getMethodInvocations mcn xs
+
+getListOfArgs :: MethodName -> [(Type, Id,[String],MethodInvocations)] -> [String]
+getListOfArgs mn []                = []
+getListOfArgs mn ((t,mn',ts,_):xs) = if (mn == mn') 
+                                     then ts
+                                     else getListOfArgs mn xs
 
 addComma :: [String] -> String
 addComma = addComma'
-
 
 getConstTnv :: HT -> OldExprM -> Variables
 getConstTnv c oldExpM = 
@@ -143,12 +167,45 @@ getBindArgs' [BindType t id]        = t ++ " " ++ id
 getBindArgs' ((BindType t id):y:ys) = t ++ " " ++ id ++ "," ++ getBindArgs' (y:ys)
 getBindArgs' _                      = ""
 
-getInfoTrigger :: (Id,MethodName,TriggerVariation,[Bind]) -> Maybe (Trigger, [String])
-getInfoTrigger (tr,mn',e,bs) = 
- case e of
-     EVExit _ -> Just (tr,splitOnIdentifier "," $ getBindArgs' bs)
-     EVEntry  -> Just (tr,splitOnIdentifier "," $ getBindArgs' bs)
-     _        -> Nothing
+
+getInfoTrigger :: [TriggersInfo] -> Trigger -> HT -> Maybe TriggersInfo
+getInfoTrigger [] _ _          = Nothing
+getInfoTrigger (tinfo:ts) tr c = 
+ let mnc = methodCN c
+     cl  = clinf mnc     
+     mn  = mname mnc
+     ov  = overl mnc
+ in if (tiTN tinfo == tr) && (tiCI tinfo == cl) && (tiMN tinfo == mn)
+    then if (cmpOverloading ov (tiOver tinfo))
+         then Just tinfo
+         else getInfoTrigger ts tr c
+    else getInfoTrigger ts tr c
+
+
+getTriggerDef :: Overloading -> HT -> [TriggersInfo] -> TriggerDef 
+getTriggerDef OverNil c xs = 
+ let mnc = methodCN c
+     cl  = clinf mnc
+     tr  = mn ++ "_ppdex"
+     mn  = mname mnc
+     xs'  = [ tiTrDef tinfo | tinfo <- xs, isInfixOf tr (tiTN tinfo), cl == (tiCI tinfo), tiTrDef tinfo /= Nothing ]
+ in case xs' of
+         []     -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
+         tdef:_ -> fromJust tdef
+getTriggerDef (Over ts) c xs = 
+ let mnc  = methodCN c
+     cl   = clinf mnc
+     tr   = mn ++ "_ppdex"
+     mn   = mname mnc
+     xs'  = [ tiTrDef tinfo | tinfo <- xs, isInfixOf tr (tiTN tinfo), cl == (tiCI tinfo), tiTrDef tinfo /= Nothing, Over ts == tiOver tinfo ]
+ in if length xs' == 1
+    then case head xs' of
+         Nothing   -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
+         Just tdef -> tdef
+    else let xs'' = map fromJust xs'
+         in case [ x | (ts',x) <- zip (map (map getBindTypeType.getCTArgs.compTrigger) xs'') xs'', ts == ts'] of
+                 []   -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
+                 x:xs -> x
 
 lookfor :: [(Trigger, [String])] -> Trigger -> [String]
 lookfor [] _     = []
@@ -161,6 +218,26 @@ lookforClVar pn []              = ""
 lookforClVar pn ((pn',_,cl):xs) = if pn == pn'
                                   then cl
                                   else lookforClVar pn xs
+
+flattenArgs :: [Args] -> String
+flattenArgs []               = ""
+flattenArgs [(Args t id)]    = t ++ " " ++ id
+flattenArgs ((Args t id):xs) = t ++ " " ++ id ++ "," ++ flattenArgs xs
+
+getImports :: Imports -> String
+getImports []            = ""
+getImports (Import s:xs) = "import " ++ s ++ ";\n" ++ getImports xs
+
+filterRefTypes :: [Args] -> [Args]
+filterRefTypes []         = []
+filterRefTypes (arg:args) = 
+ case getArgsType arg of
+      "Action"     -> filterRefTypes args
+      "Condition"  -> filterRefTypes args
+      "Trigger"    -> filterRefTypes args
+      "MethodName" -> filterRefTypes args
+      "HTriple"    -> filterRefTypes args
+      _            -> arg:filterRefTypes args
 
 ---------------------------------------
 -- Manipulating the parsed .xml file --
@@ -219,13 +296,9 @@ introduceOr :: [String] -> String
 introduceOr [x]    = x
 introduceOr (x:xs) = x ++ " || " ++ introduceOr xs
 
-
-getAllTriggers :: Global -> Triggers
-getAllTriggers (Global (Ctxt vars ies trigs prop fors)) = trigs ++ getTriggersFors fors
-
 getTriggersFors :: Foreaches -> Triggers
 getTriggersFors []     = []
-getTriggersFors (Foreach args ctxt:fs) = getTriggersCtxt ctxt ++ getTriggersFors fs
+getTriggersFors (f:fs) = getTriggersCtxt (getCtxtForeach f) ++ getTriggersFors fs
 
 getTriggersCtxt :: Context -> Triggers
 getTriggersCtxt (Ctxt vars ies trigs prop fors) = trigs ++ getTriggersFors fors

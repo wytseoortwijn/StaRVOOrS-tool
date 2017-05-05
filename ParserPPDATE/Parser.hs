@@ -5,11 +5,11 @@ import Types
 import System.IO ( stdin, hGetContents )
 import System.Environment ( getArgs, getProgName )
 
-import Lexppdate
-import Parppdate
-import Skelppdate
-import Printppdate
-import Absppdate
+import LexPpdate
+import ParPpdate
+import SkelPpdate
+import PrintPpdate
+import AbsPpdate
 import ErrM
 
 type ParseFun a = [Token] -> Err a
