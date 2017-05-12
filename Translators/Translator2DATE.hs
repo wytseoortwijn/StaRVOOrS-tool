@@ -309,15 +309,14 @@ generateTransitions p ns cs ts env pn scope =
      mn            = mname $ methodCN c
      entrs         = lookForEntryTrigger (allTriggers env) (methodCN c) scope
      entrs'        = [tr | tr <- entrs, not(isInfixOf (mn++"_ppden") tr)]
-     entrs''       = [tr | tr <- entrs, isInfixOf (mn++"_ppden") tr ]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
  in if null entrs
     then error $ "Translation: Missing entry trigger for method " ++ mn ++ ".\n"
     else if (null lts)
-         then (ts,makeTransitionAlg1 ns c env pn mn entrs'',[])
+         then (ts,makeTransitionAlg1 ns c env pn mn entrs,[])
          else let ext  = map (\e -> makeExtraTransitionAlg2 lts c e ns env pn) entrs'
                   ext' = map fromJust $ filter (\c -> c /= Nothing) ext
-              in (nonlts,ext',lts)            
+              in (nonlts,ext',lts)
 
 -- Implementation of Algorithm 1 --
 
