@@ -7,6 +7,7 @@ import qualified Data.Map as Map
 import UpgradePPDATE
 import Data.List
 import Data.Maybe
+import Optimisations
 
 -----------------------
 -- ppDATE refinement --
@@ -25,60 +26,14 @@ refinePPDATE ppd proofs =
      ppdate'   = getValue ppd'
      global    = globalGet ppdate'
      triggers' = getAllTriggers global env
-     consts''  = updateHTs nproved consts' triggers'
+     consts''  = strengthenPre $ updateHTs nproved consts' triggers'
      env'      = getEnvVal ppd'     
-     global'   = optimizedProvenHTs cproved refinePropertyOptGlobal global
+     global'   = optimisedProvenHTs cproved refinePropertyOptGlobal global
      temps     = templatesGet ppdate'
-     temps'    = optimizedProvenHTs cproved refinePropertyOptTemplates temps
+     temps'    = optimisedProvenHTs cproved refinePropertyOptTemplates temps
      ppdate''  = updateTemplatesPP (updateHTsPP (updateGlobalPP ppdate' global') consts'') temps'
  in do put env'
        return ppdate''
-
---------------------------------------------------
--- Remove Hoare triples which were fully proved --
---------------------------------------------------
-
-optimizedProvenHTs :: HTriples -> (HTName -> a -> a) -> a -> a
-optimizedProvenHTs [] f ps     = ps
-optimizedProvenHTs (c:cs) f ps = f (htName c) $ optimizedProvenHTs cs f ps
-
-refinePropertyOptTemplates :: HTName -> Templates -> Templates
-refinePropertyOptTemplates _ TempNil       = TempNil
-refinePropertyOptTemplates cn (Temp temps) = Temp $ map (refineTemplate cn) temps
-
-refineTemplate :: HTName -> Template -> Template
-refineTemplate cn temp = updateTemplateProp temp (removeStatesProp cn $ tempProp temp)
-
-refinePropertyOptGlobal :: HTName -> Global -> Global
-refinePropertyOptGlobal cn (Global ctxt) = Global $ refineContext cn ctxt
-
-refineContext :: HTName -> Context -> Context
-refineContext cn (Ctxt vars ies trigs prop fors) = 
- let prop' = removeStatesProp cn prop
- in Ctxt vars ies trigs prop' (map (refineForeach cn) fors)
-
-refineForeach :: HTName -> Foreach -> Foreach
-refineForeach cn foreach = updCtxtForeach foreach (refineContext cn (getCtxtForeach foreach))
-
-removeStatesProp :: HTName -> Property -> Property
-removeStatesProp _ PNIL               = PNIL
-removeStatesProp _ p@(PINIT _ _ _ _)  = p
-removeStatesProp cn prop = let States acc bad nor star = pStates prop
-                               acc'  = map (\s -> removeStateProp s cn) acc
-                               bad'  = map (\s -> removeStateProp s cn) bad
-                               nor'  = map (\s -> removeStateProp s cn) nor
-                               star' = map (\s -> removeStateProp s cn) star
-                               states = States acc' bad' nor' star'
-                           in Property (pName prop) states (pTransitions prop) (removeStatesProp cn (pProps prop))
-
-removeStateProp :: State -> HTName -> State
-removeStateProp (State ns ic cns) cn = State ns ic (removePropInState cn cns)
-
-removePropInState :: HTName -> [HTName] -> [HTName]
-removePropInState cn []        = []
-removePropInState cn (cn':cns) = if (cn == cn')
-                                 then cns
-                                 else cn':removePropInState cn cns
 
 
 ------------------------------------------------------
@@ -89,7 +44,6 @@ updateHTs :: [(MethodName, HTName, [Pre],String)] -> HTriples -> Triggers -> HTr
 updateHTs [] consts _      = consts
 updateHTs (x:xs) consts es = updateHTs xs (updateHT x consts es) es
 
-
 updateHT :: (MethodName, HTName, [Pre],String) -> HTriples -> Triggers -> HTriples
 updateHT (mn,cn,pres,path) [] _      = []
 updateHT (mn,cn,pres,path) (c:cs) es = 
@@ -97,30 +51,23 @@ updateHT (mn,cn,pres,path) (c:cs) es =
  then if (null pres)
       then c:updateHT (mn,cn,pres,path) cs es
       else let pres' = removeDuplicates pres
-               opt'  = simplify $ map (addParenthesisNot.removeDLstrContent) pres'
+               opt'  = simplify $ map refineNewCond pres'
                opt'' = '(':introduceOr opt' ++ [')']
-               c'    = updatePath (updateOpt c [opt'']) path
-               c''   = updatePre c' $ removeDLstrContent (pre c)
-               c'''  = updatePost c'' $ removeDLstrContent (post c)
+               c'    = updatePath (updateNewPre c [opt'']) path
+               c''   = updatePre c' $ refineCond (pre c)
+               c'''  = updatePost c'' $ refineCond (post c)
            in c''':cs
  else c:updateHT (mn,cn,pres,path) cs es
 
 getClassVar :: HT -> Triggers -> TriggerVariation -> String
 getClassVar c es ev = lookupClassVar es c ev
 
---Optimise generated preconditions
-simplify :: [String] -> [String]
-simplify = checkMiddleExcluded 
+refineNewCond :: Pre -> Pre
+refineNewCond = addParenthesisNot . removeDLstrContent
 
---If middle excluded, then verify original precondition
-checkMiddleExcluded :: [String] -> [String]
-checkMiddleExcluded [xs,ys] = 
- let xs' = "!(" ++ xs ++ ")"
-     ys' = "!(" ++ ys ++ ")"
- in if ys == xs' || xs == ys'
-    then ["true"]
-    else [xs,ys]
-checkMiddleExcluded xss     = xss
+refineCond :: Pre -> Pre
+refineCond = removeDLstrContent
+
 
 -- returns variable name used to instantiate the class in the ppDATE
 lookupClassVar :: Triggers -> HT -> TriggerVariation -> String
@@ -201,7 +148,7 @@ generateNewTriggers ppd consts =
      return ppdate'
 
 checkOverloading :: [(String,MethodName,[String],MethodInvocations)] -> Overloading -> (String,MethodName,[String],MethodInvocations)
-checkOverloading [] _                          = error "FUCK"
+checkOverloading [] _                          = error "Problem with overloading.\n"
 checkOverloading (val@(_,_,args,_):xs) OverNil = val
 checkOverloading (val@(_,_,args,_):xs) ov      = 
  if Over (map (getBindTypeType.makeBind) args) == ov

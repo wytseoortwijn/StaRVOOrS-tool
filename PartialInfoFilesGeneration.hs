@@ -117,17 +117,9 @@ methodForPre c env =
  do (argsPre, _) <- lookForAllEntryTriggerArgs env c
     return $ "  // " ++ (htName c) ++ "\n"
              ++ "  public static boolean " ++ (htName c) ++ "_pre(" ++ argsPre ++ ") {\n" 
-             ++ "    return " ++ pre c ++ addNewPre c ++ ";\n"
+             ++ "    return " ++ pre c ++ ";\n"
              ++ "  }\n\n"
 
-
-addNewPre :: HT -> String
-addNewPre c = 
- if (null (optimized c))
- then ""
- else if (head.optimized) c == "(true)"
-      then ""
-      else " && " ++ (head.optimized) c
 
 extracMethodDefinitions :: [Either (String,String) String] -> [String]
 extracMethodDefinitions []             = []
@@ -146,9 +138,9 @@ lookforArgs (x:xs) e = if (fst x==e)
                        else lookforArgs xs e 
 
 
--------------
+----------------
 -- IdPPD.java --
--------------
+----------------
 
 idFileGen :: FilePath -> IO ()
 idFileGen output_add = writeFile (output_add ++ "IdPPD.java") idGen

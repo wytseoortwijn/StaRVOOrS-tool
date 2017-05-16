@@ -9,7 +9,6 @@ import ErrM
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.List
-import Language.Java.Syntax hiding(VarDecl)
 import qualified AbsActions as Act
 import qualified AbsJml as Jml
 import qualified ParserAct as ParAct
@@ -17,6 +16,7 @@ import qualified ParserJML as ParJML
 import qualified PrintActions as PrintAct
 import qualified PrintJml as PrintJML
 import TranslatorActions
+import Optimisations
 
 
 translate :: UpgradePPD PPDATE -> FilePath -> IO ()
@@ -142,13 +142,13 @@ writeAllTriggers :: Triggers -> String
 writeAllTriggers []     = ""
 writeAllTriggers (e:es) = (getTrigger e) ++ writeAllTriggers es
 
+
 getTrigger :: TriggerDef -> String
 getTrigger (TriggerDef e arg cpe wc) =
  let wc' = if (wc == "") 
            then "" 
            else " where {" ++ wc ++ "}"
  in e ++ "(" ++ getBindArgs' arg ++ ") = " ++ getCpe cpe ++ wc' ++ "\n"
-
 
 getCpe :: CompoundTrigger -> String
 getCpe (Collection (CECollection xs)) = "{" ++ getCollectionCpeCompoundTrigger xs ++ "}"
@@ -193,31 +193,6 @@ auxGetTriggerVariation' :: [Bind] -> String
 auxGetTriggerVariation' []           = ""
 auxGetTriggerVariation' [BindId ret] = ret
 
-
-
--- Checks if the trigger to control has to be the auxiliary one (in case of optimisation by key)
-instrumentTriggers :: Triggers -> HTriples -> Env -> Triggers
-instrumentTriggers [] cs _       = []
-instrumentTriggers (e:es) cs env = 
- let (b,mn,bs) = lookupHTForTrigger e (getClassInfo e env) cs 
- in if b
-    then let e'  = updateMethodCallName e (mn++"Aux")
-             e'' = updateTriggerArgs e' ((args e') ++ [BindType "Integer" "id"])
-         in updateMethodCallBody e'' (bs++[BindId "id"]):instrumentTriggers es cs env
-    else e:instrumentTriggers es cs env
-
-lookupHTForTrigger :: TriggerDef -> ClassInfo -> HTriples -> (Bool, MethodName, [Bind])
-lookupHTForTrigger _ _ []      = (False,"", [])
-lookupHTForTrigger e ci (c:cs) = case compTrigger e of
-                                      NormalEvent _ id bs _ -> if (id == mname (methodCN c) && clinf (methodCN c) == ci)
-                                                               then (True, id, bs)
-                                                               else lookupHTForTrigger e ci cs
-                                      _                     -> lookupHTForTrigger e ci cs
-
-getClassInfo :: TriggerDef -> Env -> ClassInfo
-getClassInfo e env = 
- let trs = [tr | tr <- allTriggers env, tiTN tr == tName e]
- in head $ map tiCI trs
 
 ----------------
 -- Properties --
@@ -485,23 +460,24 @@ generateReplicatedAutomata cs es env =
      ys       = zip cs [1..n]
  in generateProp es ys env []
 
-
 generateProp :: Triggers -> [(HT,Int)] -> Env -> [(MethodCN,Bool)] -> String
 generateProp _ [] _ _              = ""
 generateProp es ((c,n):ys) env acc = 
  let (ra,acc') = genRA c n es env acc
  in ra ++ generateProp es ys env acc'
 
+-- Included to interact with optimisation OptRecAway.hs --
 genRA :: HT -> Int -> Triggers -> Env -> [(MethodCN,Bool)] -> (String,[(MethodCN,Bool)])
 genRA c n es env acc = 
  let (b,acc') = checkIfRec (methodCN c) env acc
- in if True --TODO:replace by b once the optimisation is implemented
-    then (generatePropRec c n es env, acc')
+ in if True --TODO:replace by b once the optimisation OptRecAway.hs is implemented
+    then (generateRAPost c n es env, acc')
     else (generatePropNonRec c n es env, acc')
 
+
 --Generates automaton to control a postcondition
-generatePropRec :: HT -> Int -> Triggers -> Env -> String
-generatePropRec c n es env = 
+generateRAPost :: HT -> Int -> Triggers -> Env -> String
+generateRAPost c n es env = 
  let tr      = generateTriggerRA env c n ("idPPD = msgPPD.id;","idPPD = id;")
      prop    = generateRAString es env c n Nothing
      cn      = snd prop
@@ -513,40 +489,6 @@ generatePropRec c n es env =
     ++ "EVENTS {\n" ++ tr ++ "}\n\n"
     ++ fst prop
     ++ "}\n\n"
-
-checkIfRec :: MethodCN -> Env -> [(MethodCN,Bool)] -> (Bool,[(MethodCN,Bool)])
-checkIfRec mcn env acc = 
- let xs = [b | (mcn',b) <- acc , mcn == mcn']
- in if null xs
-    then let minvs = getInvocationsInMethodBody mcn env
-             rec   = True
-         in if null minvs 
-            then (False,(mcn,False):acc)
-            else if directRec (mname mcn) minvs
-                 then (True,(mcn,True):acc)
-                 else (rec,(mcn,rec):acc)
-    else (head xs,acc)
-
-directRec :: MethodName -> [Exp] -> Bool
-directRec mn []           = False
-directRec mn (minv:minvs) = 
- case minv of
-      MethodInv (MethodCall (Name [Ident id]) _)        -> id == mn
-      MethodInv (PrimaryMethodCall This _ (Ident id) _) -> id == mn
-      _                                                 -> directRec mn minvs
-
-{- case minv of
-      MethodCall name args                    -> undefined
-      PrimaryMethodCall exp _ (Ident id) args -> undefined
-      SuperMethodCall _ (Ident id) args       -> undefined
-      ClassMethodCall _ _ (Ident id) args     -> undefined
-      TypeMethodCall _ _ (Ident id) args      -> undefined
--}
-
-getInvocationsInMethodBody :: MethodCN -> Env -> MethodInvocations
-getInvocationsInMethodBody mcn env = 
- let mns = methodsInFiles env
- in getMethodInvocations mcn mns
 
 generateTriggerRA :: Env -> HT -> Int -> (String,String) -> String
 generateTriggerRA env c n w =
@@ -574,7 +516,34 @@ generateRAString es env c n rec =
      ++ writeTransitions cn (pTransitions ra) [] (States [] [] [] []) emptyEnv (InFor (ForId cn))
      ++ "}\n\n",cn)
 
---Optimisation: If the method is not recursive, then use optimised automaton
+-- Checks if the trigger to control has to be the auxiliary one (in case of optimisation by key) --
+
+instrumentTriggers :: Triggers -> HTriples -> Env -> Triggers
+instrumentTriggers [] cs _       = []
+instrumentTriggers (e:es) cs env = 
+ let (b,mn,bs) = lookupHTForTrigger e (getClassInfo e env) cs 
+ in if b
+    then let e'  = updateMethodCallName e (mn++"Aux")
+             e'' = updateTriggerArgs e' ((args e') ++ [BindType "Integer" "id"])
+         in updateMethodCallBody e'' (bs++[BindId "id"]):instrumentTriggers es cs env
+    else e:instrumentTriggers es cs env
+
+lookupHTForTrigger :: TriggerDef -> ClassInfo -> HTriples -> (Bool, MethodName, [Bind])
+lookupHTForTrigger _ _ []      = (False,"", [])
+lookupHTForTrigger e ci (c:cs) = case compTrigger e of
+                                      NormalEvent _ id bs _ -> if (id == mname (methodCN c) && clinf (methodCN c) == ci)
+                                                               then (True, id, bs)
+                                                               else lookupHTForTrigger e ci cs
+                                      _                     -> lookupHTForTrigger e ci cs
+
+getClassInfo :: TriggerDef -> Env -> ClassInfo
+getClassInfo e env = 
+ let trs = [tr | tr <- allTriggers env, tiTN tr == tName e]
+ in head $ map tiCI trs
+
+--
+--Method added for Optimisation OptRecAway.hs --
+--
 generatePropNonRec :: HT -> Int -> Triggers -> Env -> String
 generatePropNonRec c n es env = 
  let tr      = generateTriggerRA env c n ("idPPD"++ show n ++ " = null;","idPPD"++ show n ++ " = null;")

@@ -825,7 +825,7 @@ getHT imps (Abs.HT id pre' method post' ass) =
                                   , pre          = genPre pre'
                                   , post         = genPost post'
                                   , assignable   = genAssig ass
-                                  , optimized    = []
+                                  , newPRe       = []
                                   , chGet        = 0
                                   , path2it      = ""
                                   })
@@ -1280,6 +1280,7 @@ data Env = Env
  , allCreateAct    :: [CreateActInfo]--list of all actions \create used in the transitions of the ppDATE
  }
   deriving (Show)
+
 
 type UpgradePPD a = CM.StateT Env Err a
 

@@ -60,8 +60,8 @@ bindCV c vars es methods =
      post'  = concat $ bindVars bindExit varsc (post c)
      pre''  = concat $ bindMethods bindEntry mnames pre'
      post'' = concat $ bindMethods bindExit mnames post'
-     opt    = map (replaceSelfWith bindEntry) (optimized c)
- in updateOpt (updatePre (updatePost c post'') pre'') opt
+     npre   = map (replaceSelfWith bindEntry) (newPRe c)
+ in updateNewPre (updatePre (updatePost c post'') pre'') npre
 
 bindOldExp :: HT -> [(String, ClassInfo, [(String, String)])] -> Triggers -> [(String, ClassInfo, [String])] -> OldExprL -> OldExprL
 bindOldExp c vars es _ []             = []

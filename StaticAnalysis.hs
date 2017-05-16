@@ -195,7 +195,7 @@ generateRefPPDFileName fn =
     else reverse (head xs) ++ "_optimised.ppd"
 
 prepareRefPPD :: UpgradePPD PPDATE -> UpgradePPD PPDATE
-prepareRefPPD = removeGeneratedTriggers . introduceNewHTriples
+prepareRefPPD = removeGeneratedTriggers
 
 
 removeGeneratedTriggers :: UpgradePPD PPDATE -> UpgradePPD PPDATE
@@ -224,21 +224,6 @@ removeFromTriggers (tr:trs) =
  if isInfixOf "_ppden" (tName tr) || isInfixOf "_ppdex" (tName tr)
  then removeFromTriggers trs
  else tr:removeFromTriggers trs
-
-introduceNewHTriples :: UpgradePPD PPDATE -> UpgradePPD PPDATE
-introduceNewHTriples ppd = 
- do ppdate <- ppd
-    return (updateHTsPP ppdate (newHTriples (htsGet ppdate)))
-
-newHTriples :: HTriples -> HTriples
-newHTriples []      = []
-newHTriples (h:hts) = 
- let newpre = (removeSelf.head.optimized) h
-     pre'   = "(" ++ pre h ++ ") && " ++ newpre
- in if ((head.optimized) h == "(true)")
-    then h:newHTriples hts
-    else updatePre h pre':newHTriples hts
-
 
 translateActions :: UpgradePPD PPDATE -> UpgradePPD PPDATE
 translateActions ppd =
