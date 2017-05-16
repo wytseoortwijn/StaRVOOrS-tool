@@ -59,7 +59,8 @@ writeGlobal ppdate env =
      prop   = property global
      fors   = foreaches global         
      temps  = templatesGet ppdate            
- in "GLOBAL {\n\n" ++ writeVariables vars consts acts (allCreateAct env)
+ in "GLOBAL {\n\n" 
+    ++ writeVariables vars consts acts (allCreateAct env)
     ++ writeTriggers trs consts acts env
     ++ writeProperties prop consts env TopLevel
     ++ writeForeach fors consts env
@@ -79,7 +80,7 @@ writeVariables vars [] [] [] =
 writeVariables vars consts acts creates = 
  let actChann    = if (null acts) then "" else concatMap makeChannelsAct (removeDuplicates acts) 
      createChann = if (null creates) then "" else concatMap (makeChannelsAct.caiCh) creates
-     constsChann = if (null consts) then "" else makeChannels (length consts) "h"
+     constsChann = if (null consts) then "" else makeChannels (length consts) "hppd"
      extraChann  = actChann ++ createChann ++ constsChann
  in if (null vars) 
     then if (null extraChann)
@@ -114,7 +115,7 @@ makeChannels n s = generateChannels n s ++ "\n"
 
 generateChannels :: Int -> String -> String
 generateChannels 0 s = "\n"
-generateChannels n s = generateChannels (n-1) s ++ " Channel " ++ s ++ show n ++ " = new Channel();\n"
+generateChannels n s = generateChannels (n-1) s ++ " Channel " ++ s ++ show n ++ " = new Channel(\"" ++ s ++ show n ++ "\");\n"
 
 makeChannelsAct :: String -> String
 makeChannelsAct s = " Channel " ++ s ++ " = new Channel();\n"
@@ -310,7 +311,7 @@ makeTransitionAlg1Cond ns e c env pn =
      (_,arg) = getValue $ lookForAllEntryTriggerArgs env c 
      c'      = "HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")"
      zs      = getExpForOld oldExpM cn
-     act     = " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
+     act     = " hppd" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
      type_   = if null zs then "PPD" else "Old<Old_" ++ cn ++ ">"
      old     = if null zs then "" else "," ++ zs
      ident   = lookforClVar pn (propInForeach env)
@@ -346,7 +347,7 @@ makeExtraTransitionAlg2 ts c e ns env pn =
      ident   = lookforClVar pn (propInForeach env)
      ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
      msg     = "new Messages" ++ type_ ++ ident' ++ old ++ ")"
-     act     = " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
+     act     = " hppd" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
      c'      = makeExtraTransitionAlg2Cond ts 
  in case c' of
          Nothing  -> Nothing 
@@ -394,7 +395,7 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env pn =
      ident   = lookforClVar pn (propInForeach env)
      ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
      msg     = "new Messages" ++ type_ ++ ident' ++ old ++ ")"
-     act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "} ;"
+     act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) { hppd" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "} ;"
  in Transition q (Arrow e' c' (act ++ act')) q'
 
 
@@ -503,7 +504,7 @@ generateTriggerRA env c n w =
      wtr      = if null (snd w) then "" else " where { " ++ snd w ++ "}\n"
      ntr      = getTriggerDef ov c (allTriggers env)
  in "rh" ++ show n ++ "(Messages" ++ nvar  
-    ++ " msgPPD) = {h"++ show n ++ ".receive(msgPPD)} where {" ++ fst w ++  "}\n"
+    ++ " msgPPD) = {hppd"++ show n ++ ".receive(msgPPD)} where {" ++ fst w ++  "}\n"
     ++ init (concatMap getTrigger (instrumentTriggers [ntr] [c] env)) ++ wtr
 
 
