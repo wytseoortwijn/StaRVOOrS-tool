@@ -547,7 +547,7 @@ getClassInfo e env =
 --
 generatePropNonRec :: HT -> Int -> Triggers -> Env -> String
 generatePropNonRec c n es env = 
- let tr      = generateTriggerRA env c n ("idPPD"++ show n ++ " = null;","idPPD"++ show n ++ " = null;")
+ let tr      = generateTriggerRA env c n ("idPPD" ++ show n ++ " = msgPPD.id;","idPPD"++ show n ++ " = new Integer(42);")
      prop    = generateRAString es env c n (Just ())
      cn      = snd prop
      oldExpM = oldExpTypes env

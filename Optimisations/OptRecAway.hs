@@ -15,7 +15,7 @@ checkIfRec' mcn env acc =
  let xs = [b | (mcn',b) <- acc , mcn == mcn']
  in if null xs
     then let minvs = getInvocationsInMethodBody mcn env
-             rec   = False
+             rec   = False --TODO: check if indirect recursion
          in if null minvs 
             then (False,(mcn,False):acc)
             else if directRec (mname mcn) minvs
