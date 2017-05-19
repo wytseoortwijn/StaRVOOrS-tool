@@ -1,4 +1,4 @@
-module JavaFilesAnalysis(programVariables,programMethods,updateVarsEnv) where 
+module JavaFilesAnalysis(javaStaticAnalysis,updateVarsEnv) where 
 
 import Language.Java.Parser
 import Language.Java.Syntax
@@ -14,6 +14,12 @@ import CommonFunctions
 -----------------------------------
 -- Static analysis of java files --
 -----------------------------------
+
+javaStaticAnalysis :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
+javaStaticAnalysis ppd jpath = 
+ do ppd' <- programVariables ppd jpath
+    ppd'' <- programMethods ppd' jpath
+    return ppd''
 
 --
 --Adds to the upgraded ppDATE's env the variables of all the java files involved in the verification process

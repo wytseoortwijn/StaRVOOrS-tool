@@ -99,8 +99,7 @@ run flags java_fn_add ppdate_fn output_add =
                          let ppd  = upgradePPD absppdate
                          case runStateT ppd emptyEnv of
                               Bad s -> putStrLn s
-                              Ok _  -> do ppd' <- programVariables ppd java_fn_add'
-                                          ppdate <- programMethods ppd' java_fn_add'
+                              Ok _  -> do ppdate <- javaStaticAnalysis ppd java_fn_add'
                                           if null (wellFormedActions ppdate)
                                           then do onlyRV flags
                                                   ppdate' <- staticAnalysis java_fn_add' ppdate output_add' ppdate_fn flags
