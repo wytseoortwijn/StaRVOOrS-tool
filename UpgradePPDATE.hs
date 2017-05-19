@@ -174,17 +174,20 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
     let id'' = getIdAbs id
     let xs   = [ x | x <- allTriggers env, id'' == tiTN x, tiScope x == scope ]
     let err  = if (not.null) xs
-               then "Error: Multiple definitions for trigger " ++ id'' ++ ".\n" ++ show scope ++ "\n" 
+               then "Error: Multiple definitions for trigger " 
+                    ++ id'' ++ ".\n" ++ show scope ++ "\n" 
                else ""
     do case runWriter (getBindsArgs binds) of
          (bs, s) ->
            let err0 = if (not.null) s 
-                      then (err ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s ++ "].\n")
+                      then err ++ "Error: Trigger declaration [" ++ id'' 
+                           ++ "] uses wrong argument(s) [" ++ s ++ "].\n"
                       else err
            in case runWriter (getCompTriggers ce) of
                  (ce',s') ->
                    let err1 = if (not.null) s'
-                              then err0 ++ ("Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s' ++ "] in the method component.\n")
+                              then err0 ++ ("Error: Trigger declaration [" ++ id'' 
+                                   ++ "] uses wrong argument(s) [" ++ s' ++ "] in the method component.\n")
                               else err0
                        argss = map getBindTypeId bs
                    in case ce' of
@@ -196,7 +199,8 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                                        wcs = [x | x <- argss, not(elem x allArgs)]
                                                        vs  = filter (\ x -> x /= id) $ checkVarsInitialisation wcs (getVarsWC wc)
                                                     in if ((not.null) vs) 
-                                                       then fail (err1 ++ "Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
+                                                       then fail $ err1 ++ "Error: Missing Initialization of variable(s) " 
+                                                                   ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n"
                                                        else
                                                          case runWriter ((checkAllArgs argss allArgs bind)) of
                                                           (b,zs) ->
@@ -214,7 +218,8 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                                                                          , compTrigger = ce'
                                                                                          , whereClause = getWhereClause wc
                                                                                          }
-                                                                     put env { allTriggers = TI id'' mn ci cinm EVEntry bs (Just tr) scope ov: allTriggers env }
+                                                                     let ti = TI id'' mn ci cinm EVEntry bs (Just tr) scope ov
+                                                                     put env { allTriggers = ti : allTriggers env }
                                                                      return tr
                                                                 else fail (err1 ++ s'')
                                        EVExit rs -> let id  = getIdBind bind
@@ -223,7 +228,8 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                                         rs' = map getIdBind rs
                                                         vs  = filter (\ x -> (not (elem x rs')) && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
                                                     in if ((not.null) vs) 
-                                                       then fail (err1 ++ "Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
+                                                       then fail $ err1 ++ "Error: Missing Initialization of variable(s) " 
+                                                                   ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n"
                                                        else
                                                         case runWriter ((checkAllArgs argss allArgs bind)) of
                                                           (b,zs) ->
@@ -238,7 +244,8 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                                                                             , compTrigger = ce'
                                                                                             , whereClause = wc'
                                                                                             }
-                                                                        put env { allTriggers = TI id'' mn ci cinm (EVExit rs) bs (Just tr) scope ov: allTriggers env }
+                                                                        let ti = TI id'' mn ci cinm (EVExit rs) bs (Just tr) scope ov
+                                                                        put env { allTriggers = ti : allTriggers env }
                                                                         return tr
                                                                 else fail (err1 ++ s'')
                                        _        -> return TriggerDef { tName = id''
@@ -289,7 +296,9 @@ checkMNforNew mn bind bs rs id zs =
                         else if elem (BindType id (getBindIdId (head rs))) bs
                              then if null zs 
                                   then return True
-                                  else fail $ "Error: Trigger declaration [" ++ id ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n"
+                                  else fail $ "Error: Trigger declaration [" ++ id 
+                                              ++ "] uses wrong argument(s) [" ++ addComma zs 
+                                              ++ "] in the method component.\n"
                              else do tell $ "Error: Wrong exit object in trigger " ++ id ++ "\n."
                                      return False
       _         -> return False
@@ -492,7 +501,8 @@ getTransition' :: PropertyName -> Env -> Scope -> Abs.Transition -> Writer Strin
 getTransition' id env scope (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) = 
  case runWriter (getArrow ar env scope) of
       ((xs,env'),s) -> 
-                do let err = "Error: Parsing error in an action of a transition from state " ++ getIdAbs q1 ++ " to state " 
+                do let err = "Error: Parsing error in an action of a transition from state " 
+                             ++ getIdAbs q1 ++ " to state " 
                              ++ getIdAbs q2 ++ " in property " ++ id ++ ".\n"
                    let s' = if null s then "" else err ++ s
                    tell s'                  
@@ -630,11 +640,13 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
     let prop' = getProperty prop (map tName trigs') env (InTemp (getIdAbs id))
     let extrs = getExitTrsInfo trigs'
     case runWriter prop' of
-         ((PNIL,env'),_)                      -> fail $ "Error: The template " ++ getIdAbs id ++ " does not have a PROPERTY section.\n"
+         ((PNIL,env'),_)                      -> fail $ "Error: The template " ++ getIdAbs id 
+                                                        ++ " does not have a PROPERTY section.\n"
          ((PINIT pname id' xs props,env'),s)  -> 
                   let temptrs = splitOnIdentifier "," $ fst s
                       s'      = snd s ++ if props /= PNIL 
-                                         then "Error: In template " ++ getIdAbs id ++ ", a template should describe only one property.\n"
+                                         then "Error: In template " ++ getIdAbs id 
+                                               ++ ", a template should describe only one property.\n"
                                          else "" 
                   in if ((not.null) s')
                      then fail s'
@@ -653,7 +665,8 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                       start   = checkAllHTsExist (getStarting states) cns pname (InTemp (getIdAbs id))
                       errs    = concat $ start ++ accep ++ bad ++ normal
                       s'      = snd s ++ errs ++ if props /= PNIL 
-                                                 then "Error: In template " ++ getIdAbs id ++ ", a template should describe eonly one property.\n"
+                                                 then "Error: In template " ++ getIdAbs id 
+                                                       ++ ", a template should describe eonly one property.\n"
                                                  else ""
                       temptrs = splitOnIdentifier "," $ fst s
                   in if ((not.null) s')
