@@ -57,18 +57,18 @@ type Assignable = String
 data MethodCN   = 
  MCN { clinf :: ClassInfo
      , mname :: MethodName
-     , overl :: Overloading
+     , overl :: Overriding
      } deriving (Show,Eq)
 
-data Overloading = Over [Type] | OverNil
+data Overriding = Over [Type] | OverNil
   deriving (Ord, Read)
 
-instance Eq Overloading where
+instance Eq Overriding where
  OverNil == OverNil     = True
  (Over xs) == (Over ys) = xs == ys
  _ == _                 = False
 
-instance Show Overloading where
+instance Show Overriding where
  show OverNil   = "nil"
  show (Over []) = "()"
  show (Over xs) = "(" ++ foldr1 (\x xs -> x ++ "," ++ xs) xs ++ ")"
@@ -282,7 +282,7 @@ type ErrorMsg = String
 
 type JMLExp = String
 
-type HTjml = [(MethodName, ClassInfo, Overloading, String)]
+type HTjml = [(MethodName, ClassInfo, Overriding, String)]
 
 type MethodInvocations = [Exp]
 
@@ -297,7 +297,7 @@ data TriggersInfo =
     , tiBinds   :: [Bind]
     , tiTrDef   :: Maybe TriggerDef
     , tiScope   :: Scope
-    , tiOver    :: Overloading
+    , tiOver    :: Overriding
     } deriving (Show,Eq)
 
 data CreateActInfo = 

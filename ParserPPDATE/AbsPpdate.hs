@@ -167,7 +167,7 @@ data HT = HT Id Pre Method Post Assignable
 data Pre = Pre JML | PreNil
   deriving (Eq, Ord, Show, Read)
 
-data Method = Method Id Id Overloading
+data Method = Method Id Id Overriding
   deriving (Eq, Ord, Show, Read)
 
 data Post = Post JML | PostNil
@@ -179,7 +179,7 @@ data Assignable = Assignable [Assig] | AssigNil
 data Assig = AssigJML JML | AssigE | AssigN
   deriving (Eq, Ord, Show, Read)
 
-data Overloading = Over [Type] | OverNil
+data Overriding = Over [Type] | OverNil
   deriving (Eq, Ord, Show, Read)
 
 data Methods = Methods BodyMethods | MethodsNil

@@ -38,7 +38,7 @@ genJMLConsts' (c:cs) xs = let mn = mname $ methodCN c
                               ov = overl $ methodCN c  
                           in genJMLConsts' cs (updateJMLForM' c mn cl ov xs)
 
-updateJMLForM' :: HT -> MethodName -> ClassInfo -> Overloading -> HTjml -> HTjml
+updateJMLForM' :: HT -> MethodName -> ClassInfo -> Overriding -> HTjml -> HTjml
 updateJMLForM' c mn cl ov []                       = [(mn, cl, ov,fromHT2JML' c)]
 updateJMLForM' c mn cl ov ((mn', cl', ov',jml):xs) = if (mn == mn' && cl == cl' && ov == ov')
                                                      then (mn', cl', ov', jml ++ "    @\n    @ also\n    @\n" ++ fromHT2JML' c):xs

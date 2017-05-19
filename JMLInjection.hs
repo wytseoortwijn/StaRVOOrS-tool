@@ -46,7 +46,7 @@ genTmpFilesConst (main, cl) output_add ((mn, cl', ov,jml):xs)  r =
     else genTmpFilesConst (main, cl) output_add xs  r
 
 
-lookForMethodDef :: MethodName -> Overloading -> [String] -> ([String], [String])
+lookForMethodDef :: MethodName -> Overriding -> [String] -> ([String], [String])
 lookForMethodDef mn _ []        = error $ "Something went wrong when annotating the method " ++ mn ++ ".\n"
 lookForMethodDef mn ov (xs:xss) = 
  let ys = splitOnIdentifier mn xs
@@ -67,7 +67,7 @@ lookForMethodDef mn ov (xs:xss) =
             else (xs:a, b) --not referring to a method
                 where (a, b) = lookForMethodDef mn ov xss
 
-checkArguments :: Overloading -> [String] -> Bool
+checkArguments :: Overriding -> [String] -> Bool
 checkArguments _ []           = False
 checkArguments OverNil _      = True
 checkArguments (Over []) [[]] = True

@@ -254,7 +254,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                                      , whereClause = getWhereClause wc
                                                      }
 
-generateOverloading :: [Bind] -> [Bind] -> Overloading
+generateOverloading :: [Bind] -> [Bind] -> Overriding
 generateOverloading bs [] = Over []
 generateOverloading bs ms = Over $ map (getTypeForOverLoading bs) (map getIdBind ms)
 
@@ -1176,10 +1176,10 @@ getMethodClassInfo (Abs.Method ci _ _) = getIdAbs ci
 getMethodMethodName :: Abs.Method -> MethodName
 getMethodMethodName (Abs.Method _ mn _) = getIdAbs mn
 
-getMethodOverloading :: Abs.Method -> Overloading
+getMethodOverloading :: Abs.Method -> Overriding
 getMethodOverloading (Abs.Method _ _ over) = getOverloading over
 
-getOverloading :: Abs.Overloading -> Overloading 
+getOverloading :: Abs.Overriding -> Overriding 
 getOverloading Abs.OverNil = OverNil
 getOverloading (Abs.Over xs) = Over $ map getTypeAbs xs
 

@@ -73,7 +73,7 @@ cmpScope (InFor (ForId id')) (InTemp id) = isInfixOf id id'
 cmpScope (InTemp id') (InFor (ForId id)) = cmpScope (InFor (ForId id)) (InTemp id')
 cmpScope scope scope' = scope == scope'
 
-cmpOverloading :: Overloading -> Overloading -> Bool
+cmpOverloading :: Overriding -> Overriding -> Bool
 cmpOverloading ov ov' = ov == ov' || ov == OverNil
 
 openingBracket :: String -> Bool
@@ -182,7 +182,7 @@ getInfoTrigger (tinfo:ts) tr c =
     else getInfoTrigger ts tr c
 
 
-getTriggerDef :: Overloading -> HT -> [TriggersInfo] -> TriggerDef 
+getTriggerDef :: Overriding -> HT -> [TriggersInfo] -> TriggerDef 
 getTriggerDef OverNil c xs = 
  let mnc = methodCN c
      cl  = clinf mnc

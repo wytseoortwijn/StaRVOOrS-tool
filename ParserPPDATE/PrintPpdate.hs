@@ -357,7 +357,7 @@ instance Print Pre where
 
 instance Print Method where
   prt i e = case e of
-    Method id1 id2 overloading -> prPrec i 0 (concatD [doc (showString "METHOD"), doc (showString "{"), prt 0 id1, doc (showString "."), prt 0 id2, prt 0 overloading, doc (showString "}")])
+    Method id1 id2 overriding -> prPrec i 0 (concatD [doc (showString "METHOD"), doc (showString "{"), prt 0 id1, doc (showString "."), prt 0 id2, prt 0 overriding, doc (showString "}")])
 
 instance Print Post where
   prt i e = case e of
@@ -376,7 +376,7 @@ instance Print Assig where
     AssigN -> prPrec i 0 (concatD [doc (showString "\\nothing")])
   prtList _ [x] = (concatD [prt 0 x])
   prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])
-instance Print Overloading where
+instance Print Overriding where
   prt i e = case e of
     Over types -> prPrec i 0 (concatD [doc (showString "("), prt 0 types, doc (showString ")")])
     OverNil -> prPrec i 0 (concatD [])

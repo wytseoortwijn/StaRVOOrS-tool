@@ -115,7 +115,7 @@ getExTr (e:es) c ev =
                   else getExTr es c ev
       _                                   -> getExTr es c ev
 
-checkArgsOver :: [Bind] -> [Bind] -> Overloading -> Bool
+checkArgsOver :: [Bind] -> [Bind] -> Overriding -> Bool
 checkArgsOver _ _ OverNil  = True
 checkArgsOver bs ceargs ov =
  let ov' = generateOverloading bs ceargs
@@ -147,7 +147,7 @@ generateNewTriggers ppd consts =
      put env''
      return ppdate'
 
-checkOverloading :: [(String,MethodName,[String],MethodInvocations)] -> Overloading -> (String,MethodName,[String],MethodInvocations)
+checkOverloading :: [(String,MethodName,[String],MethodInvocations)] -> Overriding -> (String,MethodName,[String],MethodInvocations)
 checkOverloading [] _                          = error "Problem with overloading.\n"
 checkOverloading (val@(_,_,args,_):xs) OverNil = val
 checkOverloading (val@(_,_,args,_):xs) ov      = 
