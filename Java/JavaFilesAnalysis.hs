@@ -32,20 +32,20 @@ getJavaInfo i jpath =
     let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
     let vars     = getVariables java_aux
     let methods  = getMethods java_aux
-    let jinfo    = T.JavaFilesInfo (splitVars vars) (map methodsDetails methods)
+    let jinfo    = T.JavaFilesInfo vars methods
     return (main, cl, jinfo)
 
 --
 --Gets the variables of all the java files involved in the verification process
 --
-getVariables :: ClassDecl -> [(String, [String])]
-getVariables = (map getTypeAndId) . (getVarDecl'.getMemberDecl.getDecls.getClassBody)
+getVariables :: ClassDecl -> [(String, String)]
+getVariables = splitVars . (map getTypeAndId) . (getVarDecl'.getMemberDecl.getDecls.getClassBody)
 
 --
 --Gets the method declarations of all the java files involved in the verification process
 --      
-getMethods :: ClassDecl -> [MemberDecl]
-getMethods = (getMethodDecl.getDecls.getClassBody)
+getMethods :: ClassDecl -> [(String, String, [String],[Exp])]
+getMethods = (map methodsDetails) . (getMethodDecl.getDecls.getClassBody)
 
 -------------------------
 -- Auxiliary Functions --
