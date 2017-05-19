@@ -606,8 +606,7 @@ getForeach (Abs.ForeachesDef args ctxt Abs.ForeachesNil) id =
       [] -> do let args'     = map getArgs args
                let propn     = pName $ property ctxt'
                let Args t cl = head $ args'               
-               put env { forsVars      = forsVars env ++ map getArgsId args'
-                       , propInForeach = (propn,t,cl):propInForeach env }               
+               put env { propInForeach = (propn,t,cl):propInForeach env }               
                return $ Foreach args' ctxt' id
       _  -> fail $ "Error: StaRVOOrS does not support nested Foreaches.\n"
 
@@ -949,8 +948,7 @@ replacePInit ppd =
                       global'   = updateGlobal (globalGet ppdate) (Ctxt vars acts es prop' fors')
                       propns    = map piName (p:ps)
                       pif       = map (\(x,Args t cl) -> (x,t,cl)) $ zip propns (map (head.getArgsForeach) tmpFors)
-                  in do put env { forsVars = forsVars env ++ map getArgsId (concatMap getArgsForeach tmpFors) 
-                                , propInForeach = pif ++ propInForeach env  }
+                  in do put env { propInForeach = pif ++ propInForeach env  }
                         return $ updateGlobalPP ppdate global'
               []     -> ppd
 
@@ -1279,8 +1277,7 @@ getAllTriggers (Global (Ctxt vars ies trigs prop fors)) env =
 --------------------------------------------------------------------
 
 data Env = Env
- { forsVars        :: [Id] --foreach bounded variable names 
- , allTriggers     :: [TriggersInfo]
+ { allTriggers     :: [TriggersInfo]
  , htsNames        :: [HTName]
  , varsInFiles     :: [(String, ClassInfo, [(Type, Id)])]
  , varsInPPD       :: Variables
@@ -1298,8 +1295,7 @@ data Env = Env
 type UpgradePPD a = CM.StateT Env Err a
 
 emptyEnv :: Env
-emptyEnv = Env { forsVars        = []
-               , allTriggers     = []
+emptyEnv = Env { allTriggers     = []
                , htsNames        = []
                , varsInFiles     = []
                , varsInPPD       = []

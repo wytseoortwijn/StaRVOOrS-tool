@@ -1,4 +1,4 @@
-module Instrumentation (programMethods,programVariables, methodsInstrumentation, updateVarsEnv) where
+module Instrumentation (methodsInstrumentation) where
 
 import qualified Types as T
 import CommonFunctions
@@ -81,8 +81,6 @@ addInstrumentedMethodsInFile xss []                          = xss
 addInstrumentedMethodsInFile xss ((id,methodaux, method):ys) = 
  addInstrumentedMethodsInFile (addMethodInFile (id,methodaux, method) xss) ys
 
-javaModifiers' = ["public", "private", "protected", "no modifier"]
-
 -- Added due to bug in the java library
 addMethodInFile :: (String,String,String) -> [String] -> [String]
 addMethodInFile (id,methodaux,method) []       = []
@@ -96,55 +94,10 @@ addMethodInFile (id,methodaux,method) (xs:xss) =
             then if (length beginl == 1)
                  then xs:addMethodInFile (id,methodaux,method) xss
                  else let ws = (clean.head) beginl in
-                      if (elem ws javaModifiers')
+                      if (elem ws javaModifiers)
                       then if ((clean $ fst $ break (=='{') $ reverse xs) == "")
                            then (methodaux ++ "\n"):method:xss
                            else (methodaux ++ "\n"):(head $ lines method):xss
                       else xs:addMethodInFile (id,methodaux,method) xss
             else xs:addMethodInFile (id,methodaux,method) xss
-
---Adds to the upgraded ppDATE's env the variables of all the java files involved in the verification process
-programVariables :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
-programVariables ppd jpath = 
- do let imports = T.importsGet (fst . fromOK $ runStateT ppd emptyEnv)
-    vars <- sequence [ getVariables i jpath
-                     | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
-                     ]
-    return $ updateVarsEnv ppd vars
-
-updateVarsEnv :: UpgradePPD T.PPDATE -> [(String, T.ClassInfo, [(String, String)])] -> UpgradePPD T.PPDATE
-updateVarsEnv ppd vars = ppd >>= (\x -> do env <- get; put (env { varsInFiles = vars }); return x)                     
-
-getVariables :: T.Import -> FilePath -> IO (String, T.ClassInfo, [(String, String)])
-getVariables i jpath =
-  do (main, cl) <- makeAddFile i
-     let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")
-     r <- readFile file_add
-     let java = (\(Right x) -> x) $ parseJavaFile r
-     let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
-     let vars = map getTypeAndId $ (getVarDecl'.getMemberDecl.getDecls.getClassBody) java_aux
-     return (main, cl, (splitVars vars))
-
-
---Adds to the upgraded ppDATE's env the method declarations of all the java files involved in the verification process
-programMethods :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
-programMethods ppd jpath = 
- do let imports = T.importsGet (fst . fromOK $ runStateT ppd emptyEnv)
-    ms <- sequence [ getMethods i jpath
-                   | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
-                   ]
-    return $ updateMethodsEnv ppd ms
-
-updateMethodsEnv :: UpgradePPD T.PPDATE -> [(String, T.ClassInfo, [(T.Id,String,[String],T.MethodInvocations)])] -> UpgradePPD T.PPDATE
-updateMethodsEnv ppd ms = ppd >>= (\x -> do env <- get; put (env { methodsInFiles = ms }); return x)                     
-
-getMethods :: T.Import -> FilePath -> IO (String, T.ClassInfo, [(T.Id,String,[String],T.MethodInvocations)])
-getMethods i jpath =
-  do (main, cl) <- makeAddFile i
-     let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")
-     r <- readFile file_add
-     let java     = (\(Right x) -> x) $ parseJavaFile r
-     let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
-     let methods = (getMethodDecl.getDecls.getClassBody) java_aux
-     return (main, cl, (map methodsDetails methods))
 

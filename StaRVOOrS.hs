@@ -13,7 +13,7 @@ import qualified Data.Map as MAP
 import StaticAnalysis
 import Translator2DATE
 import System.Console.GetOpt
-import Instrumentation
+import JavaFilesAnalysis
 import Data.Functor
 import Control.Monad.Writer
 import Data.Maybe
