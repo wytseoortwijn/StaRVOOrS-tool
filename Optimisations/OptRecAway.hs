@@ -41,7 +41,7 @@ directRec mn (minv:minvs) =
 
 getInvocationsInMethodBody :: MethodCN -> Env -> MethodInvocations
 getInvocationsInMethodBody mcn env = 
- let mns = methodsInFiles env
+ let mns = javaFilesInfo env
  in getMethodInvocations mcn mns
 
 

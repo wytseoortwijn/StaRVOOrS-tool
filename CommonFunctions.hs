@@ -101,26 +101,27 @@ removeDuplicates' (p@(xs,ys):xss) =
     else p:removeDuplicates' xss
 
 
-getListOfTypesAndVars :: ClassInfo -> [(String, ClassInfo, [(Type, Id)])] -> [(Type, Id)]
+getListOfTypesAndVars :: ClassInfo -> [(String, ClassInfo, JavaFilesInfo)] -> [(Type, Id)]
 getListOfTypesAndVars cl []                  = []
 getListOfTypesAndVars cl ((main, cl',ts):xs) = if (cl == cl') 
-                                               then ts
+                                               then varsInFiles ts
                                                else getListOfTypesAndVars cl xs
 
-getListOfTypesAndMethods :: ClassInfo -> [(String, ClassInfo, [(Type, Id,[String],MethodInvocations)])] -> [(Type, Id)]
+getListOfTypesAndMethods :: ClassInfo -> [(String, ClassInfo, JavaFilesInfo)] -> [(Type, Id)]
 getListOfTypesAndMethods cl []                  = []
-getListOfTypesAndMethods cl ((main, cl',ts):xs) = if (cl == cl') 
-                                                  then [(x,y) | (x,y,_,_) <- ts]
-                                                  else getListOfTypesAndMethods cl xs
+getListOfTypesAndMethods cl ((main, cl',ts):xs) = 
+ if (cl == cl') 
+ then [(x,y) | (x,y,_,_) <- methodsInFiles ts]
+ else getListOfTypesAndMethods cl xs
 
-getMethodInvocations :: MethodCN -> [(String, ClassInfo, [(Type, Id,[String],MethodInvocations)])] -> MethodInvocations
+getMethodInvocations :: MethodCN -> [(String, ClassInfo, JavaFilesInfo)] -> MethodInvocations
 getMethodInvocations _ []                    = []
 getMethodInvocations mcn ((main, cl',ts):xs) = 
  let mn  = mname mcn
      cl  = clinf mcn
      ov  = overl mcn
  in if (cl == cl') 
-    then let ys = [ (t,id,args,minvs) | (t,id,args,minvs) <- ts, id==mn]
+    then let ys = [ (t,id,args,minvs) | (t,id,args,minvs) <- methodsInFiles ts, id==mn]
          in if (not.null) ys
             then case ov of 
                  OverNil  -> (\(_,_,_,x) -> x) $ head ys 

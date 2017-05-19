@@ -101,10 +101,10 @@ updateTmpFilesCInvs ppd output_add jpath =
  do let (ppdate, env) =  fromOK $ runStateT ppd emptyEnv
     let imports       = importsGet ppdate
     let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
-    sequence $ map (\ i -> updateTmpFileCInv i output_add jpath (varsInFiles env)) imports'
+    sequence $ map (\ i -> updateTmpFileCInv i output_add jpath (javaFilesInfo env)) imports'
 
-updateTmpFileCInv :: Import -> FilePath -> FilePath -> [(String, String, [(String,String)])] -> IO ()
-updateTmpFileCInv i output_add jpath vars =
+updateTmpFileCInv :: Import -> FilePath -> FilePath -> [(String, ClassInfo, JavaFilesInfo)] -> IO ()
+updateTmpFileCInv i output_add jpath jinfo =
   do (main, cl) <- makeAddFile i
      let jpath' = jpath ++ "/" ++ main
      let output_add' = output_add ++ "/" ++ main
@@ -112,7 +112,7 @@ updateTmpFileCInv i output_add jpath vars =
      let file        = jpath' ++ "/" ++ (cl ++ ".java")    
      let tmp         = output_add' ++ "/" ++ (cl ++ ".java")
      r <- readFile file
-     let varsc = getListOfTypesAndVars cl vars
+     let varsc = getListOfTypesAndVars cl jinfo
      let (ys, zs) = lookForClassBeginning cl (lines r)
      writeFile tmp ((unlines ys) ++ (unlines (searchAndAnnotateVars zs varsc)))
 

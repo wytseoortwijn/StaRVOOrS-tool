@@ -740,7 +740,7 @@ checkTempArgs targs env scope =
           , checkTempArgsHTriples (map snd $ targHT targs) (htsNames env)
           , checkTempArgsConditions (map snd $ targCond targs)
           , checkTempArgsTriggers (map snd $ targTr targs) (allTriggers env) scope
-          , checkMethodNames (map snd $ targMN targs) (methodsInFiles env)
+          , checkMethodNames (map snd $ targMN targs) (javaFilesInfo env)
           ]
 
 checkTempArgsActions :: [Act.Args] -> Writer String Bool
@@ -779,9 +779,9 @@ checkTempArgsTriggers targs tinfs scope =
     then return True 
     else writer (False, "Error: In an action create, the trigger(s) [" ++ addComma xs ++ "] do(es) not exist.\n") 
 
-checkMethodNames :: [Act.Args] -> [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])] -> Writer String Bool
+checkMethodNames :: [Act.Args] -> [(String, ClassInfo, JavaFilesInfo)] -> Writer String Bool
 checkMethodNames targs minfs =
- let xs = removeDuplicates [ mn | mn <- map showActArgs targs, (_,_,xs) <- minfs, (_,mn',_,_) <- xs, mn == mn' ]
+ let xs = removeDuplicates [ mn | mn <- map showActArgs targs, (_,_,xs) <- minfs, (_,mn',_,_) <- methodsInFiles xs, mn == mn' ]
  in if length xs == length targs
     then return True 
     else writer (False, "Error: In an action create, the method(s) [" 
@@ -1279,10 +1279,8 @@ getAllTriggers (Global (Ctxt vars ies trigs prop fors)) env =
 data Env = Env
  { allTriggers     :: [TriggersInfo]
  , htsNames        :: [HTName]
- , varsInFiles     :: [(String, ClassInfo, [(Type, Id)])]
- , varsInPPD       :: Variables
- , methodsInFiles  :: [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])]
-                      --[(path_to_class,class_name,[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body)])]
+ , javaFilesInfo   :: [(String, ClassInfo, JavaFilesInfo)]
+ , varsInPPD       :: Variables                    
  , oldExpTypes     :: OldExprM --types of the old expressions
  , tempsInfo       :: [(Id,[Args])]--[(name_template, args_of_template)]
  , propInForeach   :: [(PropertyName, ClassInfo, String)]-- is used to avoid ambigous reference to variable id in foreaches
@@ -1297,9 +1295,8 @@ type UpgradePPD a = CM.StateT Env Err a
 emptyEnv :: Env
 emptyEnv = Env { allTriggers     = []
                , htsNames        = []
-               , varsInFiles     = []
+               , javaFilesInfo   = []
                , varsInPPD       = []
-               , methodsInFiles  = []
                , oldExpTypes     = Map.empty
                , tempsInfo       = []
                , propInForeach   = []

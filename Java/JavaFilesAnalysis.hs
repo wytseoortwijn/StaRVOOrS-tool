@@ -1,4 +1,4 @@
-module JavaFilesAnalysis(javaStaticAnalysis,updateVarsEnv) where 
+module JavaFilesAnalysis(javaStaticAnalysis) where 
 
 import Language.Java.Parser
 import Language.Java.Syntax
@@ -17,57 +17,35 @@ import CommonFunctions
 
 javaStaticAnalysis :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
 javaStaticAnalysis ppd jpath = 
- do ppd' <- programVariables ppd jpath
-    ppd'' <- programMethods ppd' jpath
-    return ppd''
-
---
---Adds to the upgraded ppDATE's env the variables of all the java files involved in the verification process
---
-programVariables :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
-programVariables ppd jpath = 
  do let imports = T.importsGet (fst . fromOK $ runStateT ppd emptyEnv)
-    vars <- sequence [ getVariables i jpath
+    info <- sequence [ getJavaInfo i jpath
                      | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
                      ]
-    return $ updateVarsEnv ppd vars
+    return $ ppd >>= (\x -> do env <- get; put (env { javaFilesInfo = info }); return x)
 
-updateVarsEnv :: UpgradePPD T.PPDATE -> [(String, T.ClassInfo, [(String, String)])] -> UpgradePPD T.PPDATE
-updateVarsEnv ppd vars = ppd >>= (\x -> do env <- get; put (env { varsInFiles = vars }); return x)                     
-
-getVariables :: T.Import -> FilePath -> IO (String, T.ClassInfo, [(String, String)])
-getVariables i jpath =
-  do (main, cl) <- makeAddFile i
-     let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")
-     r <- readFile file_add
-     let java = (\(Right x) -> x) $ parseJavaFile r
-     let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
-     let vars = map getTypeAndId $ (getVarDecl'.getMemberDecl.getDecls.getClassBody) java_aux
-     return (main, cl, (splitVars vars))
+getJavaInfo :: T.Import -> FilePath -> IO (String, T.ClassInfo,T.JavaFilesInfo)
+getJavaInfo i jpath = 
+ do (main, cl) <- makeAddFile i
+    let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")
+    r <- readFile file_add
+    let java     = (\(Right x) -> x) $ parseJavaFile r
+    let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
+    let vars     = getVariables java_aux
+    let methods  = getMethods java_aux
+    let jinfo    = T.JavaFilesInfo (splitVars vars) (map methodsDetails methods)
+    return (main, cl, jinfo)
 
 --
---Adds to the upgraded ppDATE's env the method declarations of all the java files involved in the verification process
+--Gets the variables of all the java files involved in the verification process
 --
-programMethods :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
-programMethods ppd jpath = 
- do let imports = T.importsGet (fst . fromOK $ runStateT ppd emptyEnv)
-    ms <- sequence [ getMethods i jpath
-                   | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
-                   ]
-    return $ updateMethodsEnv ppd ms
+getVariables :: ClassDecl -> [(String, [String])]
+getVariables = (map getTypeAndId) . (getVarDecl'.getMemberDecl.getDecls.getClassBody)
 
-updateMethodsEnv :: UpgradePPD T.PPDATE -> [(String, T.ClassInfo, [(T.Id,String,[String],T.MethodInvocations)])] -> UpgradePPD T.PPDATE
-updateMethodsEnv ppd ms = ppd >>= (\x -> do env <- get; put (env { methodsInFiles = ms }); return x)                     
-
-getMethods :: T.Import -> FilePath -> IO (String, T.ClassInfo, [(T.Id,String,[String],T.MethodInvocations)])
-getMethods i jpath =
-  do (main, cl) <- makeAddFile i
-     let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")
-     r <- readFile file_add
-     let java     = (\(Right x) -> x) $ parseJavaFile r
-     let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
-     let methods = (getMethodDecl.getDecls.getClassBody) java_aux
-     return (main, cl, (map methodsDetails methods))
+--
+--Gets the method declarations of all the java files involved in the verification process
+--      
+getMethods :: ClassDecl -> [MemberDecl]
+getMethods = (getMethodDecl.getDecls.getClassBody)
 
 -------------------------
 -- Auxiliary Functions --

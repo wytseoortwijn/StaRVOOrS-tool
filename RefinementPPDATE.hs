@@ -136,11 +136,11 @@ generateNewTriggers :: UpgradePPD PPDATE -> HTriples -> UpgradePPD PPDATE
 generateNewTriggers ppd consts =
   do let env    = getEnvVal ppd
      let ppdate = getValue ppd     
-     let mfiles = methodsInFiles env
+     let mfiles = javaFilesInfo env
      let mns    = removeDuplicates $ map methodCN consts
      let entry  = filterDefEntryTriggers mns (allTriggers env) 
-     let entry' = [(mnc, checkOverloading (filter (\(_,mn,_,_) -> mname mnc == mn) z) (overl mnc)) | mnc <- entry, (_,d,z) <- mfiles,d == clinf mnc]
-     let exit   = [(mnc, checkOverloading (filter (\(_,mn,_,_) -> mname mnc == mn) z) (overl mnc)) | mnc <- mns, (_,d,z) <- mfiles,d == clinf mnc]
+     let entry' = [(mnc, checkOverloading (filter (\(_,mn,_,_) -> mname mnc == mn) (methodsInFiles z)) (overl mnc)) | mnc <- entry, (_,d,z) <- mfiles,d == clinf mnc]
+     let exit   = [(mnc, checkOverloading (filter (\(_,mn,_,_) -> mname mnc == mn) (methodsInFiles z)) (overl mnc)) | mnc <- mns, (_,d,z) <- mfiles,d == clinf mnc]
      let scope  = properScope ppdate
      let (env',ppdate') = addNewTriggerEntry env 0 entry' ppdate scope
      let env''  = addNewTriggerExit env' (length entry') exit scope     

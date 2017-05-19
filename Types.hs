@@ -615,3 +615,12 @@ options =
     , Option "r" ["only_rv"] (NoArg OnlyRV) "Monitor generation without performing static verification"
     ]
 
+------------------------
+-- Info in Java Files --
+------------------------
+
+data JavaFilesInfo = JavaFilesInfo
+ { varsInFiles    :: [(Type, Id)]
+ , methodsInFiles :: [(Type,Id,[String],MethodInvocations)] 
+                   --[(path_to_class,class_name,[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body)])]
+ } deriving(Eq,Show)
