@@ -3,13 +3,12 @@ module OperationalizationPP (operationalizeOldResultBind, operationalizeForall, 
 import Types
 import CommonFunctions
 import DL2JML
-import RefinementPPDATE
+import RefinementPPDATE (getClassVar)
 import Data.Char
 import UpgradePPDATE
 import ErrM
-import Data.List
 import qualified Data.Map as Map
-import Data.Maybe
+import Data.Maybe (fromJust)
 import Data.List
 
 -------------------------------------

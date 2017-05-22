@@ -1,23 +1,14 @@
 module StaticAnalysis(staticAnalysis) where
 
 import Types
-import qualified JMLGenerator
 import CommonFunctions
 import System.Directory
-import System.Environment
 import System.Process
 import JMLInjection
-import qualified ParserXMLKeYOut
-import RefinementPPDATE
+import ParserXMLKeYOut
 import ReportGen
 import UpgradePPDATE
-import Data.List ((\\),isInfixOf)
-import Data.Maybe
-import System.FilePath
-import qualified Data.Map as Map
-import DL2JML
 import System.Exit
-import qualified System.IO
 
 -------------------------------
 -- Static Analysis using KeY --

@@ -9,9 +9,7 @@ import UpgradePPDATE
 import ErrM
 import Data.List
 import qualified Data.Map as Map
-import Data.Maybe
-import Data.List
-
+import Data.Maybe (fromJust)
 import TypeInferenceXml
 import Instrumentation
 

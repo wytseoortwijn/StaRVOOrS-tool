@@ -8,10 +8,7 @@ import Types
 import ErrM
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
-import Data.Functor ((<$>))
-import Data.List ((\\),isInfixOf)
 import System.FilePath
-import qualified System.IO
 import System.Directory
 
 

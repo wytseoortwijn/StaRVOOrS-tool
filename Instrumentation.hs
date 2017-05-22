@@ -4,7 +4,6 @@ import qualified Types as T
 import CommonFunctions
 import JavaParser
 import System.Directory
-import Data.Char
 import UpgradePPDATE
 import ErrM
 import JavaLanguage

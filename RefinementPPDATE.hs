@@ -1,9 +1,8 @@
-module RefinementPPDATE (specRefinement,refinePPDATE, getClassVar,generateNewTriggers) where
+module RefinementPPDATE (specRefinement, getClassVar) where
 
 import Types
 import CommonFunctions
 import DL2JML
-import qualified Data.Map as Map
 import UpgradePPDATE
 import Data.List
 import Data.Maybe
