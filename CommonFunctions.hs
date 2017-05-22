@@ -8,52 +8,12 @@ import Types
 import ErrM
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
+import Data.Functor ((<$>))
+import Data.List ((\\),isInfixOf)
+import System.FilePath
+import qualified System.IO
+import System.Directory
 
-
-readIdentifier :: String -> Err (String, String)
-readIdentifier text 
-  | identifier == "" = fail "Error Parsing: Expecting identifier, but none was found.\n"
-  | otherwise        = return (identifier, text')
-  where
-    (identifier, text') = break (\c -> c == '}' || c == '{') text
-
-isIdentifierSymbol :: Char -> Bool
-isIdentifierSymbol c = isAlphaNum c || c == '_'
-
-clean :: String -> String
-clean = dropWhile (\ c -> isSpace c || c == '{' || c == '}')
-
-trim :: String -> String
-trim = reverse . clean . reverse . clean
-
-cleanBack :: String -> String
-cleanBack = reverse . clean . reverse
-
-splitAtIdentifier :: Char -> String -> (String, String)
-splitAtIdentifier iden s = (takeWhile (\c -> not (c == iden)) s, dropWhile (\c -> not (c == iden)) s)
-
-splitAtClosingParen :: Int -> String -> (String, String)
-splitAtClosingParen _ ""       = ("","")
-splitAtClosingParen n ('(':xs) = 
- let (a,b) = splitAtClosingParen (n+1) xs
- in ('(':a,b)
-splitAtClosingParen n (')':xs) = 
- if n > 0
- then let (a,b) = splitAtClosingParen (n-1) xs
-      in (')':a,b)
- else ("",xs)
-splitAtClosingParen n (x:xs) = 
- let (a,b) = splitAtClosingParen n xs
- in (x:a,b)
-
-splitOnIdentifier :: String -> String -> [String]
-splitOnIdentifier = splitOn
-
-checkIfParseErrors :: [Either a b] -> Either [a] [b]
-checkIfParseErrors es = let (ls, rs) = partitionEithers es
-                        in if ((not.null) ls)
-                           then Left ls
-                           else Right rs
 
 lookForEntryTrigger :: [TriggersInfo] -> MethodCN -> Scope -> [Trigger]
 lookForEntryTrigger [] _ _               = []
@@ -137,9 +97,6 @@ getListOfArgs mn []                = []
 getListOfArgs mn ((t,mn',ts,_):xs) = if (mn == mn') 
                                      then ts
                                      else getListOfArgs mn xs
-
-addComma :: [String] -> String
-addComma = addComma'
 
 getConstTnv :: HT -> OldExprM -> Variables
 getConstTnv c oldExpM = 
@@ -240,6 +197,58 @@ filterRefTypes (arg:args) =
       "HTriple"    -> filterRefTypes args
       _            -> arg:filterRefTypes args
 
+-------------------------
+-- Methods for parsing --
+-------------------------
+
+readIdentifier :: String -> Err (String, String)
+readIdentifier text 
+  | identifier == "" = fail "Error Parsing: Expecting identifier, but none was found.\n"
+  | otherwise        = return (identifier, text')
+  where
+    (identifier, text') = break (\c -> c == '}' || c == '{') text
+
+isIdentifierSymbol :: Char -> Bool
+isIdentifierSymbol c = isAlphaNum c || c == '_'
+
+clean :: String -> String
+clean = dropWhile (\ c -> isSpace c || c == '{' || c == '}')
+
+trim :: String -> String
+trim = reverse . clean . reverse . clean
+
+cleanBack :: String -> String
+cleanBack = reverse . clean . reverse
+
+splitAtIdentifier :: Char -> String -> (String, String)
+splitAtIdentifier iden s = (takeWhile (\c -> not (c == iden)) s, dropWhile (\c -> not (c == iden)) s)
+
+splitAtClosingParen :: Int -> String -> (String, String)
+splitAtClosingParen _ ""       = ("","")
+splitAtClosingParen n ('(':xs) = 
+ let (a,b) = splitAtClosingParen (n+1) xs
+ in ('(':a,b)
+splitAtClosingParen n (')':xs) = 
+ if n > 0
+ then let (a,b) = splitAtClosingParen (n-1) xs
+      in (')':a,b)
+ else ("",xs)
+splitAtClosingParen n (x:xs) = 
+ let (a,b) = splitAtClosingParen n xs
+ in (x:a,b)
+
+splitOnIdentifier :: String -> String -> [String]
+splitOnIdentifier = splitOn
+
+checkIfParseErrors :: [Either a b] -> Either [a] [b]
+checkIfParseErrors es = let (ls, rs) = partitionEithers es
+                        in if ((not.null) ls)
+                           then Left ls
+                           else Right rs
+
+addComma :: [String] -> String
+addComma = addComma'
+
 ---------------------------------------
 -- Manipulating the parsed .xml file --
 ---------------------------------------
@@ -312,4 +321,35 @@ makeAddFile (Import s) = let xs = splitOnIdentifier "." s
                             else let val = last xs
                                      ys = (init $ foldr (\ xs xss -> xs ++ "/" ++ xss) "" (init xs))
                                  in return (ys, val)
+
+--------------------------------------------------------------
+-- Copy all the files within a Directory to a new directory --
+--------------------------------------------------------------
+
+copyFiles source dest =
+ do
+    createDirectoryIfMissing True dest
+    subItems <- getSubitems' source
+    mapM_ (copyItem' source dest) subItems
+
+
+getSubitems' :: FilePath -> IO [(Bool, FilePath)]
+getSubitems' path = getSubitemsRec ""
+  where
+    getChildren path =  (\\ [".", ".."]) <$> getDirectoryContents path
+
+    getSubitemsRec relPath = do
+        let absPath = path </> relPath
+        isDir <- doesDirectoryExist absPath
+        children <- if isDir then getChildren absPath else return []
+        let relChildren = [relPath </> p | p <- children]
+        ((isDir, relPath) :) . concat <$> mapM getSubitemsRec relChildren
+
+copyItem' baseSourcePath baseTargetPath (isDir, relativePath) =
+ do
+    let sourcePath = baseSourcePath </> relativePath
+    let targetPath = baseTargetPath </> relativePath
+    if isDir
+    then createDirectoryIfMissing False targetPath
+    else copyFile sourcePath targetPath
 

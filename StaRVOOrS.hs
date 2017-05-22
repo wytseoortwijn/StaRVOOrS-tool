@@ -2,28 +2,26 @@ module Main where
 
 import System.Directory
 import System.Environment as SE
-import System.Process
 import Types
 import CommonFunctions
 import Parser
 import ErrM
 import AbsPpdate
 import UpgradePPDATE
-import qualified Data.Map as MAP
-import StaticAnalysis
-import Translator2DATE
 import System.Console.GetOpt
 import JavaFilesAnalysis
-import Data.Functor
 import Control.Monad.Writer
-import Data.Maybe
+import StaticAnalysis
+import RefinementPPDATE
+import PartialInfoFilesGeneration
+import MonitorGeneration
 
 -------------
 -- Version --
 -------------
 
 version :: String
-version = "StaRVOOrS 1.4"
+version = "StaRVOOrS 1.6"
 
 ----------
 -- Main --
@@ -73,9 +71,9 @@ main =
                      putStrLn ("Usage: " ++ name ++ " [-OPTIONS] <java_source_files> <ppDATE_file> <output>\n")
       (_,_,errs) -> sequence_ $ map putStrLn errs
 
---
---Runs StaRVOOrS --
---
+--------------------
+-- Runs StaRVOOrS --
+--------------------
 
 run :: [Flag] -> FilePath -> FilePath -> FilePath -> IO ()
 run flags java_fn_add ppdate_fn output_add =  
@@ -90,9 +88,8 @@ run flags java_fn_add ppdate_fn output_add =
               case ppdateP of
                    Bad s        -> do putStrLn $ "\nThe parsing has failed: " ++ s
                    Ok absppdate -> 
-                      do      
-                         let output_addr = setAddress output_add
-                         let output_add' = output_addr ++ "out"
+                      do let output_addr = setAddress output_add
+                         let output_add' = output_addr ++ "out/"
                          checkOutputDirectory output_add'
                          createDirectoryIfMissing False output_add'      
                          createDirectoryIfMissing False (output_add' ++ "/workspace")
@@ -101,29 +98,17 @@ run flags java_fn_add ppdate_fn output_add =
                               Bad s -> putStrLn s
                               Ok _  -> do ppdate <- javaStaticAnalysis ppd java_fn_add'
                                           if null (wellFormedActions ppdate)
-                                          then do onlyRV flags
-                                                  ppdate' <- staticAnalysis java_fn_add' ppdate output_add' ppdate_fn flags
-                                                  putStrLn "Initiating monitor files generation."
-                                                  let larva_fn  = generateLarvaFileName ppdate_fn
-                                                  let larva_add = output_addr ++ "out/" ++ larva_fn
-                                                  writeFile larva_add ""
-                                                  translate ppdate' larva_add
-                                                  putStrLn "Running LARVA..."
-                                                  let mode = if elem NoneVerbose flags then "" else "-v"
-                                                  rawSystem "java" ["-jar","larva.jar",larva_add,mode,"-o",output_add']
-                                                  putStrLn "Monitor files generation completed."
-                                                  removeDirectoryRecursive (output_add' ++ "/workspace") 
+                                          then do proofs <- staticAnalysis java_fn_add' ppdate output_add' flags
+                                                  ppdate' <- specRefinement ppdate proofs ppdate_fn output_add'
+                                                  ppdate'' <- javaFilesGen ppdate' java_fn_add' output_add'
+                                                  monitorGen output_addr ppdate_fn ppdate'' flags 
+                                                  removeDirectoryRecursive (output_add' ++ "workspace") 
                                                   putStrLn "StaRVOOrS has finished successfully.\n"
                                           else putStrLn (wellFormedActions ppdate)
 
 -------------------------
 -- Auxiliary Functions --
 -------------------------
-
-onlyRV :: [Flag] -> IO ()
-onlyRV flags = if elem OnlyRV flags
-               then return ()
-               else putStrLn "Initiating static verification of Hoare triples with KeY."  
 
 --Method used to check if the provided arguments exist
 argsExist :: Maybe FilePath -> Maybe FilePath -> Maybe FilePath -> IO (Writer String Bool)
@@ -167,20 +152,11 @@ checkOptions (OnlyParse:xs)   = False
 checkOptions (Help:xs)        = False
 checkOptions (_:xs)           = checkOptions xs
 
-
 checkOutputDirectory :: FilePath -> IO ()
 checkOutputDirectory file = 
  do b <- doesDirectoryExist file
     if b then removeDirectoryRecursive file
          else return ()
-
-generateLarvaFileName :: Filename -> Filename
-generateLarvaFileName fn = 
- let (ext, _:name) = break ('.' ==) $ reverse fn 
-     xs = splitOnIdentifier "/" name     
- in if (length xs == 1)
-    then reverse name ++ ".lrv"
-    else reverse (head xs) ++ ".lrv"
 
 setAddress :: FilePath -> FilePath
 setAddress add = 

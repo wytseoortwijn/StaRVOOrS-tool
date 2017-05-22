@@ -1,4 +1,4 @@
-module JMLInjection(generateTmpFilesAllConsts,generateTmpFilesCInvs,updateTmpFilesCInvs,generateDummyBoolVars) where
+module JMLInjection(injectJMLannotations) where
 
 import Types
 import JMLGenerator
@@ -8,11 +8,34 @@ import Data.Char
 import UpgradePPDATE
 import ErrM
 import JavaLanguage
-import System.IO
+import qualified System.IO
 
 -------------------------------------------------
 -- Injecting JML annotations for Hoare triples --
 -------------------------------------------------
+
+injectJMLannotations :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO ()
+injectJMLannotations ppd jpath output_addr = 
+ let toAnalyse_add = output_addr ++ "workspace/files2analyse"
+     tmp_add       = output_addr ++ "workspace/files/"
+     cinv_add      = output_addr ++ "workspace/filescinv"
+     nulla_add     = output_addr ++ "workspace/filesnullable/"
+     filesnu_add   = output_addr ++ "workspace/filesnu"
+ in do createDirectoryIfMissing False tmp_add
+       createDirectoryIfMissing False toAnalyse_add
+       createDirectoryIfMissing False nulla_add
+       createDirectoryIfMissing False cinv_add
+       createDirectoryIfMissing False filesnu_add
+       generateDummyBoolVars ppd tmp_add jpath
+       generateTmpFilesCInvs ppd cinv_add tmp_add
+       updateTmpFilesCInvs ppd nulla_add cinv_add
+       let consts_jml = JMLGenerator.getHTs ppd
+       copyFiles jpath toAnalyse_add
+       generateTmpFilesAllConsts ppd consts_jml toAnalyse_add nulla_add  
+
+---------------------------------------------
+-- Injecting JML annotations for contracts --
+---------------------------------------------
 
 generateTmpFilesAllConsts :: UpgradePPD PPDATE -> HTjml -> FilePath -> FilePath -> IO ()
 generateTmpFilesAllConsts ppd consts_jml output_add jpath =
@@ -250,4 +273,3 @@ updateJCC (cn, c) []            = [(cn, [c])]
 updateJCC (cn, c) ((cn',cs):xs) = if (cn == cn')
                                   then (cn', c:cs) : xs
                                   else (cn', cs):updateJCC (cn, c) xs
-

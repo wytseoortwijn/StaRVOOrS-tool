@@ -1,4 +1,4 @@
-module PartialInfoFilesGeneration (htsJavaFileGen, idFileGen, oldExprFileGen,messagesFileGen,cloningFileGen,templatesFileGen) where
+module PartialInfoFilesGeneration (javaFilesGen) where
 
 import Types
 import System.Directory
@@ -11,6 +11,37 @@ import Data.List
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.List
+
+import TypeInferenceXml
+import Instrumentation
+
+----------------------------------------
+-- Instrumented Java files generation --
+----------------------------------------
+
+javaFilesGen :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO (UpgradePPD PPDATE)
+javaFilesGen ppdate jpath output_addr = 
+ do putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
+    oldExpTypes <- inferTypesOldExprs ppdate jpath (output_addr ++ "workspace/")
+    let ppdate'' = operationalizeOldResultBind ppdate oldExpTypes
+    let add = output_addr ++ "ppArtifacts/"
+    let annotated_add = getSourceCodeFolderName jpath ++ "/"
+    createDirectoryIfMissing True add
+    createDirectoryIfMissing True (output_addr ++ annotated_add)
+    htsJavaFileGen ppdate'' add
+    idFileGen add
+    cloningFileGen add
+    oldExprFileGen add ppdate''
+    templatesFileGen add ppdate''
+    messagesFileGen add (getEnvVal ppdate'')
+    copyFiles jpath (output_addr ++ annotated_add)
+    methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
+    return ppdate''
+
+
+getSourceCodeFolderName :: FilePath -> String
+getSourceCodeFolderName s = let (xs,ys) = splitAtIdentifier '/' $ (reverse . init) s
+                            in reverse xs
 
 -----------------------
 -- HoareTriples.java --

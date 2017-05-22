@@ -12,6 +12,9 @@ import qualified Data.Map as Map
 import Data.Maybe
 import Data.List
 
+-------------------------------------
+-- Performs the operationalisation --
+-------------------------------------
 
 operationalizeOldResultBind :: UpgradePPD PPDATE -> Map.Map HTName [(String,Type)] -> UpgradePPD PPDATE
 operationalizeOldResultBind ppd oldExprTypesM =

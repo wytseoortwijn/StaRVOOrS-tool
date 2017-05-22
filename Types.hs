@@ -597,6 +597,8 @@ data OExpr = OExpr
 -- Flags --
 -----------
 
+type Flags = [Flag]
+
 data Flag = Version 
  | OnlyParse
  | NoneVerbose
