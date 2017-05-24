@@ -81,32 +81,9 @@ checkTypeClass ((cn',ts):xss) cn s =
  if (cn == cn')
  then let ys = [ t | (t,s') <- ts, s == s' || isPrefixOf (s'++"(") s]
       in if null ys 
-         then checkType' ts s
+         then ""
          else head ys
  else checkTypeClass xss cn s
-
-checkType' :: [(Type,String)] -> String -> Type
-checkType' ts s 
- | (or.map (\c -> isInfixOf c s)) boolSymbols   = "boolean"
- | (or.map (\c -> isInfixOf c s)) intSymbols    = "int"
- | (or.map (\c -> isInfixOf c s)) mathSymbols 
-   && (or.map (\c -> isInfixOf c s)) intSymbols = "int"
- | (or.map (\c -> isInfixOf c s)) mathSymbols   = 
-   let ys = [x | x <- words s,not $ elem x mathSymbols]
-       zs = removeDuplicates [t | z <- ys, (t,s) <- ts, z == s || isPrefixOf (z++"(") s]
-   in if null zs 
-      then ""
-      else head zs
- | otherwise                                    = ""
- 
-boolSymbols :: [String]
-boolSymbols = ["<","<=","==",">",">=","&&","||","!"]
-
-mathSymbols :: [String]
-mathSymbols = ["+","-","*"]
-
-intSymbols :: [String]
-intSymbols = [".intValue()","1"]
 
 -------------------------
 -- Generating XML file --
