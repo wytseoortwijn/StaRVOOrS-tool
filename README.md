@@ -1,4 +1,6 @@
-# StaRVOOrS 1.6 (unstable)
+
+# StaRVOOrS 1.5 
+
 
 In order to work with the source code you have to install the following packages:
 
@@ -30,3 +32,4 @@ For older compilers, use:
 In addition, to use the compiled code you have to download the APIs for KeY and LARVA:
 
 http://cse-212294.cse.chalmers.se/starvoors/files/APIs/StaRVOOrS_APIs.zip
+
