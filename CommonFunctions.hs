@@ -10,6 +10,7 @@ import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import System.FilePath
 import System.Directory
+import Data.Functor
 
 
 lookForEntryTrigger :: [TriggersInfo] -> MethodCN -> Scope -> [Trigger]
