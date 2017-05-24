@@ -193,7 +193,7 @@ transPre x = case x of
   PreNil -> failure x
 transMethod :: Method -> Result
 transMethod x = case x of
-  Method id1 id2 overloading -> failure x
+  Method id1 id2 overriding -> failure x
 transPost :: Post -> Result
 transPost x = case x of
   Post jml -> failure x
@@ -207,8 +207,8 @@ transAssig x = case x of
   AssigJML jml -> failure x
   AssigE -> failure x
   AssigN -> failure x
-transOverloading :: Overloading -> Result
-transOverloading x = case x of
+transOverriding :: Overriding -> Result
+transOverriding x = case x of
   Over types -> failure x
   OverNil -> failure x
 transMethods :: Methods -> Result

@@ -5,7 +5,7 @@ module JavaLanguage where
 -------------------
 
 javaModifiers :: [String]
-javaModifiers = ["public", "private", "protected"]
+javaModifiers = ["public", "private", "protected", "no modifier"]
 
 primitiveJavaTypes :: [String]
 primitiveJavaTypes = ["byte", "short", "int", "long", "float", "double", "char", "boolean"]

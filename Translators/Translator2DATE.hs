@@ -9,7 +9,6 @@ import ErrM
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.List
-import Language.Java.Syntax hiding(VarDecl)
 import qualified AbsActions as Act
 import qualified AbsJml as Jml
 import qualified ParserAct as ParAct
@@ -17,6 +16,7 @@ import qualified ParserJML as ParJML
 import qualified PrintActions as PrintAct
 import qualified PrintJml as PrintJML
 import TranslatorActions
+import Optimisations
 
 
 translate :: UpgradePPD PPDATE -> FilePath -> IO ()
@@ -59,7 +59,8 @@ writeGlobal ppdate env =
      prop   = property global
      fors   = foreaches global         
      temps  = templatesGet ppdate            
- in "GLOBAL {\n\n" ++ writeVariables vars consts acts (allCreateAct env)
+ in "GLOBAL {\n\n" 
+    ++ writeVariables vars consts acts (allCreateAct env)
     ++ writeTriggers trs consts acts env
     ++ writeProperties prop consts env TopLevel
     ++ writeForeach fors consts env
@@ -79,7 +80,7 @@ writeVariables vars [] [] [] =
 writeVariables vars consts acts creates = 
  let actChann    = if (null acts) then "" else concatMap makeChannelsAct (removeDuplicates acts) 
      createChann = if (null creates) then "" else concatMap (makeChannelsAct.caiCh) creates
-     constsChann = if (null consts) then "" else makeChannels (length consts) "h"
+     constsChann = if (null consts) then "" else makeChannels (length consts) "hppd"
      extraChann  = actChann ++ createChann ++ constsChann
  in if (null vars) 
     then if (null extraChann)
@@ -114,7 +115,7 @@ makeChannels n s = generateChannels n s ++ "\n"
 
 generateChannels :: Int -> String -> String
 generateChannels 0 s = "\n"
-generateChannels n s = generateChannels (n-1) s ++ " Channel " ++ s ++ show n ++ " = new Channel();\n"
+generateChannels n s = generateChannels (n-1) s ++ " Channel " ++ s ++ show n ++ " = new Channel(\"" ++ s ++ show n ++ "\");\n"
 
 makeChannelsAct :: String -> String
 makeChannelsAct s = " Channel " ++ s ++ " = new Channel();\n"
@@ -142,13 +143,13 @@ writeAllTriggers :: Triggers -> String
 writeAllTriggers []     = ""
 writeAllTriggers (e:es) = (getTrigger e) ++ writeAllTriggers es
 
+
 getTrigger :: TriggerDef -> String
 getTrigger (TriggerDef e arg cpe wc) =
  let wc' = if (wc == "") 
            then "" 
            else " where {" ++ wc ++ "}"
  in e ++ "(" ++ getBindArgs' arg ++ ") = " ++ getCpe cpe ++ wc' ++ "\n"
-
 
 getCpe :: CompoundTrigger -> String
 getCpe (Collection (CECollection xs)) = "{" ++ getCollectionCpeCompoundTrigger xs ++ "}"
@@ -193,31 +194,6 @@ auxGetTriggerVariation' :: [Bind] -> String
 auxGetTriggerVariation' []           = ""
 auxGetTriggerVariation' [BindId ret] = ret
 
-
-
--- Checks if the trigger to control has to be the auxiliary one (in case of optimisation by key)
-instrumentTriggers :: Triggers -> HTriples -> Env -> Triggers
-instrumentTriggers [] cs _       = []
-instrumentTriggers (e:es) cs env = 
- let (b,mn,bs) = lookupHTForTrigger e (getClassInfo e env) cs 
- in if b
-    then let e'  = updateMethodCallName e (mn++"Aux")
-             e'' = updateTriggerArgs e' ((args e') ++ [BindType "Integer" "id"])
-         in updateMethodCallBody e'' (bs++[BindId "id"]):instrumentTriggers es cs env
-    else e:instrumentTriggers es cs env
-
-lookupHTForTrigger :: TriggerDef -> ClassInfo -> HTriples -> (Bool, MethodName, [Bind])
-lookupHTForTrigger _ _ []      = (False,"", [])
-lookupHTForTrigger e ci (c:cs) = case compTrigger e of
-                                      NormalEvent _ id bs _ -> if (id == mname (methodCN c) && clinf (methodCN c) == ci)
-                                                               then (True, id, bs)
-                                                               else lookupHTForTrigger e ci cs
-                                      _                     -> lookupHTForTrigger e ci cs
-
-getClassInfo :: TriggerDef -> Env -> ClassInfo
-getClassInfo e env = 
- let trs = [tr | tr <- allTriggers env, tiTN tr == tName e]
- in head $ map tiCI trs
 
 ----------------
 -- Properties --
@@ -335,7 +311,7 @@ makeTransitionAlg1Cond ns e c env pn =
      (_,arg) = getValue $ lookForAllEntryTriggerArgs env c 
      c'      = "HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")"
      zs      = getExpForOld oldExpM cn
-     act     = " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
+     act     = " hppd" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
      type_   = if null zs then "PPD" else "Old<Old_" ++ cn ++ ">"
      old     = if null zs then "" else "," ++ zs
      ident   = lookforClVar pn (propInForeach env)
@@ -371,7 +347,7 @@ makeExtraTransitionAlg2 ts c e ns env pn =
      ident   = lookforClVar pn (propInForeach env)
      ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
      msg     = "new Messages" ++ type_ ++ ident' ++ old ++ ")"
-     act     = " h" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
+     act     = " hppd" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
      c'      = makeExtraTransitionAlg2Cond ts 
  in case c' of
          Nothing  -> Nothing 
@@ -419,7 +395,7 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env pn =
      ident   = lookforClVar pn (propInForeach env)
      ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
      msg     = "new Messages" ++ type_ ++ ident' ++ old ++ ")"
-     act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) { h" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "} ;"
+     act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) { hppd" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "} ;"
  in Transition q (Arrow e' c' (act ++ act')) q'
 
 
@@ -485,23 +461,24 @@ generateReplicatedAutomata cs es env =
      ys       = zip cs [1..n]
  in generateProp es ys env []
 
-
 generateProp :: Triggers -> [(HT,Int)] -> Env -> [(MethodCN,Bool)] -> String
 generateProp _ [] _ _              = ""
 generateProp es ((c,n):ys) env acc = 
  let (ra,acc') = genRA c n es env acc
  in ra ++ generateProp es ys env acc'
 
+-- Included to interact with optimisation OptRecAway.hs --
 genRA :: HT -> Int -> Triggers -> Env -> [(MethodCN,Bool)] -> (String,[(MethodCN,Bool)])
 genRA c n es env acc = 
  let (b,acc') = checkIfRec (methodCN c) env acc
- in if True --TODO:replace by b once the optimisation is implemented
-    then (generatePropRec c n es env, acc')
+ in if True --TODO:replace by b once the optimisation OptRecAway.hs is implemented
+    then (generateRAPost c n es env, acc')
     else (generatePropNonRec c n es env, acc')
 
+
 --Generates automaton to control a postcondition
-generatePropRec :: HT -> Int -> Triggers -> Env -> String
-generatePropRec c n es env = 
+generateRAPost :: HT -> Int -> Triggers -> Env -> String
+generateRAPost c n es env = 
  let tr      = generateTriggerRA env c n ("idPPD = msgPPD.id;","idPPD = id;")
      prop    = generateRAString es env c n Nothing
      cn      = snd prop
@@ -513,40 +490,6 @@ generatePropRec c n es env =
     ++ "EVENTS {\n" ++ tr ++ "}\n\n"
     ++ fst prop
     ++ "}\n\n"
-
-checkIfRec :: MethodCN -> Env -> [(MethodCN,Bool)] -> (Bool,[(MethodCN,Bool)])
-checkIfRec mcn env acc = 
- let xs = [b | (mcn',b) <- acc , mcn == mcn']
- in if null xs
-    then let minvs = getInvocationsInMethodBody mcn env
-             rec   = True
-         in if null minvs 
-            then (False,(mcn,False):acc)
-            else if directRec (mname mcn) minvs
-                 then (True,(mcn,True):acc)
-                 else (rec,(mcn,rec):acc)
-    else (head xs,acc)
-
-directRec :: MethodName -> [Exp] -> Bool
-directRec mn []           = False
-directRec mn (minv:minvs) = 
- case minv of
-      MethodInv (MethodCall (Name [Ident id]) _)        -> id == mn
-      MethodInv (PrimaryMethodCall This _ (Ident id) _) -> id == mn
-      _                                                 -> directRec mn minvs
-
-{- case minv of
-      MethodCall name args                    -> undefined
-      PrimaryMethodCall exp _ (Ident id) args -> undefined
-      SuperMethodCall _ (Ident id) args       -> undefined
-      ClassMethodCall _ _ (Ident id) args     -> undefined
-      TypeMethodCall _ _ (Ident id) args      -> undefined
--}
-
-getInvocationsInMethodBody :: MethodCN -> Env -> MethodInvocations
-getInvocationsInMethodBody mcn env = 
- let mns = methodsInFiles env
- in getMethodInvocations mcn mns
 
 generateTriggerRA :: Env -> HT -> Int -> (String,String) -> String
 generateTriggerRA env c n w =
@@ -561,7 +504,7 @@ generateTriggerRA env c n w =
      wtr      = if null (snd w) then "" else " where { " ++ snd w ++ "}\n"
      ntr      = getTriggerDef ov c (allTriggers env)
  in "rh" ++ show n ++ "(Messages" ++ nvar  
-    ++ " msgPPD) = {h"++ show n ++ ".receive(msgPPD)} where {" ++ fst w ++  "}\n"
+    ++ " msgPPD) = {hppd"++ show n ++ ".receive(msgPPD)} where {" ++ fst w ++  "}\n"
     ++ init (concatMap getTrigger (instrumentTriggers [ntr] [c] env)) ++ wtr
 
 
@@ -574,10 +517,37 @@ generateRAString es env c n rec =
      ++ writeTransitions cn (pTransitions ra) [] (States [] [] [] []) emptyEnv (InFor (ForId cn))
      ++ "}\n\n",cn)
 
---Optimisation: If the method is not recursive, then use optimised automaton
+-- Checks if the trigger to control has to be the auxiliary one (in case of optimisation by key) --
+
+instrumentTriggers :: Triggers -> HTriples -> Env -> Triggers
+instrumentTriggers [] cs _       = []
+instrumentTriggers (e:es) cs env = 
+ let (b,mn,bs) = lookupHTForTrigger e (getClassInfo e env) cs 
+ in if b
+    then let e'  = updateMethodCallName e (mn++"Aux")
+             e'' = updateTriggerArgs e' ((args e') ++ [BindType "Integer" "id"])
+         in updateMethodCallBody e'' (bs++[BindId "id"]):instrumentTriggers es cs env
+    else e:instrumentTriggers es cs env
+
+lookupHTForTrigger :: TriggerDef -> ClassInfo -> HTriples -> (Bool, MethodName, [Bind])
+lookupHTForTrigger _ _ []      = (False,"", [])
+lookupHTForTrigger e ci (c:cs) = case compTrigger e of
+                                      NormalEvent _ id bs _ -> if (id == mname (methodCN c) && clinf (methodCN c) == ci)
+                                                               then (True, id, bs)
+                                                               else lookupHTForTrigger e ci cs
+                                      _                     -> lookupHTForTrigger e ci cs
+
+getClassInfo :: TriggerDef -> Env -> ClassInfo
+getClassInfo e env = 
+ let trs = [tr | tr <- allTriggers env, tiTN tr == tName e]
+ in head $ map tiCI trs
+
+--
+--Method added for Optimisation OptRecAway.hs --
+--
 generatePropNonRec :: HT -> Int -> Triggers -> Env -> String
 generatePropNonRec c n es env = 
- let tr      = generateTriggerRA env c n ("idPPD"++ show n ++ " = null;","idPPD"++ show n ++ " = null;")
+ let tr      = generateTriggerRA env c n ("idPPD" ++ show n ++ " = msgPPD.id;","idPPD"++ show n ++ " = new Integer(42);")
      prop    = generateRAString es env c n (Just ())
      cn      = snd prop
      oldExpM = oldExpTypes env
@@ -604,19 +574,21 @@ writeTemplates (Temp temps) env consts =
      xs      = [ instantiateTemp for id args cai env | (id,args,for) <- skell , cai <- creates, id == caiId cai ] 
  in writeForeach xs consts env
 
+--Generates an abstract Foreach for the template
 generateRAtmp :: Template -> (Id, [Args], Foreach)
 generateRAtmp temp = (tempId temp, tempBinds temp, Foreach (filterRefTypes $ tempBinds temp) (generateCtxtForTemp temp) (ForId (tempId temp)))
 
 generateCtxtForTemp :: Template -> Context
 generateCtxtForTemp temp = Ctxt (tempVars temp) (tempActEvents temp) (tempTriggers temp) (tempProp temp) []
 
+--Creates an instance of the abstract Foreach
 instantiateTemp :: Foreach -> Id -> [Args] -> CreateActInfo -> Env -> Foreach
 instantiateTemp for id args cai env = 
  let ch     = caiCh cai
+     targs  = splitTempArgs (zip args (caiArgs cai)) emptyTargs  
      mp     = Map.union (makeRefTypeMap $ targRef targs) (makeMap $ targMN targs)
      trs    = addTriggerDef args cai env mp
      ctxt   = getCtxtForeach for 
-     targs  = splitTempArgs (zip args (caiArgs cai)) emptyTargs  
      trs'   = (genTriggerForCreate id ch args): instantiateTrs (triggers ctxt) mp
      ctxt'  = updateCtxtTrs ctxt (trs' ++ trs)
      ctxt'' = updateCtxtProps ctxt' (instantiateProp (property ctxt) args cai)
@@ -647,6 +619,7 @@ newWhereClause s =
      ys = (head.tail) xs
  in ys ++ " = " ++ ys ++ "_tmp" ++ " ;"
 
+--Adds existing triggers definition to an instance of a template
 addTriggerDef :: [Args] -> CreateActInfo -> Env -> Map.Map Id String -> Triggers
 addTriggerDef args cai env mp = 
  let refs  = targRef $ splitTempArgs (zip args (caiArgs cai)) emptyTargs
@@ -654,7 +627,7 @@ addTriggerDef args cai env mp =
      scope = caiScope cai
      trs   = allTriggers env 
  in [ adaptTrigger (fromJust $ tiTrDef tr) refs mp (tiCI tr) | tr <- trs, tiScope tr == scope, targ <- targs, (showActArgs $ snd targ) == tiTN tr]
-
+    
 adaptTrigger :: TriggerDef -> [(Args,Act.Args)] -> Map.Map Id String -> ClassInfo -> TriggerDef
 adaptTrigger tr [] _ _      = tr { whereClause = ""}
 adaptTrigger tr targs mp ci = 
@@ -664,7 +637,7 @@ adaptTrigger tr targs mp ci =
               BindingVar (BindId id)     -> 
                    let xs = [ arg | arg <- args tr, ci == getBindTypeType arg, id == getBindTypeId arg]
                        ys = [ arg | arg <- args tr, not (elem arg xs) ]
-                       zs = [ getBindTypeId arg | arg <- xs]
+                       zs = [ getArgsId (fst targ) | arg <- xs, targ <- targs, getArgsType (fst targ) == getBindTypeType arg ]
                    in if null zs 
                       then tr { whereClause = ""}
                       else let tr' = tr { args = ys, compTrigger = updCEne (compTrigger tr) (BindingVar (BindId (head zs))) }
@@ -677,10 +650,6 @@ adaptTrigger tr targs mp ci =
                            in head $ instantiateTrs [tr'] mp                           
               BindingVar BindStar        -> tr { whereClause = ""}
       _                      -> tr { whereClause = ""} 
-
-adaptArgs :: TriggerDef -> [Args] -> TriggerDef
-adaptArgs tr []     = tr
-adaptArgs tr (x:xs) = undefined
 
 instantiateProp :: Property -> [Args] -> CreateActInfo -> Property
 instantiateProp PNIL _ _                               = PNIL

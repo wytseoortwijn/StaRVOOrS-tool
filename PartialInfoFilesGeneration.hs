@@ -1,4 +1,4 @@
-module PartialInfoFilesGeneration (htsJavaFileGen, idFileGen, oldExprFileGen,messagesFileGen,cloningFileGen,templatesFileGen) where
+module PartialInfoFilesGeneration (javaFilesGen) where
 
 import Types
 import System.Directory
@@ -9,8 +9,37 @@ import UpgradePPDATE
 import ErrM
 import Data.List
 import qualified Data.Map as Map
-import Data.Maybe
-import Data.List
+import Data.Maybe (fromJust)
+import TypeInferenceXml
+import Instrumentation
+
+----------------------------------------
+-- Instrumented Java files generation --
+----------------------------------------
+
+javaFilesGen :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO (UpgradePPD PPDATE)
+javaFilesGen ppdate jpath output_addr = 
+ do putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
+    oldExpTypes <- inferTypesOldExprs ppdate jpath (output_addr ++ "workspace/")
+    let ppdate'' = operationalizeOldResultBind ppdate oldExpTypes
+    let add = output_addr ++ "ppArtifacts/"
+    let annotated_add = getSourceCodeFolderName jpath ++ "/"
+    createDirectoryIfMissing True add
+    createDirectoryIfMissing True (output_addr ++ annotated_add)
+    htsJavaFileGen ppdate'' add
+    idFileGen add
+    cloningFileGen add
+    oldExprFileGen add ppdate''
+    templatesFileGen add ppdate''
+    messagesFileGen add (getEnvVal ppdate'')
+    copyFiles jpath (output_addr ++ annotated_add)
+    methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
+    return ppdate''
+
+
+getSourceCodeFolderName :: FilePath -> String
+getSourceCodeFolderName s = let (xs,ys) = splitAtIdentifier '/' $ (reverse . init) s
+                            in reverse xs
 
 -----------------------
 -- HoareTriples.java --
@@ -117,17 +146,9 @@ methodForPre c env =
  do (argsPre, _) <- lookForAllEntryTriggerArgs env c
     return $ "  // " ++ (htName c) ++ "\n"
              ++ "  public static boolean " ++ (htName c) ++ "_pre(" ++ argsPre ++ ") {\n" 
-             ++ "    return " ++ pre c ++ addNewPre c ++ ";\n"
+             ++ "    return " ++ pre c ++ ";\n"
              ++ "  }\n\n"
 
-
-addNewPre :: HT -> String
-addNewPre c = 
- if (null (optimized c))
- then ""
- else if (head.optimized) c == "(true)"
-      then ""
-      else " && " ++ (head.optimized) c
 
 extracMethodDefinitions :: [Either (String,String) String] -> [String]
 extracMethodDefinitions []             = []
@@ -146,9 +167,9 @@ lookforArgs (x:xs) e = if (fst x==e)
                        else lookforArgs xs e 
 
 
--------------
+----------------
 -- IdPPD.java --
--------------
+----------------
 
 idFileGen :: FilePath -> IO ()
 idFileGen output_add = writeFile (output_add ++ "IdPPD.java") idGen

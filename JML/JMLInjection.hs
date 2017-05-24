@@ -1,4 +1,4 @@
-module JMLInjection(generateTmpFilesAllConsts,generateTmpFilesCInvs,updateTmpFilesCInvs,generateDummyBoolVars) where
+module JMLInjection(injectJMLannotations) where
 
 import Types
 import JMLGenerator
@@ -8,11 +8,34 @@ import Data.Char
 import UpgradePPDATE
 import ErrM
 import JavaLanguage
-import System.IO
+import qualified System.IO
 
 -------------------------------------------------
 -- Injecting JML annotations for Hoare triples --
 -------------------------------------------------
+
+injectJMLannotations :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO ()
+injectJMLannotations ppd jpath output_addr = 
+ let toAnalyse_add = output_addr ++ "workspace/files2analyse"
+     tmp_add       = output_addr ++ "workspace/files/"
+     cinv_add      = output_addr ++ "workspace/filescinv"
+     nulla_add     = output_addr ++ "workspace/filesnullable/"
+     filesnu_add   = output_addr ++ "workspace/filesnu"
+ in do createDirectoryIfMissing False tmp_add
+       createDirectoryIfMissing False toAnalyse_add
+       createDirectoryIfMissing False nulla_add
+       createDirectoryIfMissing False cinv_add
+       createDirectoryIfMissing False filesnu_add
+       generateDummyBoolVars ppd tmp_add jpath
+       generateTmpFilesCInvs ppd cinv_add tmp_add
+       updateTmpFilesCInvs ppd nulla_add cinv_add
+       let consts_jml = JMLGenerator.getHTs ppd
+       copyFiles jpath toAnalyse_add
+       generateTmpFilesAllConsts ppd consts_jml toAnalyse_add nulla_add  
+
+---------------------------------------------
+-- Injecting JML annotations for contracts --
+---------------------------------------------
 
 generateTmpFilesAllConsts :: UpgradePPD PPDATE -> HTjml -> FilePath -> FilePath -> IO ()
 generateTmpFilesAllConsts ppd consts_jml output_add jpath =
@@ -46,7 +69,7 @@ genTmpFilesConst (main, cl) output_add ((mn, cl', ov,jml):xs)  r =
     else genTmpFilesConst (main, cl) output_add xs  r
 
 
-lookForMethodDef :: MethodName -> Overloading -> [String] -> ([String], [String])
+lookForMethodDef :: MethodName -> Overriding -> [String] -> ([String], [String])
 lookForMethodDef mn _ []        = error $ "Something went wrong when annotating the method " ++ mn ++ ".\n"
 lookForMethodDef mn ov (xs:xss) = 
  let ys = splitOnIdentifier mn xs
@@ -67,7 +90,7 @@ lookForMethodDef mn ov (xs:xss) =
             else (xs:a, b) --not referring to a method
                 where (a, b) = lookForMethodDef mn ov xss
 
-checkArguments :: Overloading -> [String] -> Bool
+checkArguments :: Overriding -> [String] -> Bool
 checkArguments _ []           = False
 checkArguments OverNil _      = True
 checkArguments (Over []) [[]] = True
@@ -101,10 +124,10 @@ updateTmpFilesCInvs ppd output_add jpath =
  do let (ppdate, env) =  fromOK $ runStateT ppd emptyEnv
     let imports       = importsGet ppdate
     let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
-    sequence $ map (\ i -> updateTmpFileCInv i output_add jpath (varsInFiles env)) imports'
+    sequence $ map (\ i -> updateTmpFileCInv i output_add jpath (javaFilesInfo env)) imports'
 
-updateTmpFileCInv :: Import -> FilePath -> FilePath -> [(String, String, [(String,String)])] -> IO ()
-updateTmpFileCInv i output_add jpath vars =
+updateTmpFileCInv :: Import -> FilePath -> FilePath -> [(String, ClassInfo, JavaFilesInfo)] -> IO ()
+updateTmpFileCInv i output_add jpath jinfo =
   do (main, cl) <- makeAddFile i
      let jpath' = jpath ++ "/" ++ main
      let output_add' = output_add ++ "/" ++ main
@@ -112,7 +135,7 @@ updateTmpFileCInv i output_add jpath vars =
      let file        = jpath' ++ "/" ++ (cl ++ ".java")    
      let tmp         = output_add' ++ "/" ++ (cl ++ ".java")
      r <- readFile file
-     let varsc = getListOfTypesAndVars cl vars
+     let varsc = getListOfTypesAndVars cl jinfo
      let (ys, zs) = lookForClassBeginning cl (lines r)
      writeFile tmp ((unlines ys) ++ (unlines (searchAndAnnotateVars zs varsc)))
 
@@ -250,4 +273,3 @@ updateJCC (cn, c) []            = [(cn, [c])]
 updateJCC (cn, c) ((cn',cs):xs) = if (cn == cn')
                                   then (cn', c:cs) : xs
                                   else (cn', cs):updateJCC (cn, c) xs
-

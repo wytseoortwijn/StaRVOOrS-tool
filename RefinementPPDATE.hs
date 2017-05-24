@@ -1,12 +1,74 @@
-module RefinementPPDATE (refinePPDATE, getClassVar,generateNewTriggers) where
+module RefinementPPDATE (specRefinement, getClassVar) where
 
 import Types
 import CommonFunctions
 import DL2JML
-import qualified Data.Map as Map
 import UpgradePPDATE
 import Data.List
 import Data.Maybe
+import Optimisations
+import qualified ParserAct as ParAct
+import ErrM
+import qualified PrintActions as PrintAct
+import TranslatorActions
+
+
+specRefinement :: UpgradePPD PPDATE -> Either [Proof] [Proof] -> Filename -> FilePath -> IO (UpgradePPD PPDATE)
+specRefinement ppdate (Left []) _ _  = return ppdate
+specRefinement ppdate (Right []) _ _ =
+ if (null (htsGet $ getValue ppdate))
+ then return ppdate
+ else let ppdref = generateNewTriggers ppdate (htsGet $ getValue ppdate)  
+      in return $ translateActions $ replacePInit $ namedCreateActPPD ppdref
+specRefinement ppdate (Right proofs) fn output_addr =
+ do let ppdref  = refinePPDATE ppdate proofs
+    let ppdref' = prepareRefPPD ppdref
+    let ppdate' = translateActions $ replacePInit $ namedCreateActPPD ppdref
+    let refFile = output_addr ++ generateRefPPDFileName fn
+    writeFile refFile (writePPD ppdref')
+    return ppdate'
+
+-------------------------
+-- Auxiliary functions --
+-------------------------
+
+generateRefPPDFileName :: Filename -> Filename
+generateRefPPDFileName fn = 
+ let (ext, _:name) = break ('.' ==) $ reverse fn 
+     xs = splitOnIdentifier "/" name     
+ in if (length xs == 1)
+    then reverse name ++ "_optimised.ppd"
+    else reverse (head xs) ++ "_optimised.ppd"
+
+prepareRefPPD :: UpgradePPD PPDATE -> UpgradePPD PPDATE
+prepareRefPPD = removeGeneratedTriggers
+
+removeGeneratedTriggers :: UpgradePPD PPDATE -> UpgradePPD PPDATE
+removeGeneratedTriggers ppd = 
+ do ppdate <- ppd
+    return $ remGeneratedTriggers ppdate
+
+remGeneratedTriggers :: PPDATE -> PPDATE
+remGeneratedTriggers ppdate@(PPDATE _ (Global ctxt@(Ctxt [] [] [] PNIL (foreach:fors))) _ _ _ _) = 
+ let ctxt''  = removeFromTrsCtxt (getCtxtForeach foreach)
+     fors'   = (updCtxtForeach foreach ctxt''):fors
+     ctxt''' = updateCtxtFors ctxt fors'
+     global' = Global ctxt'''
+ in updateGlobalPP ppdate global'
+remGeneratedTriggers ppdate@(PPDATE _ (Global ctxt) _ _ _ _) = 
+ let ctxt'   = removeFromTrsCtxt ctxt
+     global' = Global ctxt'
+ in updateGlobalPP ppdate global'
+
+removeFromTrsCtxt :: Context -> Context 
+removeFromTrsCtxt ctxt@(Ctxt _ _ trs _ _) = updateCtxtTrs ctxt (removeFromTriggers trs)
+
+removeFromTriggers :: Triggers -> Triggers
+removeFromTriggers []       = []
+removeFromTriggers (tr:trs) = 
+ if isInfixOf "_ppden" (tName tr) || isInfixOf "_ppdex" (tName tr)
+ then removeFromTriggers trs
+ else tr:removeFromTriggers trs
 
 -----------------------
 -- ppDATE refinement --
@@ -25,61 +87,89 @@ refinePPDATE ppd proofs =
      ppdate'   = getValue ppd'
      global    = globalGet ppdate'
      triggers' = getAllTriggers global env
-     consts''  = updateHTs nproved consts' triggers'
+     consts''  = strengthenPre $ updateHTs nproved consts' triggers'
      env'      = getEnvVal ppd'     
-     global'   = optimizedProvenHTs cproved refinePropertyOptGlobal global
+     global'   = optimisedProvenHTs cproved refinePropertyOptGlobal global
      temps     = templatesGet ppdate'
-     temps'    = optimizedProvenHTs cproved refinePropertyOptTemplates temps
+     temps'    = optimisedProvenHTs cproved refinePropertyOptTemplates temps
      ppdate''  = updateTemplatesPP (updateHTsPP (updateGlobalPP ppdate' global') consts'') temps'
  in do put env'
        return ppdate''
 
---------------------------------------------------
--- Remove Hoare triples which were fully proved --
---------------------------------------------------
+-----------------------------------------------------------------
+-- Generate name for the channels associated to actions create --
+-----------------------------------------------------------------
 
-optimizedProvenHTs :: HTriples -> (HTName -> a -> a) -> a -> a
-optimizedProvenHTs [] f ps     = ps
-optimizedProvenHTs (c:cs) f ps = f (htName c) $ optimizedProvenHTs cs f ps
+namedCreateActPPD :: UpgradePPD PPDATE -> UpgradePPD PPDATE
+namedCreateActPPD ppd = 
+ do let env = getEnvVal ppd
+    put (namedCreateAct env)
+    return (getValue ppd)
 
-refinePropertyOptTemplates :: HTName -> Templates -> Templates
-refinePropertyOptTemplates _ TempNil       = TempNil
-refinePropertyOptTemplates cn (Temp temps) = Temp $ map (refineTemplate cn) temps
+namedCreateAct :: Env -> Env
+namedCreateAct env =
+ let xs = allCreateAct env 
+     ys = genChannelNames $ zip xs [1..length xs]
+ in env { allCreateAct = ys}
 
-refineTemplate :: HTName -> Template -> Template
-refineTemplate cn temp = updateTemplateProp temp (removeStatesProp cn $ tempProp temp)
+genChannelNames :: [(CreateActInfo,Int)] -> [CreateActInfo]
+genChannelNames []                 = []
+genChannelNames ((cai,n):xs) = (cai {caiCh = "cact"++show n}):genChannelNames xs
 
-refinePropertyOptGlobal :: HTName -> Global -> Global
-refinePropertyOptGlobal cn (Global ctxt) = Global $ refineContext cn ctxt
+---
+--
+---
 
-refineContext :: HTName -> Context -> Context
-refineContext cn (Ctxt vars ies trigs prop fors) = 
- let prop' = removeStatesProp cn prop
- in Ctxt vars ies trigs prop' (map (refineForeach cn) fors)
+translateActions :: UpgradePPD PPDATE -> UpgradePPD PPDATE
+translateActions ppd =
+ do ppdate <- ppd
+    return $ translateActInPPD ppdate (getEnvVal ppd)
 
-refineForeach :: HTName -> Foreach -> Foreach
-refineForeach cn foreach = updCtxtForeach foreach (refineContext cn (getCtxtForeach foreach))
+translateActInPPD :: PPDATE -> Env -> PPDATE
+translateActInPPD (PPDATE imps global temps cinvs hts ms) env = 
+ PPDATE imps (translateActInGlobal global env) (translateActInTemps temps env) cinvs hts ms
 
-removeStatesProp :: HTName -> Property -> Property
-removeStatesProp _ PNIL               = PNIL
-removeStatesProp _ p@(PINIT _ _ _ _)  = p
-removeStatesProp cn prop = let States acc bad nor star = pStates prop
-                               acc'  = map (\s -> removeStateProp s cn) acc
-                               bad'  = map (\s -> removeStateProp s cn) bad
-                               nor'  = map (\s -> removeStateProp s cn) nor
-                               star' = map (\s -> removeStateProp s cn) star
-                               states = States acc' bad' nor' star'
-                           in Property (pName prop) states (pTransitions prop) (removeStatesProp cn (pProps prop))
 
-removeStateProp :: State -> HTName -> State
-removeStateProp (State ns ic cns) cn = State ns ic (removePropInState cn cns)
+translateActInGlobal :: Global -> Env -> Global
+translateActInGlobal (Global ctxt) env = Global (translateActInCtxt ctxt env)
 
-removePropInState :: HTName -> [HTName] -> [HTName]
-removePropInState cn []        = []
-removePropInState cn (cn':cns) = if (cn == cn')
-                                 then cns
-                                 else cn':removePropInState cn cns
+translateActInCtxt :: Context -> Env -> Context
+translateActInCtxt ctxt env = 
+ let prop' = translateActInProps (property ctxt) env
+     fors' = translateActInFors env (foreaches ctxt)
+ in updateCtxtProps (updateCtxtFors ctxt fors') prop'
+ 
+translateActInProps :: Property -> Env -> Property
+translateActInProps PNIL _                            = PNIL
+translateActInProps (PINIT nm tmp bnds props) env     = PINIT nm tmp bnds (translateActInProps props env)
+translateActInProps (Property nm sts trans props) env = Property nm sts (translateActInTrans env trans) (translateActInProps props env)
 
+translateActInFors :: Env -> Foreaches -> Foreaches
+translateActInFors env = map (translateActInFor env)
+
+translateActInFor :: Env -> Foreach -> Foreach
+translateActInFor env foreach = updCtxtForeach foreach (translateActInCtxt (getCtxtForeach foreach) env)
+
+translateActInTrans :: Env -> Transitions -> Transitions
+translateActInTrans env = map (translateActInTran env)
+
+translateActInTran :: Env -> Transition -> Transition
+translateActInTran env (Transition q (Arrow tr cond act) q') =
+ Transition q (Arrow tr cond (translateAction act env)) q'
+
+translateAction :: Action -> Env -> Action
+translateAction [] _    = ""
+translateAction act env = 
+ case ParAct.parse act of 
+      Ok ac -> PrintAct.printTree (translateAct ac env)
+
+translateActInTemps :: Templates -> Env -> Templates
+translateActInTemps TempNil _       = TempNil
+translateActInTemps (Temp tmps) env = Temp $ map (translateActInTemp env) tmps
+
+translateActInTemp :: Env -> Template -> Template
+translateActInTemp env tmp = 
+ updateTemplateProp tmp (translateActInProps (tempProp tmp) env)
 
 ------------------------------------------------------
 -- Get information from the results produced by KeY --
@@ -89,7 +179,6 @@ updateHTs :: [(MethodName, HTName, [Pre],String)] -> HTriples -> Triggers -> HTr
 updateHTs [] consts _      = consts
 updateHTs (x:xs) consts es = updateHTs xs (updateHT x consts es) es
 
-
 updateHT :: (MethodName, HTName, [Pre],String) -> HTriples -> Triggers -> HTriples
 updateHT (mn,cn,pres,path) [] _      = []
 updateHT (mn,cn,pres,path) (c:cs) es = 
@@ -97,30 +186,23 @@ updateHT (mn,cn,pres,path) (c:cs) es =
  then if (null pres)
       then c:updateHT (mn,cn,pres,path) cs es
       else let pres' = removeDuplicates pres
-               opt'  = simplify $ map (addParenthesisNot.removeDLstrContent) pres'
+               opt'  = simplify $ map refineNewCond pres'
                opt'' = '(':introduceOr opt' ++ [')']
-               c'    = updatePath (updateOpt c [opt'']) path
-               c''   = updatePre c' $ removeDLstrContent (pre c)
-               c'''  = updatePost c'' $ removeDLstrContent (post c)
+               c'    = updatePath (updateNewPre c [opt'']) path
+               c''   = updatePre c' $ refineCond (pre c)
+               c'''  = updatePost c'' $ refineCond (post c)
            in c''':cs
  else c:updateHT (mn,cn,pres,path) cs es
 
 getClassVar :: HT -> Triggers -> TriggerVariation -> String
 getClassVar c es ev = lookupClassVar es c ev
 
---Optimise generated preconditions
-simplify :: [String] -> [String]
-simplify = checkMiddleExcluded 
+refineNewCond :: Pre -> Pre
+refineNewCond = addParenthesisNot . removeDLstrContent
 
---If middle excluded, then verify original precondition
-checkMiddleExcluded :: [String] -> [String]
-checkMiddleExcluded [xs,ys] = 
- let xs' = "!(" ++ xs ++ ")"
-     ys' = "!(" ++ ys ++ ")"
- in if ys == xs' || xs == ys'
-    then ["true"]
-    else [xs,ys]
-checkMiddleExcluded xss     = xss
+refineCond :: Pre -> Pre
+refineCond = removeDLstrContent
+
 
 -- returns variable name used to instantiate the class in the ppDATE
 lookupClassVar :: Triggers -> HT -> TriggerVariation -> String
@@ -168,7 +250,7 @@ getExTr (e:es) c ev =
                   else getExTr es c ev
       _                                   -> getExTr es c ev
 
-checkArgsOver :: [Bind] -> [Bind] -> Overloading -> Bool
+checkArgsOver :: [Bind] -> [Bind] -> Overriding -> Bool
 checkArgsOver _ _ OverNil  = True
 checkArgsOver bs ceargs ov =
  let ov' = generateOverloading bs ceargs
@@ -189,19 +271,19 @@ generateNewTriggers :: UpgradePPD PPDATE -> HTriples -> UpgradePPD PPDATE
 generateNewTriggers ppd consts =
   do let env    = getEnvVal ppd
      let ppdate = getValue ppd     
-     let mfiles = methodsInFiles env
+     let mfiles = javaFilesInfo env
      let mns    = removeDuplicates $ map methodCN consts
      let entry  = filterDefEntryTriggers mns (allTriggers env) 
-     let entry' = [(mnc, checkOverloading (filter (\(_,mn,_,_) -> mname mnc == mn) z) (overl mnc)) | mnc <- entry, (_,d,z) <- mfiles,d == clinf mnc]
-     let exit   = [(mnc, checkOverloading (filter (\(_,mn,_,_) -> mname mnc == mn) z) (overl mnc)) | mnc <- mns, (_,d,z) <- mfiles,d == clinf mnc]
+     let entry' = [(mnc, checkOverloading (filter (\(_,mn,_,_) -> mname mnc == mn) (methodsInFiles z)) (overl mnc)) | mnc <- entry, (_,d,z) <- mfiles,d == clinf mnc]
+     let exit   = [(mnc, checkOverloading (filter (\(_,mn,_,_) -> mname mnc == mn) (methodsInFiles z)) (overl mnc)) | mnc <- mns, (_,d,z) <- mfiles,d == clinf mnc]
      let scope  = properScope ppdate
      let (env',ppdate') = addNewTriggerEntry env 0 entry' ppdate scope
      let env''  = addNewTriggerExit env' (length entry') exit scope     
      put env''
      return ppdate'
 
-checkOverloading :: [(String,MethodName,[String],MethodInvocations)] -> Overloading -> (String,MethodName,[String],MethodInvocations)
-checkOverloading [] _                          = error "FUCK"
+checkOverloading :: [(String,MethodName,[String],MethodInvocations)] -> Overriding -> (String,MethodName,[String],MethodInvocations)
+checkOverloading [] _                          = error "Problem with overloading.\n"
 checkOverloading (val@(_,_,args,_):xs) OverNil = val
 checkOverloading (val@(_,_,args,_):xs) ov      = 
  if Over (map (getBindTypeType.makeBind) args) == ov

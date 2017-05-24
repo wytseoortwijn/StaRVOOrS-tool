@@ -174,17 +174,20 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
     let id'' = getIdAbs id
     let xs   = [ x | x <- allTriggers env, id'' == tiTN x, tiScope x == scope ]
     let err  = if (not.null) xs
-               then "Error: Multiple definitions for trigger " ++ id'' ++ ".\n" ++ show scope ++ "\n" 
+               then "Error: Multiple definitions for trigger " 
+                    ++ id'' ++ ".\n" ++ show scope ++ "\n" 
                else ""
     do case runWriter (getBindsArgs binds) of
          (bs, s) ->
            let err0 = if (not.null) s 
-                      then (err ++ "Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s ++ "].\n")
+                      then err ++ "Error: Trigger declaration [" ++ id'' 
+                           ++ "] uses wrong argument(s) [" ++ s ++ "].\n"
                       else err
            in case runWriter (getCompTriggers ce) of
                  (ce',s') ->
                    let err1 = if (not.null) s'
-                              then err0 ++ ("Error: Trigger declaration [" ++ id'' ++ "] uses wrong argument(s) [" ++ s' ++ "] in the method component.\n")
+                              then err0 ++ ("Error: Trigger declaration [" ++ id'' 
+                                   ++ "] uses wrong argument(s) [" ++ s' ++ "] in the method component.\n")
                               else err0
                        argss = map getBindTypeId bs
                    in case ce' of
@@ -196,7 +199,8 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                                        wcs = [x | x <- argss, not(elem x allArgs)]
                                                        vs  = filter (\ x -> x /= id) $ checkVarsInitialisation wcs (getVarsWC wc)
                                                     in if ((not.null) vs) 
-                                                       then fail (err1 ++ "Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
+                                                       then fail $ err1 ++ "Error: Missing Initialization of variable(s) " 
+                                                                   ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n"
                                                        else
                                                          case runWriter ((checkAllArgs argss allArgs bind)) of
                                                           (b,zs) ->
@@ -214,7 +218,8 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                                                                          , compTrigger = ce'
                                                                                          , whereClause = getWhereClause wc
                                                                                          }
-                                                                     put env { allTriggers = TI id'' mn ci cinm EVEntry bs (Just tr) scope ov: allTriggers env }
+                                                                     let ti = TI id'' mn ci cinm EVEntry bs (Just tr) scope ov
+                                                                     put env { allTriggers = ti : allTriggers env }
                                                                      return tr
                                                                 else fail (err1 ++ s'')
                                        EVExit rs -> let id  = getIdBind bind
@@ -223,7 +228,8 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                                         rs' = map getIdBind rs
                                                         vs  = filter (\ x -> (not (elem x rs')) && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
                                                     in if ((not.null) vs) 
-                                                       then fail (err1 ++ "Error: Missing Initialization of variable(s) " ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n")
+                                                       then fail $ err1 ++ "Error: Missing Initialization of variable(s) " 
+                                                                   ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n"
                                                        else
                                                         case runWriter ((checkAllArgs argss allArgs bind)) of
                                                           (b,zs) ->
@@ -238,7 +244,8 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                                                                             , compTrigger = ce'
                                                                                             , whereClause = wc'
                                                                                             }
-                                                                        put env { allTriggers = TI id'' mn ci cinm (EVExit rs) bs (Just tr) scope ov: allTriggers env }
+                                                                        let ti = TI id'' mn ci cinm (EVExit rs) bs (Just tr) scope ov
+                                                                        put env { allTriggers = ti : allTriggers env }
                                                                         return tr
                                                                 else fail (err1 ++ s'')
                                        _        -> return TriggerDef { tName = id''
@@ -254,7 +261,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                                      , whereClause = getWhereClause wc
                                                      }
 
-generateOverloading :: [Bind] -> [Bind] -> Overloading
+generateOverloading :: [Bind] -> [Bind] -> Overriding
 generateOverloading bs [] = Over []
 generateOverloading bs ms = Over $ map (getTypeForOverLoading bs) (map getIdBind ms)
 
@@ -289,7 +296,9 @@ checkMNforNew mn bind bs rs id zs =
                         else if elem (BindType id (getBindIdId (head rs))) bs
                              then if null zs 
                                   then return True
-                                  else fail $ "Error: Trigger declaration [" ++ id ++ "] uses wrong argument(s) [" ++ addComma zs ++ "] in the method component.\n"
+                                  else fail $ "Error: Trigger declaration [" ++ id 
+                                              ++ "] uses wrong argument(s) [" ++ addComma zs 
+                                              ++ "] in the method component.\n"
                              else do tell $ "Error: Wrong exit object in trigger " ++ id ++ "\n."
                                      return False
       _         -> return False
@@ -492,7 +501,8 @@ getTransition' :: PropertyName -> Env -> Scope -> Abs.Transition -> Writer Strin
 getTransition' id env scope (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) = 
  case runWriter (getArrow ar env scope) of
       ((xs,env'),s) -> 
-                do let err = "Error: Parsing error in an action of a transition from state " ++ getIdAbs q1 ++ " to state " 
+                do let err = "Error: Parsing error in an action of a transition from state " 
+                             ++ getIdAbs q1 ++ " to state " 
                              ++ getIdAbs q2 ++ " in property " ++ id ++ ".\n"
                    let s' = if null s then "" else err ++ s
                    tell s'                  
@@ -596,8 +606,7 @@ getForeach (Abs.ForeachesDef args ctxt Abs.ForeachesNil) id =
       [] -> do let args'     = map getArgs args
                let propn     = pName $ property ctxt'
                let Args t cl = head $ args'               
-               put env { forsVars      = forsVars env ++ map getArgsId args'
-                       , propInForeach = (propn,t,cl):propInForeach env }               
+               put env { propInForeach = (propn,t,cl):propInForeach env }               
                return $ Foreach args' ctxt' id
       _  -> fail $ "Error: StaRVOOrS does not support nested Foreaches.\n"
 
@@ -630,11 +639,13 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
     let prop' = getProperty prop (map tName trigs') env (InTemp (getIdAbs id))
     let extrs = getExitTrsInfo trigs'
     case runWriter prop' of
-         ((PNIL,env'),_)                      -> fail $ "Error: The template " ++ getIdAbs id ++ " does not have a PROPERTY section.\n"
+         ((PNIL,env'),_)                      -> fail $ "Error: The template " ++ getIdAbs id 
+                                                        ++ " does not have a PROPERTY section.\n"
          ((PINIT pname id' xs props,env'),s)  -> 
                   let temptrs = splitOnIdentifier "," $ fst s
                       s'      = snd s ++ if props /= PNIL 
-                                         then "Error: In template " ++ getIdAbs id ++ ", a template should describe only one property.\n"
+                                         then "Error: In template " ++ getIdAbs id 
+                                               ++ ", a template should describe only one property.\n"
                                          else "" 
                   in if ((not.null) s')
                      then fail s'
@@ -653,7 +664,8 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                       start   = checkAllHTsExist (getStarting states) cns pname (InTemp (getIdAbs id))
                       errs    = concat $ start ++ accep ++ bad ++ normal
                       s'      = snd s ++ errs ++ if props /= PNIL 
-                                                 then "Error: In template " ++ getIdAbs id ++ ", a template should describe eonly one property.\n"
+                                                 then "Error: In template " ++ getIdAbs id 
+                                                       ++ ", a template should describe eonly one property.\n"
                                                  else ""
                       temptrs = splitOnIdentifier "," $ fst s
                   in if ((not.null) s')
@@ -728,7 +740,7 @@ checkTempArgs targs env scope =
           , checkTempArgsHTriples (map snd $ targHT targs) (htsNames env)
           , checkTempArgsConditions (map snd $ targCond targs)
           , checkTempArgsTriggers (map snd $ targTr targs) (allTriggers env) scope
-          , checkMethodNames (map snd $ targMN targs) (methodsInFiles env)
+          , checkMethodNames (map snd $ targMN targs) (javaFilesInfo env)
           ]
 
 checkTempArgsActions :: [Act.Args] -> Writer String Bool
@@ -767,9 +779,9 @@ checkTempArgsTriggers targs tinfs scope =
     then return True 
     else writer (False, "Error: In an action create, the trigger(s) [" ++ addComma xs ++ "] do(es) not exist.\n") 
 
-checkMethodNames :: [Act.Args] -> [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])] -> Writer String Bool
+checkMethodNames :: [Act.Args] -> [(String, ClassInfo, JavaFilesInfo)] -> Writer String Bool
 checkMethodNames targs minfs =
- let xs = removeDuplicates [ mn | mn <- map showActArgs targs, (_,_,xs) <- minfs, (_,mn',_,_) <- xs, mn == mn' ]
+ let xs = removeDuplicates [ mn | mn <- map showActArgs targs, (_,_,xs) <- minfs, (_,mn',_,_) <- methodsInFiles xs, mn == mn' ]
  in if length xs == length targs
     then return True 
     else writer (False, "Error: In an action create, the method(s) [" 
@@ -825,7 +837,7 @@ getHT imps (Abs.HT id pre' method post' ass) =
                                   , pre          = genPre pre'
                                   , post         = genPost post'
                                   , assignable   = genAssig ass
-                                  , optimized    = []
+                                  , newPRe       = []
                                   , chGet        = 0
                                   , path2it      = ""
                                   })
@@ -936,8 +948,7 @@ replacePInit ppd =
                       global'   = updateGlobal (globalGet ppdate) (Ctxt vars acts es prop' fors')
                       propns    = map piName (p:ps)
                       pif       = map (\(x,Args t cl) -> (x,t,cl)) $ zip propns (map (head.getArgsForeach) tmpFors)
-                  in do put env { forsVars = forsVars env ++ map getArgsId (concatMap getArgsForeach tmpFors) 
-                                , propInForeach = pif ++ propInForeach env  }
+                  in do put env { propInForeach = pif ++ propInForeach env  }
                         return $ updateGlobalPP ppdate global'
               []     -> ppd
 
@@ -1176,10 +1187,10 @@ getMethodClassInfo (Abs.Method ci _ _) = getIdAbs ci
 getMethodMethodName :: Abs.Method -> MethodName
 getMethodMethodName (Abs.Method _ mn _) = getIdAbs mn
 
-getMethodOverloading :: Abs.Method -> Overloading
+getMethodOverloading :: Abs.Method -> Overriding
 getMethodOverloading (Abs.Method _ _ over) = getOverloading over
 
-getOverloading :: Abs.Overloading -> Overloading 
+getOverloading :: Abs.Overriding -> Overriding 
 getOverloading Abs.OverNil = OverNil
 getOverloading (Abs.Over xs) = Over $ map getTypeAbs xs
 
@@ -1266,13 +1277,10 @@ getAllTriggers (Global (Ctxt vars ies trigs prop fors)) env =
 --------------------------------------------------------------------
 
 data Env = Env
- { forsVars        :: [Id] --foreach bounded variable names 
- , allTriggers     :: [TriggersInfo]
+ { allTriggers     :: [TriggersInfo]
  , htsNames        :: [HTName]
- , varsInFiles     :: [(String, ClassInfo, [(Type, Id)])]
- , varsInPPD       :: Variables
- , methodsInFiles  :: [(String, ClassInfo, [(Type,Id,[String],MethodInvocations)])]
-                      --[(path_to_class,class_name,[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body)])]
+ , javaFilesInfo   :: [(String, ClassInfo, JavaFilesInfo)]
+ , varsInPPD       :: Variables                    
  , oldExpTypes     :: OldExprM --types of the old expressions
  , tempsInfo       :: [(Id,[Args])]--[(name_template, args_of_template)]
  , propInForeach   :: [(PropertyName, ClassInfo, String)]-- is used to avoid ambigous reference to variable id in foreaches
@@ -1281,15 +1289,14 @@ data Env = Env
  }
   deriving (Show)
 
+
 type UpgradePPD a = CM.StateT Env Err a
 
 emptyEnv :: Env
-emptyEnv = Env { forsVars        = []
-               , allTriggers     = []
+emptyEnv = Env { allTriggers     = []
                , htsNames        = []
-               , varsInFiles     = []
+               , javaFilesInfo   = []
                , varsInPPD       = []
-               , methodsInFiles  = []
                , oldExpTypes     = Map.empty
                , tempsInfo       = []
                , propInForeach   = []

@@ -3,25 +3,27 @@ module OperationalizationPP (operationalizeOldResultBind, operationalizeForall, 
 import Types
 import CommonFunctions
 import DL2JML
-import RefinementPPDATE
+import RefinementPPDATE (getClassVar)
 import Data.Char
 import UpgradePPDATE
 import ErrM
-import Data.List
 import qualified Data.Map as Map
-import Data.Maybe
+import Data.Maybe (fromJust)
 import Data.List
 
+-------------------------------------
+-- Performs the operationalisation --
+-------------------------------------
 
 operationalizeOldResultBind :: UpgradePPD PPDATE -> Map.Map HTName [(String,Type)] -> UpgradePPD PPDATE
 operationalizeOldResultBind ppd oldExprTypesM =
  let (ppdate, env) =  fromOK $ runStateT ppd emptyEnv
      global   = globalGet ppdate
      consts   = htsGet ppdate
-     mfiles   = methodsInFiles env
-     methods  = map (\(x,y,z) -> (x,y,map (\(x,y,z,_) -> y) z)) mfiles
+     jinfo    = javaFilesInfo env
+     methods  = map (\(x,y,z) -> (x,y,map (\(x,y,z,_) -> y) (methodsInFiles z))) jinfo
      es       = getAllTriggers global env
-     xs       = map (\ c -> operationalizePrePostORB c (varsInFiles env) es methods oldExprTypesM) consts
+     xs       = map (\ c -> operationalizePrePostORB c (javaFilesInfo env) es methods oldExprTypesM) consts
      xs'      = map (\(Bad s) -> s) $ filter isBad $ map (\x -> runStateT x env) xs
      oldExpT  = Map.unions $ map (snd.goo env) xs
      consts'  = map (fst.goo env) xs
@@ -32,7 +34,7 @@ operationalizeOldResultBind ppd oldExprTypesM =
                  where goo env = \ x -> fst $ fromOK $ runStateT x env
 
 
-operationalizePrePostORB :: HT -> [(String, ClassInfo, [(Type, Id)])] -> Triggers -> [(String, ClassInfo, [String])] -> Map.Map HTName [(String,Type)] -> UpgradePPD (HT,OldExprM)
+operationalizePrePostORB :: HT -> [(String, ClassInfo, JavaFilesInfo)] -> Triggers -> [(String, ClassInfo, [String])] -> Map.Map HTName [(String,Type)] -> UpgradePPD (HT,OldExprM)
 operationalizePrePostORB c vars trigs methods oldExprTypesM = 
  do let cn             = htName c
     let p              = pre c
@@ -50,7 +52,7 @@ operationalizePrePostORB c vars trigs methods oldExprTypesM =
 --------------------------
 
 --Note: if classes with the same name in different folders allowed, then fix this method
-bindCV :: HT -> [(String, ClassInfo, [(String, String)])] -> Triggers -> [(String, ClassInfo, [String])] -> HT
+bindCV :: HT -> [(String, ClassInfo, JavaFilesInfo)] -> Triggers -> [(String, ClassInfo, [String])] -> HT
 bindCV c vars es methods =
  let bindEntry = getClassVar c es EVEntry
      bindExit  = getClassVar c es (EVExit [])
@@ -60,10 +62,10 @@ bindCV c vars es methods =
      post'  = concat $ bindVars bindExit varsc (post c)
      pre''  = concat $ bindMethods bindEntry mnames pre'
      post'' = concat $ bindMethods bindExit mnames post'
-     opt    = map (replaceSelfWith bindEntry) (optimized c)
- in updateOpt (updatePre (updatePost c post'') pre'') opt
+     npre   = map (replaceSelfWith bindEntry) (newPRe c)
+ in updateNewPre (updatePre (updatePost c post'') pre'') npre
 
-bindOldExp :: HT -> [(String, ClassInfo, [(String, String)])] -> Triggers -> [(String, ClassInfo, [String])] -> OldExprL -> OldExprL
+bindOldExp :: HT -> [(String, ClassInfo, JavaFilesInfo)] -> Triggers -> [(String, ClassInfo, [String])] -> OldExprL -> OldExprL
 bindOldExp c vars es _ []             = []
 bindOldExp c vars es ms ((x,y,z):xss) = 
  let bindEntry = getClassVar c es (EVEntry)
@@ -128,11 +130,11 @@ getExpression s = (takeWhile isCharExpression s, dropWhile isCharExpression s)
 isCharExpression :: Char -> Bool
 isCharExpression = (\c -> isIdentifierSymbol c || c == '.')
 
-getVarsToControl :: ClassInfo -> [(String, ClassInfo, [(String, String)])] -> [String]
-getVarsToControl cl []                     = []
-getVarsToControl cl ((main, cl', vars):xs) = if (cl == cl')
-                                             then map snd vars
-                                             else getVarsToControl cl xs
+getVarsToControl :: ClassInfo -> [(String, ClassInfo, JavaFilesInfo)] -> [String]
+getVarsToControl cl []                      = []
+getVarsToControl cl ((main, cl', jinfo):xs) = if (cl == cl')
+                                              then map snd $ varsInFiles jinfo
+                                              else getVarsToControl cl xs
 ----------
 -- \old --
 ----------

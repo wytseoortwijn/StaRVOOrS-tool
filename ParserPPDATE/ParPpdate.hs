@@ -462,10 +462,10 @@ happyIn168 x = Happy_GHC_Exts.unsafeCoerce# x
 happyOut168 :: (HappyAbsSyn ) -> (Assig)
 happyOut168 x = Happy_GHC_Exts.unsafeCoerce# x
 {-# INLINE happyOut168 #-}
-happyIn169 :: (Overloading) -> (HappyAbsSyn )
+happyIn169 :: (Overriding) -> (HappyAbsSyn )
 happyIn169 x = Happy_GHC_Exts.unsafeCoerce# x
 {-# INLINE happyIn169 #-}
-happyOut169 :: (HappyAbsSyn ) -> (Overloading)
+happyOut169 :: (HappyAbsSyn ) -> (Overriding)
 happyOut169 x = Happy_GHC_Exts.unsafeCoerce# x
 {-# INLINE happyOut169 #-}
 happyIn170 :: ([Type]) -> (HappyAbsSyn )
@@ -2885,7 +2885,7 @@ pListAssig tks = happySomeParser where
 pAssig tks = happySomeParser where
   happySomeParser = happyThen (happyParse 69# tks) (\x -> happyReturn (happyOut168 x))
 
-pOverloading tks = happySomeParser where
+pOverriding tks = happySomeParser where
   happySomeParser = happyThen (happyParse 70# tks) (\x -> happyReturn (happyOut169 x))
 
 pListType tks = happySomeParser where
