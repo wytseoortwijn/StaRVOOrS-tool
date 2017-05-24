@@ -574,19 +574,21 @@ writeTemplates (Temp temps) env consts =
      xs      = [ instantiateTemp for id args cai env | (id,args,for) <- skell , cai <- creates, id == caiId cai ] 
  in writeForeach xs consts env
 
+--Generates an abstract Foreach for the template
 generateRAtmp :: Template -> (Id, [Args], Foreach)
 generateRAtmp temp = (tempId temp, tempBinds temp, Foreach (filterRefTypes $ tempBinds temp) (generateCtxtForTemp temp) (ForId (tempId temp)))
 
 generateCtxtForTemp :: Template -> Context
 generateCtxtForTemp temp = Ctxt (tempVars temp) (tempActEvents temp) (tempTriggers temp) (tempProp temp) []
 
+--Creates an instance of the abstract Foreach
 instantiateTemp :: Foreach -> Id -> [Args] -> CreateActInfo -> Env -> Foreach
 instantiateTemp for id args cai env = 
  let ch     = caiCh cai
+     targs  = splitTempArgs (zip args (caiArgs cai)) emptyTargs  
      mp     = Map.union (makeRefTypeMap $ targRef targs) (makeMap $ targMN targs)
      trs    = addTriggerDef args cai env mp
      ctxt   = getCtxtForeach for 
-     targs  = splitTempArgs (zip args (caiArgs cai)) emptyTargs  
      trs'   = (genTriggerForCreate id ch args): instantiateTrs (triggers ctxt) mp
      ctxt'  = updateCtxtTrs ctxt (trs' ++ trs)
      ctxt'' = updateCtxtProps ctxt' (instantiateProp (property ctxt) args cai)
@@ -617,6 +619,7 @@ newWhereClause s =
      ys = (head.tail) xs
  in ys ++ " = " ++ ys ++ "_tmp" ++ " ;"
 
+--Adds existing triggers definition to an instance of a template
 addTriggerDef :: [Args] -> CreateActInfo -> Env -> Map.Map Id String -> Triggers
 addTriggerDef args cai env mp = 
  let refs  = targRef $ splitTempArgs (zip args (caiArgs cai)) emptyTargs
@@ -624,7 +627,7 @@ addTriggerDef args cai env mp =
      scope = caiScope cai
      trs   = allTriggers env 
  in [ adaptTrigger (fromJust $ tiTrDef tr) refs mp (tiCI tr) | tr <- trs, tiScope tr == scope, targ <- targs, (showActArgs $ snd targ) == tiTN tr]
-
+    
 adaptTrigger :: TriggerDef -> [(Args,Act.Args)] -> Map.Map Id String -> ClassInfo -> TriggerDef
 adaptTrigger tr [] _ _      = tr { whereClause = ""}
 adaptTrigger tr targs mp ci = 
@@ -634,7 +637,7 @@ adaptTrigger tr targs mp ci =
               BindingVar (BindId id)     -> 
                    let xs = [ arg | arg <- args tr, ci == getBindTypeType arg, id == getBindTypeId arg]
                        ys = [ arg | arg <- args tr, not (elem arg xs) ]
-                       zs = [ getBindTypeId arg | arg <- xs]
+                       zs = [ getArgsId (fst targ) | arg <- xs, targ <- targs, getArgsType (fst targ) == getBindTypeType arg ]
                    in if null zs 
                       then tr { whereClause = ""}
                       else let tr' = tr { args = ys, compTrigger = updCEne (compTrigger tr) (BindingVar (BindId (head zs))) }
@@ -647,10 +650,6 @@ adaptTrigger tr targs mp ci =
                            in head $ instantiateTrs [tr'] mp                           
               BindingVar BindStar        -> tr { whereClause = ""}
       _                      -> tr { whereClause = ""} 
-
-adaptArgs :: TriggerDef -> [Args] -> TriggerDef
-adaptArgs tr []     = tr
-adaptArgs tr (x:xs) = undefined
 
 instantiateProp :: Property -> [Args] -> CreateActInfo -> Property
 instantiateProp PNIL _ _                               = PNIL
