@@ -17,6 +17,7 @@ data JML
     | JMLForallRT Type IdJml BodyF
     | JMLExistsRT Type IdJml BodyF
     | JMLPar JML
+    | JMLNeg Symbols JML
     | JMLExp [Expression]
   deriving (Eq, Ord, Show, Read)
 

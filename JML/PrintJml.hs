@@ -118,6 +118,7 @@ instance Print JML where
     JMLForallRT type_ idjml bodyf -> prPrec i 0 (concatD [doc (showString "("), doc (showString "\\forall"), prt 0 type_, prt 0 idjml, prt 0 bodyf, doc (showString ")")])
     JMLExistsRT type_ idjml bodyf -> prPrec i 0 (concatD [doc (showString "("), doc (showString "\\exists"), prt 0 type_, prt 0 idjml, prt 0 bodyf, doc (showString ")")])
     JMLPar jml -> prPrec i 0 (concatD [doc (showString "("), prt 0 jml, doc (showString ")")])
+    JMLNeg symbols jml -> prPrec i 0 (concatD [prt 0 symbols, prt 0 jml])
     JMLExp expressions -> prPrec i 0 (concatD [prt 0 expressions])
 
 instance Print BodyF where
