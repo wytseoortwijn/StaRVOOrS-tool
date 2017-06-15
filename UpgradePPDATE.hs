@@ -1279,7 +1279,7 @@ getAllTriggers (Global (Ctxt vars ies trigs prop fors)) env =
 data Env = Env
  { allTriggers     :: [TriggersInfo]
  , htsNames        :: [HTName]
- , javaFilesInfo   :: [(String, ClassInfo, JavaFilesInfo)]
+ , javaFilesInfo   :: [(JPath, ClassInfo, JavaFilesInfo)]
  , varsInPPD       :: Variables                    
  , oldExpTypes     :: OldExprM --types of the old expressions
  , tempsInfo       :: [(Id,[Args])]--[(name_template, args_of_template)]

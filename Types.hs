@@ -274,6 +274,8 @@ type VarExp = String
 
 type XML = String
 
+type JPath = String
+
 type Java = String
 
 type Filename = String
@@ -624,5 +626,5 @@ options =
 data JavaFilesInfo = JavaFilesInfo
  { varsInFiles    :: [(Type, Id)]
  , methodsInFiles :: [(Type,Id,[String],MethodInvocations)] 
-                   --[(path_to_class,class_name,[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body)])]
+                   --[(path_to_class,method_name,args,[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body)])]
  } deriving(Eq,Show)

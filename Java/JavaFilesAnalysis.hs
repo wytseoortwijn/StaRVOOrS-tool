@@ -20,10 +20,10 @@ javaStaticAnalysis ppd jpath =
  do let imports = T.importsGet (fst . fromOK $ runStateT ppd emptyEnv)
     info <- sequence [ getJavaInfo i jpath
                      | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
-                     ]
-    return $ ppd >>= (\x -> do env <- get; put (env { javaFilesInfo = info }); return x)
+                     ] 
+    return $ ppd >>= (\x -> do env <- get ; checkMethodsExistance info (T.htsGet x) ; put (env { javaFilesInfo = info }) ; return x)
 
-getJavaInfo :: T.Import -> FilePath -> IO (String, T.ClassInfo,T.JavaFilesInfo)
+getJavaInfo :: T.Import -> FilePath -> IO (T.JPath, T.ClassInfo,T.JavaFilesInfo)
 getJavaInfo i jpath = 
  do (main, cl) <- makeAddFile i
     let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")
@@ -34,6 +34,38 @@ getJavaInfo i jpath =
     let methods  = getMethods java_aux
     let jinfo    = T.JavaFilesInfo vars methods
     return (main, cl, jinfo)
+
+--
+-- Checks if the methods associated to the Hoare triples exists in the corresponding Java files.
+--
+checkMethodsExistance :: [(T.JPath, T.ClassInfo, T.JavaFilesInfo)] -> T.HTriples -> UpgradePPD ()
+checkMethodsExistance info hts =     
+ let xs = methodExistence info hts
+ in if null xs
+    then return ()
+    else error $ concatMap wrongMethod xs
+
+methodExistence :: [(T.JPath, T.ClassInfo, T.JavaFilesInfo)] -> T.HTriples -> T.HTriples
+methodExistence jinfo hts = [ h | h <- hts, not $ methodExists h jinfo ]
+
+methodExists :: T.HT -> [(T.JPath, T.ClassInfo, T.JavaFilesInfo)] -> Bool
+methodExists h = foldr (\ x xs -> checkMethod x h || xs) False
+
+checkMethod :: (T.JPath, T.ClassInfo, T.JavaFilesInfo) -> T.HT -> Bool
+checkMethod info h = 
+ if (\(_,y,_) -> y) info == T.clinf (T.methodCN h) 
+ then let minfo = T.methodsInFiles $ (\(_,_,z) -> z) info
+          mn    = T.mname $ T.methodCN h 
+          ovl   = T.overl $ T.methodCN h 
+      in (not.null) [ id | (_,id,args,_) <- minfo , id == mn, (ovl == T.OverNil || ovl == over args)]
+ else False
+               where over = T.Over . map (head.words)
+
+wrongMethod :: T.HT -> String
+wrongMethod h = "Problem in the Hoare triple " ++ T.htName h 
+                ++ ". The method " ++ (T.mname . T.methodCN) h 
+                ++ " is not defined in the class " ++ (T.clinf . T.methodCN) h ++ ".\n"
+
 
 --
 --Gets the variables of all the java files involved in the verification process
