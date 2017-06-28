@@ -1174,7 +1174,7 @@ getJML :: Abs.JML -> String -> Writer String JMLExp
 getJML jml str = 
  let jml' = printTree jml in
  case ParJML.parse jml' of
-      Bad s -> do tell $ "Parse error on the " ++ str
+      Bad s -> do tell $ "Parse error on the \n" ++ jml'--"Parse error on the " ++ str
                   return "Parse error"
       Ok _  -> return jml' 
 

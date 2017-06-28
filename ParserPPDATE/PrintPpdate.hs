@@ -32,8 +32,10 @@ render d = rend 0 (map ($ "") $ d []) "" where
     t: "%"   :ts -> space t . showChar '%' . rend i ts
     t: "."   :ts -> showString t . showChar '.' . rend i ts 
     t:":":":":ts -> showString t . showChar ':' . showChar ':' . rend i ts
+    "=":"=":">":ts -> showString "==" . space ">" . rend i ts
     "=" :"=" :ts -> showChar '=' . space "=" . rend i ts
     ">" :"=" :ts -> showChar '>' . space "=" . rend i ts
+    "<" :"=":"=":">" :ts -> showString "<==" . space ">" . rend i ts
     "<" :"=" :ts -> showChar '<' . space "=" . rend i ts
     "!" :"=" :ts -> showChar '!' . space "=" . rend i ts
     "!" :t   :ts -> showChar '!' . showString t . rend i ts

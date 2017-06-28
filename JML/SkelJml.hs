@@ -24,6 +24,7 @@ transJML x = case x of
   JMLForallRT type_ idjml bodyf -> failure x
   JMLExistsRT type_ idjml bodyf -> failure x
   JMLPar jml -> failure x
+  JMLNeg symbols jml -> failure x
   JMLExp expressions -> failure x
 transBodyF :: BodyF -> Result
 transBodyF x = case x of
