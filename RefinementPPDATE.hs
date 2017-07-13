@@ -11,6 +11,7 @@ import qualified ParserAct as ParAct
 import ErrM
 import qualified PrintActions as PrintAct
 import TranslatorActions
+import PPDATE2Script
 
 
 specRefinement :: UpgradePPD PPDATE -> Either [Proof] [Proof] -> Filename -> FilePath -> IO (UpgradePPD PPDATE)
@@ -25,7 +26,7 @@ specRefinement ppdate (Right proofs) fn output_addr =
     let ppdref' = prepareRefPPD ppdref
     let ppdate' = translateActions $ replacePInit $ namedCreateActPPD ppdref
     let refFile = output_addr ++ generateRefPPDFileName fn
-    writeFile refFile (writePPD ppdref')
+    writeFile refFile (ppd2Script $ getValue ppdref')
     return ppdate'
 
 -------------------------
