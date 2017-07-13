@@ -460,7 +460,7 @@ mAppend [] (y:ys) = y:ys
 mAppend (x:xs) [] = x:xs
 mAppend xs ys     = xs ++ "," ++ ys
 
-getStates' :: Abs.States -> States
+getStates' :: Abs.States -> Writer String States
 getStates' (Abs.States start accep bad norm) = States { getStarting = getStarting' start
                                                       , getAccepting = getAccepting' accep 
                                                       , getBad = getBad' bad
@@ -489,6 +489,30 @@ getState (Abs.State (Abs.NameState id) ic (Abs.CNS cns)) = State (getIdAbs id) (
 getInitCode :: Abs.InitialCode -> InitialCode
 getInitCode Abs.InitNil      = InitNil
 getInitCode (Abs.InitProg p) = InitProg (getJava p)
+
+uniqueNamesStates :: States -> Writer String States
+uniqueNamesStates sts = 
+ let accp = uniqueNames $ getAccepting sts
+     bad  = uniqueNames $ getBad sts
+     norm = uniqueNames $ getNormal sts
+     all  = accp ++ bad ++ norm
+ in if null all
+    then return sts
+    else do tell (msg all) 
+            return sts
+                        where msg xs = if length xs > 1
+                                       then "The following state names are not unique: " ++ show xs ++ "."
+                                       else "The following state name is not unique: " ++ show xs ++ "."
+
+uniqueNames :: [State] -> [NameState]
+uniqueNames sts = removeDuplicates [ getNameState st | st <- sts, (not.null) (getSameNameStates st sts) ]
+
+getSameNameStates :: State -> [State] -> [State]
+getSameNameStates _ []      = []
+getSameNameStates st (x:xs) = 
+ if getNameState st == getNameState x
+ then x:getSameNameStates st xs
+ else getSameNameStates st xs
 
 getTransitions :: PropertyName -> Abs.Transitions -> Env -> Scope -> Writer String (Transitions,Env)
 getTransitions id (Abs.Transitions ts) env scope = 
