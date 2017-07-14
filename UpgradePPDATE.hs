@@ -79,31 +79,33 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
          ((PNIL,env'),_)                              -> do put env'
                                                             getForeaches foreaches (Ctxt vars' ies' trigs' PNIL []) scope
          ((PINIT pname id xs props,env'),s)           -> 
-                  let trs = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
+                  let trs = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (fst' s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
                       s'  = if (not.null) trs
                             then "Error: Trigger(s) [" ++ trs 
                                  ++ "] is(are) used in the transitions, but is(are) not defined in section TRIGGERS.\n" 
-                                 ++ snd s
-                            else snd s
+                                 ++ snd' s
+                            else snd' s
                       s'' = if elem id (map fst $ tempsInfo env)
                             then ""
                             else "Error: In the definition of property " ++ pname
-                                 ++ ". The template " ++ id ++ " does not exist\n." 
-                  in if (null (s'++s''))
+                                 ++ ". The template " ++ id ++ " does not exist\n."
+                      s''' = trd' s
+                      alls = s' ++ s'' ++ s'''
+                  in if (null alls)
                      then do put env' 
                              getForeaches foreaches (Ctxt vars' ies' trigs' (PINIT pname id xs props) []) scope
-                     else fail s'
+                     else fail alls
          ((Property pname states trans props,env'),s) -> 
                   let accep  = checkAllHTsExist (getAccepting states) cns pname scope
                       bad    = checkAllHTsExist (getBad states) cns pname scope
                       normal = checkAllHTsExist (getNormal states) cns pname scope
                       start  = checkAllHTsExist (getStarting states) cns pname scope
                       errs   = concat $ start ++ accep ++ bad ++ normal
-                      trs    = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (fst s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
+                      trs    = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (fst' s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
                       s'     = if (not.null) trs
                                then "Error: Trigger(s) [" ++ trs ++ "] is(are) used in the transitions, but is(are) not defined in section TRIGGERS.\n" 
-                                     ++ snd s ++ errs
-                               else snd s ++ errs 
+                                     ++ snd' s ++ trd' s ++ errs
+                               else snd' s ++ trd' s ++ errs 
                   in if (null s')
                      then do put env' 
                              getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) []) scope
@@ -424,7 +426,7 @@ getWhereClause (Abs.WhereClauseDef wexp) = (concat.lines.printTree) wexp
 -- Properties --
 --
 
-getProperty :: Abs.Properties -> [Id] -> Env -> Scope -> Writer (String,String) (Property,Env)
+getProperty :: Abs.Properties -> [Id] -> Env -> Scope -> Writer (String,String,String) (Property,Env)
 getProperty Abs.PropertiesNil _ env _                                               = return (PNIL,env)
 getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms env scope = 
  let props' = getProperty props enms env scope
@@ -435,7 +437,7 @@ getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms env sc
                                  , tmpId   = getIdAbs id'
                                  , bounds  = map getIdAbs ids'
                                  , piProps = p
-                                 },env')
+                                 }, env')
 getProperty (Abs.ProperiesDef id (Abs.PropKindNormal states trans) props) enms env scope =
  let trans' = getTransitions (getIdAbs id) trans env scope in
  case runWriter trans' of
@@ -444,15 +446,18 @@ getProperty (Abs.ProperiesDef id (Abs.PropKindNormal states trans) props) enms e
                ts = map (trigger.arrow) t
            in case runWriter props' of
                    ((p,env''), s) -> 
-                              do let xs = [x | x <- ts, not(elem x enms)]
-                                 tell $ mkErrPair s (addComma xs) s'
-                                 return (Property { pName        = getIdAbs id
-                                                  , pStates      = getStates' states
-                                                  , pTransitions = t
-                                                  , pProps       = p },env'')
+                        do let xs      = [x | x <- ts, not(elem x enms)]
+                           let id'     = getIdAbs id
+                           let states' = getStates' states
+                           case runWriter (checkStatesWF states' id') of
+                                (ys,s'') -> do tell $ mkErrTuple s (addComma xs) s' s''
+                                               return (Property { pName        = id'
+                                                                , pStates      = states'
+                                                                , pTransitions = t
+                                                                , pProps       = p },env'')
 
-mkErrPair :: (String, String) -> String -> String -> (String,String)
-mkErrPair s xs s' = ((mAppend xs (fst s)), s' ++ snd s)
+mkErrTuple :: (String, String,String) -> String -> String -> String -> (String,String,String)
+mkErrTuple s xs s' s'' = ((mAppend xs (fst' s)), s' ++ snd' s, trd' s ++ s'')
 
 mAppend :: String -> String -> String
 mAppend [] []     = ""
@@ -460,7 +465,7 @@ mAppend [] (y:ys) = y:ys
 mAppend (x:xs) [] = x:xs
 mAppend xs ys     = xs ++ "," ++ ys
 
-getStates' :: Abs.States -> Writer String States
+getStates' :: Abs.States -> States
 getStates' (Abs.States start accep bad norm) = States { getStarting = getStarting' start
                                                       , getAccepting = getAccepting' accep 
                                                       , getBad = getBad' bad
@@ -490,8 +495,23 @@ getInitCode :: Abs.InitialCode -> InitialCode
 getInitCode Abs.InitNil      = InitNil
 getInitCode (Abs.InitProg p) = InitProg (getJava p)
 
-uniqueNamesStates :: States -> Writer String States
-uniqueNamesStates sts = 
+--Check if the states are well-formed
+checkStatesWF :: States -> PropertyName -> Writer String States
+checkStatesWF sts s =
+ do oneStarting sts s
+    uniqueNamesStates sts s
+
+--Checks if there is one (and only one) starting state
+oneStarting :: States -> PropertyName -> Writer String States
+oneStarting sts s = 
+ if length (getStarting sts) /= 1
+ then writer (sts, "Error: There is more than one starting state " ++ "in property " ++ s ++ ".\n")
+ else return sts
+
+
+--Checks if the names of the states are unique.
+uniqueNamesStates :: States -> PropertyName -> Writer String States
+uniqueNamesStates sts s = 
  let accp = uniqueNames $ getAccepting sts
      bad  = uniqueNames $ getBad sts
      norm = uniqueNames $ getNormal sts
@@ -501,18 +521,25 @@ uniqueNamesStates sts =
     else do tell (msg all) 
             return sts
                         where msg xs = if length xs > 1
-                                       then "The following state names are not unique: " ++ show xs ++ "."
-                                       else "The following state name is not unique: " ++ show xs ++ "."
+                                       then "Error: In property " ++ s ++ ", the following state names are not unique: " ++ show xs ++ ".\n"
+                                       else "Error: In property " ++ s ++ ", the following state name is not unique: " ++ show xs ++ ".\n"
 
 uniqueNames :: [State] -> [NameState]
-uniqueNames sts = removeDuplicates [ getNameState st | st <- sts, (not.null) (getSameNameStates st sts) ]
+uniqueNames sts = removeDuplicates $ map getNameState $ sameNameStates sts
+
+sameNameStates :: [State] -> [State]
+sameNameStates []     = []
+sameNameStates (x:xs) = getSameNameStates x xs ++ sameNameStates xs
 
 getSameNameStates :: State -> [State] -> [State]
-getSameNameStates _ []      = []
+getSameNameStates st []     = []
 getSameNameStates st (x:xs) = 
- if getNameState st == getNameState x
+ if (stateEq st x)
  then x:getSameNameStates st xs
  else getSameNameStates st xs
+
+stateEq :: State -> State -> Bool
+stateEq st st' = st == st' || getNameState st == getNameState st'
 
 getTransitions :: PropertyName -> Abs.Transitions -> Env -> Scope -> Writer String (Transitions,Env)
 getTransitions id (Abs.Transitions ts) env scope = 
@@ -667,11 +694,12 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
          ((PNIL,env'),_)                      -> fail $ "Error: The template " ++ getIdAbs id 
                                                         ++ " does not have a PROPERTY section.\n"
          ((PINIT pname id' xs props,env'),s)  -> 
-                  let temptrs = splitOnIdentifier "," $ fst s
-                      s'      = snd s ++ if props /= PNIL 
-                                         then "Error: In template " ++ getIdAbs id 
-                                               ++ ", a template should describe only one property.\n"
-                                         else "" 
+                  let temptrs = splitOnIdentifier "," $ fst' s
+                      s'      = snd' s ++ trd' s
+                                ++ if props /= PNIL 
+                                   then "Error: In template " ++ getIdAbs id 
+                                        ++ ", a template should describe only one property.\n"
+                                   else "" 
                   in if ((not.null) s')
                      then fail s'
                      else do put env' { actes = actes env' ++ map show (getActEvents ies)}
@@ -682,17 +710,17 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                                                , tempTriggers  = trigs'
                                                , tempProp      = PINIT pname id' xs props
                                                }
-         ((Property pname states trans props,env'),s) -> 
+         ((Property pname states trans props, env'), s) -> 
                   let accep   = checkAllHTsExist (getAccepting states) cns pname (InTemp (getIdAbs id)) 
                       bad     = checkAllHTsExist (getBad states) cns pname (InTemp (getIdAbs id))
                       normal  = checkAllHTsExist (getNormal states) cns pname (InTemp (getIdAbs id))
                       start   = checkAllHTsExist (getStarting states) cns pname (InTemp (getIdAbs id))
                       errs    = concat $ start ++ accep ++ bad ++ normal
-                      s'      = snd s ++ errs ++ if props /= PNIL 
-                                                 then "Error: In template " ++ getIdAbs id 
-                                                       ++ ", a template should describe eonly one property.\n"
-                                                 else ""
-                      temptrs = splitOnIdentifier "," $ fst s
+                      s'      = snd' s ++ errs ++ trd' s ++ if props /= PNIL 
+                                                            then "Error: In template " ++ getIdAbs id 
+                                                                 ++ ", a template should describe eonly one property.\n"
+                                                            else ""
+                      temptrs = splitOnIdentifier "," $ fst' s
                   in if ((not.null) s')
                      then fail s'
                      else do put env' { actes = actes env' ++ map show (getActEvents ies)}

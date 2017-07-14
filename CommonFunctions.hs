@@ -58,6 +58,14 @@ removeDuplicates' (p@(xs,ys):xss) =
     then removeDuplicates' xss 
     else p:removeDuplicates' xss
 
+fst' :: (a,b,c) -> a
+fst' (x,_,_) = x 
+
+snd' :: (a,b,c) -> b
+snd' (_,y,_) = y 
+
+trd' :: (a,b,c) -> c
+trd' (_,_,z) = z
 
 getListOfTypesAndVars :: ClassInfo -> [(String, ClassInfo, JavaFilesInfo)] -> [(Type, Id)]
 getListOfTypesAndVars cl []                  = []
