@@ -19,6 +19,7 @@ import Data.List
 import Data.Either
 import Data.Maybe
 import PPDATE2Script
+import Control.Lens hiding(Context,pre)
 
 
 upgradePPD :: Abs.AbsPPDATE -> UpgradePPD PPDATE
@@ -79,17 +80,17 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
          ((PNIL,env'),_)                              -> do put env'
                                                             getForeaches foreaches (Ctxt vars' ies' trigs' PNIL []) scope
          ((PINIT pname id xs props,env'),s)           -> 
-                  let trs = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (fst' s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
+                  let trs = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (s ^. _1)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
                       s'  = if (not.null) trs
                             then "Error: Trigger(s) [" ++ trs 
                                  ++ "] is(are) used in the transitions, but is(are) not defined in section TRIGGERS.\n" 
-                                 ++ snd' s
-                            else snd' s
+                                 ++ s ^. _2
+                            else s ^. _2
                       s'' = if elem id (map fst $ tempsInfo env)
                             then ""
                             else "Error: In the definition of property " ++ pname
                                  ++ ". The template " ++ id ++ " does not exist\n."
-                      s''' = trd' s
+                      s''' = s ^. _3
                       alls = s' ++ s'' ++ s'''
                   in if (null alls)
                      then do put env' 
@@ -101,11 +102,11 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
                       normal = checkAllHTsExist (getNormal states) cns pname scope
                       start  = checkAllHTsExist (getStarting states) cns pname scope
                       errs   = concat $ start ++ accep ++ bad ++ normal
-                      trs    = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (fst' s)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
+                      trs    = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (s ^. _1)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
                       s'     = if (not.null) trs
                                then "Error: Trigger(s) [" ++ trs ++ "] is(are) used in the transitions, but is(are) not defined in section TRIGGERS.\n" 
-                                     ++ snd' s ++ trd' s ++ errs
-                               else snd' s ++ trd' s ++ errs 
+                                     ++ s ^. _2 ++ s ^. _3 ++ errs
+                               else s ^. _2 ++ s ^. _3 ++ errs 
                   in if (null s')
                      then do put env' 
                              getForeaches foreaches (Ctxt vars' ies' trigs' (Property pname states trans props) []) scope
@@ -457,7 +458,7 @@ getProperty (Abs.ProperiesDef id (Abs.PropKindNormal states trans) props) enms e
                                                                 , pProps       = p },env'')
 
 mkErrTuple :: (String, String,String) -> String -> String -> String -> (String,String,String)
-mkErrTuple s xs s' s'' = ((mAppend xs (fst' s)), s' ++ snd' s, trd' s ++ s'')
+mkErrTuple s xs s' s'' = ((mAppend xs (s ^. _1)), s' ++ s ^. _2, s ^. _3 ++ s'')
 
 mAppend :: String -> String -> String
 mAppend [] []     = ""
@@ -694,8 +695,8 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
          ((PNIL,env'),_)                      -> fail $ "Error: The template " ++ getIdAbs id 
                                                         ++ " does not have a PROPERTY section.\n"
          ((PINIT pname id' xs props,env'),s)  -> 
-                  let temptrs = splitOnIdentifier "," $ fst' s
-                      s'      = snd' s ++ trd' s
+                  let temptrs = splitOnIdentifier "," $ s ^. _1
+                      s'      = s ^. _2 ++ s ^. _3
                                 ++ if props /= PNIL 
                                    then "Error: In template " ++ getIdAbs id 
                                         ++ ", a template should describe only one property.\n"
@@ -716,11 +717,12 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                       normal  = checkAllHTsExist (getNormal states) cns pname (InTemp (getIdAbs id))
                       start   = checkAllHTsExist (getStarting states) cns pname (InTemp (getIdAbs id))
                       errs    = concat $ start ++ accep ++ bad ++ normal
-                      s'      = snd' s ++ errs ++ trd' s ++ if props /= PNIL 
-                                                            then "Error: In template " ++ getIdAbs id 
-                                                                 ++ ", a template should describe eonly one property.\n"
-                                                            else ""
-                      temptrs = splitOnIdentifier "," $ fst' s
+                      s'      = s ^. _2 ++ errs ++ s ^. _3
+                                ++ if props /= PNIL 
+                                   then "Error: In template " ++ getIdAbs id 
+                                        ++ ", a template should describe eonly one property.\n"
+                                   else ""
+                      temptrs = splitOnIdentifier "," $ s ^. _1
                   in if ((not.null) s')
                      then fail s'
                      else do put env' { actes = actes env' ++ map show (getActEvents ies)}
@@ -834,7 +836,7 @@ checkTempArgsTriggers targs tinfs scope =
 
 checkMethodNames :: [Act.Args] -> [(String, ClassInfo, JavaFilesInfo)] -> Writer String Bool
 checkMethodNames targs minfs =
- let xs = removeDuplicates [ mn | mn <- map showActArgs targs, (_,_,xs) <- minfs, (_,mn',_,_) <- methodsInFiles xs, mn == mn' ]
+ let xs = removeDuplicates [ mn | mn <- map showActArgs targs, xs <- minfs, mn' <- methodsInFiles (xs ^. _3), mn == (mn' ^. _2) ]
  in if length xs == length targs
     then return True 
     else writer (False, "Error: In an action create, the method(s) [" 

@@ -76,9 +76,8 @@ addFidDec' (xs:xss) = if (clean xs == "")
 
 -- Added due to bug in the java library
 addInstrumentedMethodsInFile :: [String] -> [(String, String, String)] -> [String]
-addInstrumentedMethodsInFile xss []                          = xss
-addInstrumentedMethodsInFile xss ((id,methodaux, method):ys) = 
- addInstrumentedMethodsInFile (addMethodInFile (id,methodaux, method) xss) ys
+addInstrumentedMethodsInFile xss []     = xss
+addInstrumentedMethodsInFile xss (y:ys) = addInstrumentedMethodsInFile (addMethodInFile y xss) ys
 
 -- Added due to bug in the java library
 addMethodInFile :: (String,String,String) -> [String] -> [String]

@@ -55,8 +55,7 @@ generateTmpFilesAllConsts ppd consts_jml output_add jpath =
 genTmpFilesConst :: (String, ClassInfo) -> FilePath -> HTjml -> String -> IO ()
 genTmpFilesConst (main, cl) output_add [] r                      = writeFile (output_add ++ "/" ++ main ++ "/" ++ (cl ++ ".java")) r
 genTmpFilesConst (main, cl) output_add ((mn, cl', ov,jml):xs)  r = 
- do 
-    if (cl == cl') 
+ do if (cl == cl') 
     then do 
             let output_add'' = output_add ++ "/" ++ main
             createDirectoryIfMissing True output_add''

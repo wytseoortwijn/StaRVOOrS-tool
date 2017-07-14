@@ -10,6 +10,7 @@ import ErrM
 import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import Data.List
+import Control.Lens hiding(Context,pre)
 
 -------------------------------------
 -- Performs the operationalisation --
@@ -21,7 +22,7 @@ operationalizeOldResultBind ppd oldExprTypesM =
      global   = globalGet ppdate
      consts   = htsGet ppdate
      jinfo    = javaFilesInfo env
-     methods  = map (\(x,y,z) -> (x,y,map (\(x,y,z,_) -> y) (methodsInFiles z))) jinfo
+     methods  = map (\(x,y,z) -> (x,y,map (\y -> y ^. _2) (methodsInFiles z))) jinfo
      es       = getAllTriggers global env
      xs       = map (\ c -> operationalizePrePostORB c (javaFilesInfo env) es methods oldExprTypesM) consts
      xs'      = map (\(Bad s) -> s) $ filter isBad $ map (\x -> runStateT x env) xs
@@ -82,10 +83,10 @@ bindMethods bindn mnames s =
  in bindExpsM bindn mnames exps
 
 getMethodsToControl :: ClassInfo -> [(String, ClassInfo, [String])] -> [String]
-getMethodsToControl cl []                       = []
-getMethodsToControl cl ((main, cl', mnames):xs) = if (cl == cl')
-                                                  then mnames
-                                                  else getMethodsToControl cl xs
+getMethodsToControl cl []       = []
+getMethodsToControl cl (val:xs) = if (cl == (val ^. _2))
+                                  then val ^. _3
+                                  else getMethodsToControl cl xs
 
 bindExpsM :: String -> [String] -> [String] -> [String]
 bindExpsM bindn _ []           = []
@@ -131,10 +132,10 @@ isCharExpression :: Char -> Bool
 isCharExpression = (\c -> isIdentifierSymbol c || c == '.')
 
 getVarsToControl :: ClassInfo -> [(String, ClassInfo, JavaFilesInfo)] -> [String]
-getVarsToControl cl []                      = []
-getVarsToControl cl ((main, cl', jinfo):xs) = if (cl == cl')
-                                              then map snd $ varsInFiles jinfo
-                                              else getVarsToControl cl xs
+getVarsToControl cl []       = []
+getVarsToControl cl (val:xs) = if (cl == (val ^. _2))
+                               then map snd $ varsInFiles (val ^. _3)
+                               else getVarsToControl cl xs
 ----------
 -- \old --
 ----------

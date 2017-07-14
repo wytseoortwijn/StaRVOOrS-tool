@@ -10,6 +10,7 @@ In order to work with the source code you have to install the following packages
 
  split >= 0.2.2
 
+ lens >= 4.15.3 
 
 To install them, you must have a Haskell compiler: ghc-7.8.3 or later recommended
 

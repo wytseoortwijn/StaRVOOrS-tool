@@ -6,6 +6,7 @@ import System.Console.GetOpt
 import Data.Maybe ( fromMaybe )
 import Language.Java.Syntax hiding(Type,VarDecl)
 import qualified AbsActions as Act
+import Control.Lens hiding(Context)
 
 ------------
 -- ppDATE --

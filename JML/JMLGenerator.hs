@@ -3,6 +3,7 @@ module JMLGenerator where
 import Types
 import UpgradePPDATE
 import ErrM
+import Control.Lens hiding(Context,pre,assign)
 
 ----------------------
 -- Class Invariants --
@@ -29,7 +30,7 @@ genJMLConstsAll' :: UpgradePPD PPDATE -> HTjml
 genJMLConstsAll' ppd = 
  let ppdate = getValue ppd
      cs     = htsGet ppdate
- in map (\(x,z,ov,y) -> (x, z,ov,"  /*@ \n" ++ y ++ "    @*/\n")) $ genJMLConsts' cs []
+ in map (over _4 (\ y -> "  /*@ \n" ++ y ++ "    @*/\n")) $ genJMLConsts' cs []
 
 genJMLConsts' :: HTriples -> HTjml -> HTjml
 genJMLConsts' [] xs     = xs
@@ -40,16 +41,16 @@ genJMLConsts' (c:cs) xs = let mn = mname $ methodCN c
 
 updateJMLForM' :: HT -> MethodName -> ClassInfo -> Overriding -> HTjml -> HTjml
 updateJMLForM' c mn cl ov []                       = [(mn, cl, ov,fromHT2JML' c)]
-updateJMLForM' c mn cl ov ((mn', cl', ov',jml):xs) = if (mn == mn' && cl == cl' && ov == ov')
-                                                     then (mn', cl', ov', jml ++ "    @\n    @ also\n    @\n" ++ fromHT2JML' c):xs
-                                                     else (mn', cl', ov', jml):updateJMLForM' c mn cl ov xs
+updateJMLForM' c mn cl ov (x:xs) = if (mn == (x ^. _1) && cl == (x ^. _2) && ov == (x ^. _3))
+                                   then over _4 (\ jml -> jml ++ "    @\n    @ also\n    @\n" ++ fromHT2JML' c) x:xs
+                                   else x:updateJMLForM' c mn cl ov xs
 
 fromHT2JML' :: HT -> String
-fromHT2JML' (HT cn _ precon postcon assig _ _ _) =  
+fromHT2JML' ht =  
   "    @ public normal_behaviour\n"
-  ++ "    @ " ++ requires precon cn
-  ++ "    @ " ++ ensures postcon
-  ++ "    @ " ++ assign assig
+  ++ "    @ " ++ requires (pre ht) (htName ht)
+  ++ "    @ " ++ ensures (post ht)
+  ++ "    @ " ++ assign (assignable ht)
   ++ "    @ diverges true;\n" -- partial correctness
 
 -- bool variable added to be able to identify the Hoare triple

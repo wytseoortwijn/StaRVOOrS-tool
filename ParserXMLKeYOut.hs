@@ -6,6 +6,7 @@ import Text.XML.HaXml.Parse
 import Text.XML.HaXml.Posn
 import CommonFunctions
 import Data.List 
+import Control.Lens hiding(Context,pre)
 
 
 parse :: XML -> [Proof]
@@ -29,16 +30,13 @@ parse xml_fn =
       epath' = map (map translateEPATH) epath
       proof  = foldr foo [] $ zip proof_info epath'
   in proof
-          where foo (x,ep) xs  = (Proof { contractId    = fst' x
-                                        , contractText  = snd' x
-                                        , typee         = trd' x
+          where foo (x,ep) xs  = (Proof { contractId    = x ^. _1
+                                        , contractText  = x ^. _2
+                                        , typee         = x ^. _3
                                         , target        = frth x
                                         , executionPath = ep 
                                         }) : xs
-                fst' (x,y,z,t) = x
-                snd' (x,y,z,t) = y
-                trd' (x,y,z,t) = z
-                frth (x,y,z,t) = t
+                frth (_,_,_,t) = t
 
 translateEPATH :: EPath -> EPath
 translateEPATH epath = epath { pathCondition = translate $ pathCondition epath }

@@ -12,6 +12,7 @@ import ErrM
 import qualified PrintActions as PrintAct
 import TranslatorActions
 import PPDATE2Script
+import Control.Lens hiding(Context,pre)
 
 
 specRefinement :: UpgradePPD PPDATE -> Either [Proof] [Proof] -> Filename -> FilePath -> IO (UpgradePPD PPDATE)
@@ -80,10 +81,10 @@ refinePPDATE ppd proofs =
  let ppdate    = getValue ppd 
      env       = getEnvVal ppd
      consts    = htsGet ppdate
-     nproved   = filter (\(x,y,z,t) -> (not.null) z) $ map getInfoFromProof proofs
-     proved    = filter (\(x,y,z,t) -> (null z)) $ map getInfoFromProof proofs
-     consts'   = [c | c <- consts, (x,y,z,t) <- nproved, htName c == y]  
-     cproved   = [c | c <- consts, (x,y,z,t) <- proved, htName c == y]  
+     nproved   = filter (\npr -> (not.null) (npr ^. _3)) $ map getInfoFromProof proofs
+     proved    = filter (\pr -> null (pr ^. _3)) $ map getInfoFromProof proofs
+     consts'   = [c | c <- consts, npr <- nproved, htName c == (npr ^. _2)]  
+     cproved   = [c | c <- consts, pr <- proved, htName c == (pr ^. _2)]
      ppd'      = generateNewTriggers ppd consts'
      ppdate'   = getValue ppd'
      global    = globalGet ppdate'
@@ -275,8 +276,8 @@ generateNewTriggers ppd consts =
      let mfiles = javaFilesInfo env
      let mns    = removeDuplicates $ map methodCN consts
      let entry  = filterDefEntryTriggers mns (allTriggers env) 
-     let entry' = [(mnc, checkOverloading (filter (\(_,mn,_,_) -> mname mnc == mn) (methodsInFiles z)) (overl mnc)) | mnc <- entry, (_,d,z) <- mfiles,d == clinf mnc]
-     let exit   = [(mnc, checkOverloading (filter (\(_,mn,_,_) -> mname mnc == mn) (methodsInFiles z)) (overl mnc)) | mnc <- mns, (_,d,z) <- mfiles,d == clinf mnc]
+     let entry' = [(mnc, checkOverloading (filter (\mn -> mname mnc == (mn ^. _2)) (methodsInFiles (dz ^. _3))) (overl mnc)) | mnc <- entry, dz <- mfiles, (dz ^. _2) == clinf mnc]
+     let exit   = [(mnc, checkOverloading (filter (\mn -> mname mnc == (mn ^. _2)) (methodsInFiles (dz ^. _3))) (overl mnc)) | mnc <- mns, dz <- mfiles, (dz ^. _2) == clinf mnc]
      let scope  = properScope ppdate
      let (env',ppdate') = addNewTriggerEntry env 0 entry' ppdate scope
      let env''  = addNewTriggerExit env' (length entry') exit scope     
@@ -284,10 +285,10 @@ generateNewTriggers ppd consts =
      return ppdate'
 
 checkOverloading :: [(String,MethodName,[String],MethodInvocations)] -> Overriding -> (String,MethodName,[String],MethodInvocations)
-checkOverloading [] _                          = error "Problem with overloading.\n"
-checkOverloading (val@(_,_,args,_):xs) OverNil = val
-checkOverloading (val@(_,_,args,_):xs) ov      = 
- if Over (map (getBindTypeType.makeBind) args) == ov
+checkOverloading [] _             = error "Problem with overloading.\n"
+checkOverloading (val:xs) OverNil = val
+checkOverloading (val:xs) ov      = 
+ if Over (map (getBindTypeType.makeBind) (val ^. _3)) == ov
  then val
  else checkOverloading xs ov
 
@@ -305,10 +306,13 @@ filterDefEntryTriggers (mnc@(MCN ci mn (Over xs)):mncs) ts =
 
 --Creates the info to be added in the environment
 createTriggerEntry :: (MethodCN,(String,MethodName,[String],MethodInvocations)) -> Int -> Scope -> TriggersInfo
-createTriggerEntry (mnc,(rt,mn',xs,_)) n scope = 
- let mn = mname mnc
-     cn = clinf mnc 
-     ov = overl mnc
+createTriggerEntry (mnc,inf) n scope = 
+ let mn  = mname mnc
+     cn  = clinf mnc 
+     ov  = overl mnc
+     rt  = inf ^. _1
+     mn' = inf ^. _2
+     xs  = inf ^. _3
  in if (mn == mn')
     then let trnm = mn ++ "_ppden"++ (show n)
              nvar = "cv" ++ "_" ++ (show n)
@@ -329,10 +333,13 @@ addNewTriggerEntry env n (x:xs) ppd scope =
 
 --Creates the info to be added in the environment
 createTriggerExit:: (MethodCN,(String,MethodName,[String],MethodInvocations)) -> Int -> Scope -> TriggersInfo
-createTriggerExit (mnc,(rt,mn',xs',_)) n scope = 
- let mn = mname mnc
-     cn = clinf mnc
-     ov = overl mnc
+createTriggerExit (mnc,inf) n scope = 
+ let mn   = mname mnc
+     cn   = clinf mnc
+     ov   = overl mnc
+     rt   = inf ^. _1
+     mn'  = inf ^. _2
+     xs'  = inf ^. _3
      trnm = mn ++ "_ppdex"
      nvar = "cv" ++ "_" ++ (show n)
      cn'  = cn ++ " " ++ nvar

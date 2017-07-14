@@ -11,6 +11,7 @@ import Data.Maybe (fromJust)
 import System.FilePath
 import System.Directory
 import Data.Functor
+import Control.Lens hiding(Context,pre)
 
 
 lookForEntryTrigger :: [TriggersInfo] -> MethodCN -> Scope -> [Trigger]
@@ -58,15 +59,6 @@ removeDuplicates' (p@(xs,ys):xss) =
     then removeDuplicates' xss 
     else p:removeDuplicates' xss
 
-fst' :: (a,b,c) -> a
-fst' (x,_,_) = x 
-
-snd' :: (a,b,c) -> b
-snd' (_,y,_) = y 
-
-trd' :: (a,b,c) -> c
-trd' (_,_,z) = z
-
 getListOfTypesAndVars :: ClassInfo -> [(String, ClassInfo, JavaFilesInfo)] -> [(Type, Id)]
 getListOfTypesAndVars cl []                  = []
 getListOfTypesAndVars cl ((main, cl',ts):xs) = if (cl == cl') 
@@ -77,7 +69,7 @@ getListOfTypesAndMethods :: ClassInfo -> [(String, ClassInfo, JavaFilesInfo)] ->
 getListOfTypesAndMethods cl []                  = []
 getListOfTypesAndMethods cl ((main, cl',ts):xs) = 
  if (cl == cl') 
- then [(x,y) | (x,y,_,_) <- methodsInFiles ts]
+ then [(xy ^. _1, xy ^. _2) | xy <- methodsInFiles ts]
  else getListOfTypesAndMethods cl xs
 
 getMethodInvocations :: MethodCN -> [(String, ClassInfo, JavaFilesInfo)] -> MethodInvocations
@@ -90,8 +82,8 @@ getMethodInvocations mcn ((main, cl',ts):xs) =
     then let ys = [ (t,id,args,minvs) | (t,id,args,minvs) <- methodsInFiles ts, id==mn]
          in if (not.null) ys
             then case ov of 
-                 OverNil  -> (\(_,_,_,x) -> x) $ head ys 
-                 Over ovs -> let zs = [ minvs | (_,_,args,minvs) <- ys, map (head.words) args == ovs]
+                 OverNil  -> (\x -> x ^. _4) $ head ys 
+                 Over ovs -> let zs = [ y ^. _4 | y <- ys, map (head.words) (y ^. _3) == ovs]
                              in if null zs
                                 then getMethodInvocations mcn xs
                                 else head zs

@@ -5,6 +5,7 @@ import Language.Java.Parser
 import Language.Java.Syntax
 import Language.Java.Pretty
 import Language.Java.Lexer
+import Data.Maybe (fromJust)
 
 ---------------------------------------
 -- Manipulation of parsed java files --
@@ -111,7 +112,7 @@ instrumentMethodMemberDecl (d:ds) mns =
                             MethodDecl _ _ _ _ _ _ _ -> let (m1,m2,mns') = generateMethods d mns
                                                         in if (m1 == Nothing)
                                                            then m2:instrumentMethodMemberDecl ds mns'
-                                                           else [(\(Just x) -> x) m1, m2] ++ instrumentMethodMemberDecl ds mns'
+                                                           else [fromJust m1, m2] ++ instrumentMethodMemberDecl ds mns'
                             _                        -> d:instrumentMethodMemberDecl ds mns
       _             -> d:instrumentMethodMemberDecl ds mns
 

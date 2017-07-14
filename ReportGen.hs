@@ -3,6 +3,7 @@ module ReportGen(generateReport,generateReportFailure) where
 import Types
 import CommonFunctions
 import DL2JML
+import Control.Lens hiding(Context,pre)
 
 
 type PProof = (MethodName, HTName, [Pre])
@@ -30,7 +31,7 @@ report proofs = let xs    = map getInfoFromProof proofs
 
 splitAccording2Proof :: [PProof] -> [PProof] -> [PProof] -> [PProof] -> ([PProof], [PProof], [PProof])
 splitAccording2Proof xs ys zs []     = (xs, ys, zs)
-splitAccording2Proof xs ys zs (p:ps) = let pres = (\(x,y,z) -> z) p
+splitAccording2Proof xs ys zs (p:ps) = let pres = p ^. _3
                                        in if (null pres)
                                           then splitAccording2Proof (p:xs) ys zs ps
                                           else if (elem "true" pres) 
@@ -59,7 +60,7 @@ fullyProvedInfo :: [PProof] -> String
 fullyProvedInfo ps = if (null ps)
                      then "* No Hoare triple(s) were fully proved.\n"
                      else "* " ++ show (length ps) ++ " Hoare triple(s) were fully proved:\n"
-                          ++ genListContractsName (map (\(x,y,z) -> y) ps)                          
+                          ++ genListContractsName (map (view _2) ps)                          
 
 partiallyProvedInfo :: [PProof] -> String
 partiallyProvedInfo pps = if (null pps)
@@ -71,7 +72,7 @@ notProvedInfo :: [PProof] -> String
 notProvedInfo nps = if (null nps)
                     then ""
                     else "* " ++ show (length nps) ++ " Hoare triple(s) were not proved:\n"
-                         ++ genListContractsName (map (\(x,y,z) -> y) nps)
+                         ++ genListContractsName (map (view _2) nps)
 
 genListContractsName :: [HTName] -> String
 genListContractsName []     = ""
@@ -79,4 +80,6 @@ genListContractsName (c:cs) = "  " ++ c ++ "\n" ++ genListContractsName cs
 
 genPartiallyInfo :: [PProof] -> String
 genPartiallyInfo []                  = ""
-genPartiallyInfo ((mn, cn, pres):ps) = "  " ++ cn ++ " --> New condition added to its pre-condition is "  ++ (introduceOr $ map (addParenthesisNot.removeSelf) (removeDuplicates pres)) ++ "\n" ++ genPartiallyInfo ps
+genPartiallyInfo ((mn, cn, pres):ps) = "  " ++ cn ++ " --> New condition added to its pre-condition is " 
+                                       ++ (introduceOr $ map (addParenthesisNot.removeSelf) (removeDuplicates pres)) 
+                                       ++ "\n" ++ genPartiallyInfo ps

@@ -12,6 +12,7 @@ import System.Process
 import System.FilePath
 import qualified Data.Map as Map
 import Data.List
+import Control.Lens hiding(Context,pre)
 
 
 inferTypesOldExprs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO (Map.Map HTName [(String,Type)])
@@ -59,7 +60,6 @@ checkType xs ys oexpr s =
     then checkTypeClass xs cinf s
     else checkTypeArgs ys oexpr s
 
---TODO: Fix if classes with the same name in different folders is allowed
 checkTypeArgs :: [(String, ClassInfo, JavaFilesInfo)] -> OldExpr -> String -> String
 checkTypeArgs [] _ s                   = ""
 checkTypeArgs ((_,cinf,ys):xs) oexpr s = 
@@ -158,19 +158,14 @@ parse xml_fn =
      let oldExpr      = map (foldr (\p xs -> (makeOldExpr p):xs) [].(\(x, y) -> zip x y)) components
      let proof        = foldr foo [] $ zip oldExpr_info oldExpr
      return proof
-          where foo (x,oexpr) xs  = (OldExpr { htID    = fst' x
-                                             , classInf      = fth x 
-                                             , path          = fifth x
-                                             , methoD        = snd' x
-                                             , targ          = trd' x
-                                             , oldExprs      = oexpr
+          where foo (x,oexpr) xs  = (OldExpr { htID     = x ^. _1
+                                             , classInf = x ^. _4 
+                                             , path     = fifth x
+                                             , methoD   = x ^. _2
+                                             , targ     = x ^. _3
+                                             , oldExprs = oexpr
                                              }) : xs
-                fst' (x,y,z,t,u)  = x
-                snd' (x,y,z,t,u)  = y
-                trd' (x,y,z,t,u)  = z
-                fth  (x,y,z,t,u)  = t
-                fifth (x,y,z,t,u) = u
-
+                fifth (_,_,_,_,u) = u
 
 getHTInfo :: Content i -> (ContractId, ClassInfo, Target,Type, FilePath)
 getHTInfo (CElem (Elem name as _) _) =
