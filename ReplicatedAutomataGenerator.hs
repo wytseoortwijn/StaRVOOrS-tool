@@ -20,7 +20,7 @@ generateRA c n env =
 
 makeTransitions :: HT -> Int -> Env -> Transitions
 makeTransitions c n env =
-   let trig    = tName $ getTriggerDef (_methodCN c ^. overl) c (allTriggers env) 
+   let trig    = getTriggerDef (_methodCN c ^. overl) c (allTriggers env) ^. tName
        bs      = snd $ getValue $ lookForAllExitTriggerArgs env c
        cn      = c ^. htName
        oldExpM = oldExpTypes env

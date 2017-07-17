@@ -524,14 +524,14 @@ instrumentTriggers [] cs _       = []
 instrumentTriggers (e:es) cs env = 
  let (b,mn,bs) = lookupHTForTrigger e (getClassInfo e env) cs 
  in if b
-    then let e'  = updateMethodCallName e (mn++"Aux")
-             e'' = updateTriggerArgs e' ((args e') ++ [BindType "Integer" "id"])
+    then let e'  = updateMethodCallName e (mn++"Aux")             
+             e'' = args %~ (\ arg -> arg ++ [BindType "Integer" "id"]) $ e'
          in updateMethodCallBody e'' (bs++[BindId "id"]):instrumentTriggers es cs env
     else e:instrumentTriggers es cs env
 
 lookupHTForTrigger :: TriggerDef -> ClassInfo -> HTriples -> (Bool, MethodName, [Bind])
 lookupHTForTrigger _ _ []      = (False,"", [])
-lookupHTForTrigger e ci (c:cs) = case compTrigger e of
+lookupHTForTrigger e ci (c:cs) = case e ^. compTrigger of
                                       NormalEvent _ id bs _ -> if (id == (_methodCN c ^. mname) && (_methodCN c ^. clinf) == ci)
                                                                then (True, id, bs)
                                                                else lookupHTForTrigger e ci cs
@@ -539,7 +539,7 @@ lookupHTForTrigger e ci (c:cs) = case compTrigger e of
 
 getClassInfo :: TriggerDef -> Env -> ClassInfo
 getClassInfo e env = 
- let trs = [tr | tr <- allTriggers env, tiTN tr == tName e]
+ let trs = [tr | tr <- allTriggers env, tiTN tr == e ^. tName]
  in head $ map tiCI trs
 
 --
@@ -597,9 +597,9 @@ instantiateTemp for id args cai env =
 instantiateTrs :: Triggers -> Map.Map Id String -> Triggers
 instantiateTrs [] _        = []
 instantiateTrs (tr:trs) mp = 
- let ce   = instantiateCE (compTrigger tr) mp
-     tr'  = tr { compTrigger = fst $ ce }
-     tr'' = if (snd ce) == Nothing then tr' else tr' { whereClause = (whereClause tr') ++ newWhereClause (fromJust $ snd ce)}
+ let ce   = instantiateCE (tr ^. compTrigger) mp
+     tr'  = compTrigger .~ fst ce $ tr
+     tr'' = if (snd ce) == Nothing then tr' else tr' & whereClause %~ (\ wc -> wc ++ newWhereClause (fromJust $ snd ce))
  in tr'' : instantiateTrs trs mp
 
 instantiateCE :: CompoundTrigger -> Map.Map Id String -> (CompoundTrigger, Maybe String)
@@ -629,27 +629,28 @@ addTriggerDef args cai env mp =
  in [ adaptTrigger (fromJust $ tiTrDef tr) refs mp (tiCI tr) | tr <- trs, tiScope tr == scope, targ <- targs, (showActArgs $ snd targ) == tiTN tr]
     
 adaptTrigger :: TriggerDef -> [(Args,Act.Args)] -> Map.Map Id String -> ClassInfo -> TriggerDef
-adaptTrigger tr [] _ _      = tr { whereClause = ""}
+adaptTrigger tr [] _ _      = tr & whereClause .~ ""
 adaptTrigger tr targs mp ci = 
- case compTrigger tr of
+ case tr ^. compTrigger of
       NormalEvent bind _ _ _ -> 
          case bind of 
               BindingVar (BindId id)     -> 
-                   let xs = [ arg | arg <- args tr, ci == getBindTypeType arg, id == getBindTypeId arg]
-                       ys = [ arg | arg <- args tr, not (elem arg xs) ]
+                   let xs = [ arg | arg <- tr ^. args, ci == getBindTypeType arg, id == getBindTypeId arg]
+                       ys = [ arg | arg <- tr ^. args, not (elem arg xs) ]
                        zs = [ getArgsId (fst targ) | arg <- xs, targ <- targs, getArgsType (fst targ) == getBindTypeType arg ]
                    in if null zs 
-                      then tr { whereClause = ""}
-                      else let tr' = tr { args = ys, compTrigger = updCEne (compTrigger tr) (BindingVar (BindId (head zs))) }
+                      then tr & whereClause .~ ""
+                      else let tr' = tr & args .~ ys 
+                                        & compTrigger %~ \ ct -> updCEne ct (BindingVar (BindId (head zs)))
                            in head $ instantiateTrs [tr'] mp
               BindingVar (BindType t id) -> 
                    let xs = [ getArgsId arg | arg <- map fst targs, t == getArgsType arg]
                    in if null xs 
-                      then tr { whereClause = ""}
-                      else let tr' = tr { compTrigger = updCEne (compTrigger tr) (BindingVar (BindId (head xs))) }
+                      then tr & whereClause .~ ""
+                      else let tr' = tr & compTrigger %~ \ ct -> updCEne ct (BindingVar (BindId (head xs)))
                            in head $ instantiateTrs [tr'] mp                           
-              BindingVar BindStar        -> tr { whereClause = ""}
-      _                      -> tr { whereClause = ""} 
+              BindingVar BindStar        -> tr & whereClause .~ ""
+      _                      -> tr & whereClause .~ ""
 
 instantiateProp :: Property -> [Args] -> CreateActInfo -> Property
 instantiateProp PNIL _ _                               = PNIL

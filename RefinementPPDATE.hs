@@ -63,7 +63,7 @@ removeFromTrsCtxt ctxt = triggers %~ removeFromTriggers $ ctxt
 removeFromTriggers :: Triggers -> Triggers
 removeFromTriggers []       = []
 removeFromTriggers (tr:trs) = 
- if isInfixOf "_ppden" (tName tr) || isInfixOf "_ppdex" (tName tr)
+ if isInfixOf "_ppden" (tr ^. tName) || isInfixOf "_ppdex" (tr ^. tName)
  then removeFromTriggers trs
  else tr:removeFromTriggers trs
 
@@ -210,12 +210,12 @@ lookupClassVar trs c ev =
 filterTriggers :: Triggers -> HT -> TriggerVariation -> Triggers
 filterTriggers [] _ _      = []
 filterTriggers (e:es) c ev = 
- case (compTrigger e) of
+ case (e ^. compTrigger) of
       NormalEvent (BindingVar b) id _ ev' -> 
            let mn = _methodCN c ^. mname 
                ov = _methodCN c ^. overl
            in if (id == mn && compareEV ev ev'
-                 && checkArgsOver (args e) (getCTArgs (compTrigger e)) (_methodCN c ^. overl))
+                 && checkArgsOver (e ^. args) (getCTArgs (e ^. compTrigger)) (_methodCN c ^. overl))
               then e:filterTriggers es c ev
               else filterTriggers es c ev
       _                                   -> filterTriggers es c ev
@@ -223,9 +223,9 @@ filterTriggers (e:es) c ev =
 getGeneratedExTr :: Triggers -> HT -> [String]
 getGeneratedExTr [] _       = []
 getGeneratedExTr (tr:trs) c = 
-  case (compTrigger tr) of
+  case (tr ^. compTrigger) of
       NormalEvent (BindingVar b) id _ ev' -> 
-                  if (isInfixOf "_ppdex" (tName tr) && checkArgsOver (args tr) (getCTArgs (compTrigger tr)) (_methodCN c ^. overl)) 
+                  if (isInfixOf "_ppdex" (tr ^. tName) && checkArgsOver (tr ^. args) (getCTArgs (tr ^. compTrigger)) (_methodCN c ^. overl)) 
                   then case b of
                             BindStar      -> []
                             BindType _ id -> [id]
@@ -235,7 +235,7 @@ getGeneratedExTr (tr:trs) c =
 getExTr :: Triggers -> HT -> TriggerVariation -> String
 getExTr [] _ _      = ""
 getExTr (e:es) c ev = 
- case (compTrigger e) of
+ case (e ^. compTrigger) of
       NormalEvent (BindingVar b) id _ ev' -> 
                   if (id == (_methodCN c ^. mname) && compareEV ev ev')
                   then case b of

@@ -219,10 +219,10 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                                                                  else s''
                                                                      let ov = generateOverloading bs (getCTArgs ce')
                                                                      (ci,cinm) <- getClassVarName id'' mn bs bind s'' scope args
-                                                                     let tr = TriggerDef { tName = id''
-                                                                                         , args  = bs
-                                                                                         , compTrigger = ce'
-                                                                                         , whereClause = getWhereClause wc
+                                                                     let tr = TriggerDef { _tName = id''
+                                                                                         , _args  = bs
+                                                                                         , _compTrigger = ce'
+                                                                                         , _whereClause = getWhereClause wc
                                                                                          }
                                                                      let ti = TI id'' mn ci cinm EVEntry bs (Just tr) scope ov
                                                                      put env { allTriggers = ti : allTriggers env }
@@ -245,26 +245,26 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                                                 then if (not.null) err1 then fail err1 else
                                                                      do (ci,cinm) <- getClassVarName id'' mn bs bind s'' scope args
                                                                         let ov = generateOverloading bs (getCTArgs ce')
-                                                                        let tr = TriggerDef { tName = id''
-                                                                                            , args  = bs
-                                                                                            , compTrigger = ce'
-                                                                                            , whereClause = wc'
+                                                                        let tr = TriggerDef { _tName = id''
+                                                                                            , _args  = bs
+                                                                                            , _compTrigger = ce'
+                                                                                            , _whereClause = wc'
                                                                                             }
                                                                         let ti = TI id'' mn ci cinm (EVExit rs) bs (Just tr) scope ov
                                                                         put env { allTriggers = ti : allTriggers env }
                                                                         return tr
                                                                 else fail (err1 ++ s'')
-                                       _        -> return TriggerDef { tName = id''
-                                                                     , args  = bs
-                                                                     , compTrigger = ce'
-                                                                     , whereClause = getWhereClause wc
+                                       _        -> return TriggerDef { _tName = id''
+                                                                     , _args  = bs
+                                                                     , _compTrigger = ce'
+                                                                     , _whereClause = getWhereClause wc
                                                                      }
                           _  -> if (not.null) err1 then fail err1 else
                                 do put env { allTriggers = TI id'' "" "" "" EVNil bs Nothing scope OverNil: allTriggers env }
-                                   return TriggerDef { tName = id''
-                                                     , args  = bs
-                                                     , compTrigger = ce'
-                                                     , whereClause = getWhereClause wc
+                                   return TriggerDef { _tName = id''
+                                                     , _args  = bs
+                                                     , _compTrigger = ce'
+                                                     , _whereClause = getWhereClause wc
                                                      }
 
 generateOverloading :: [Bind] -> [Bind] -> Overriding
@@ -690,7 +690,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
  do trigs' <- getTriggers trs (InTemp (getIdAbs id)) (map ((uncurry makeArgs).getArgsAbs) args)
     env <- get
     let cns   = htsNames env
-    let prop' = getProperty prop (map tName trigs') env (InTemp (getIdAbs id))
+    let prop' = getProperty prop (map (^. tName) trigs') env (InTemp (getIdAbs id))
     let extrs = getExitTrsInfo trigs'
     case runWriter prop' of
          ((PNIL,env'),_)                      -> fail $ "Error: The template " ++ getIdAbs id 

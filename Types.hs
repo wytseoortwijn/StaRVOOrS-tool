@@ -362,10 +362,10 @@ instance Show ActEvent where
 type WhereClause = String
 
 data TriggerDef = TriggerDef 
-  { tName :: Trigger
-  , args :: [Bind]
-  , compTrigger :: CompoundTrigger
-  , whereClause :: WhereClause
+  { _tName :: Trigger
+  , _args :: [Bind]
+  , _compTrigger :: CompoundTrigger
+  , _whereClause :: WhereClause
   } deriving (Eq,Read)
 
 instance Show TriggerDef where 
@@ -451,9 +451,6 @@ instance Show Binding where
 
 getBind :: Binding -> Bind
 getBind (BindingVar bn) = bn
-
-updateTriggerArgs :: TriggerDef -> [Bind] -> TriggerDef
-updateTriggerArgs (TriggerDef e arg cpes wc) arg' = TriggerDef e arg' cpes wc
 
 updateMethodCallName :: TriggerDef -> MethodName -> TriggerDef
 updateMethodCallName (TriggerDef e arg cpes wc) mn = TriggerDef e arg (updateCpeMethodName cpes mn) wc
@@ -587,3 +584,4 @@ makeLenses ''MethodCN
 makeLenses ''Template
 makeLenses ''State
 makeLenses ''OldExpr
+makeLenses ''TriggerDef
