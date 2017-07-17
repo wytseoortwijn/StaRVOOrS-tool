@@ -78,8 +78,8 @@ refinePPDATE ppd proofs =
      consts    = ppdate ^. htsGet
      nproved   = filter (\npr -> (not.null) (npr ^. _3)) $ map getInfoFromProof proofs
      proved    = filter (\pr -> null (pr ^. _3)) $ map getInfoFromProof proofs
-     consts'   = [c | c <- consts, npr <- nproved, htName c == (npr ^. _2)]  
-     cproved   = [c | c <- consts, pr <- proved, htName c == (pr ^. _2)]
+     consts'   = [c | c <- consts, npr <- nproved, c ^. htName == npr ^. _2]  
+     cproved   = [c | c <- consts, pr <- proved, c ^. htName == pr ^. _2]
      ppd'      = generateNewTriggers ppd consts'
      ppdate'   = getValue ppd'
      global    = ppdate' ^. globalGet
@@ -177,16 +177,17 @@ updateHTs (x:xs) consts es = updateHTs xs (updateHT x consts es) es
 updateHT :: (MethodName, HTName, [Pre],String) -> HTriples -> Triggers -> HTriples
 updateHT (mn,cn,pres,path) [] _      = []
 updateHT (mn,cn,pres,path) (c:cs) es = 
- if (htName c == cn && (mname.methodCN) c == mn)
+ if (c ^. htName == cn && (_methodCN c ^. mname) == mn)
  then if (null pres)
       then c:updateHT (mn,cn,pres,path) cs es
       else let pres' = removeDuplicates pres
                opt'  = simplify $ map refineNewCond pres'
                opt'' = '(':introduceOr opt' ++ [')']
-               c'    = updatePath (updateNewPre c [opt'']) path
-               c''   = updatePre c' $ refineCond (pre c)
-               c'''  = updatePost c'' $ refineCond (post c)
-           in c''':cs
+               c'    = c & pre %~ refineCond 
+                         & post %~ refineCond  
+                         & newPRe .~ [opt'']
+                         & path2it .~ path 
+           in c':cs
  else c:updateHT (mn,cn,pres,path) cs es
 
 getClassVar :: HT -> Triggers -> TriggerVariation -> String
@@ -212,10 +213,10 @@ filterTriggers [] _ _      = []
 filterTriggers (e:es) c ev = 
  case (compTrigger e) of
       NormalEvent (BindingVar b) id _ ev' -> 
-           let mn = mname (methodCN c) 
-               ov = overl (methodCN c)
+           let mn = _methodCN c ^. mname 
+               ov = _methodCN c ^. overl
            in if (id == mn && compareEV ev ev'
-                 && checkArgsOver (args e) (getCTArgs (compTrigger e)) (overl $ methodCN c))
+                 && checkArgsOver (args e) (getCTArgs (compTrigger e)) (_methodCN c ^. overl))
               then e:filterTriggers es c ev
               else filterTriggers es c ev
       _                                   -> filterTriggers es c ev
@@ -225,7 +226,7 @@ getGeneratedExTr [] _       = []
 getGeneratedExTr (tr:trs) c = 
   case (compTrigger tr) of
       NormalEvent (BindingVar b) id _ ev' -> 
-                  if (isInfixOf "_ppdex" (tName tr) && checkArgsOver (args tr) (getCTArgs (compTrigger tr)) (overl $ methodCN c)) 
+                  if (isInfixOf "_ppdex" (tName tr) && checkArgsOver (args tr) (getCTArgs (compTrigger tr)) (_methodCN c ^. overl)) 
                   then case b of
                             BindStar      -> []
                             BindType _ id -> [id]
@@ -237,7 +238,7 @@ getExTr [] _ _      = ""
 getExTr (e:es) c ev = 
  case (compTrigger e) of
       NormalEvent (BindingVar b) id _ ev' -> 
-                  if (id == mname (methodCN c) && compareEV ev ev')
+                  if (id == (_methodCN c ^. mname) && compareEV ev ev')
                   then case b of
                             BindStar      -> ""
                             BindType _ id -> id
@@ -267,10 +268,10 @@ generateNewTriggers ppd consts =
   do let env    = getEnvVal ppd
      let ppdate = getValue ppd     
      let mfiles = javaFilesInfo env
-     let mns    = removeDuplicates $ map methodCN consts
+     let mns    = removeDuplicates $ map _methodCN consts
      let entry  = filterDefEntryTriggers mns (allTriggers env) 
-     let entry' = [(mnc, checkOverloading (filter (\mn -> mname mnc == (mn ^. _2)) (methodsInFiles (dz ^. _3))) (overl mnc)) | mnc <- entry, dz <- mfiles, (dz ^. _2) == clinf mnc]
-     let exit   = [(mnc, checkOverloading (filter (\mn -> mname mnc == (mn ^. _2)) (methodsInFiles (dz ^. _3))) (overl mnc)) | mnc <- mns, dz <- mfiles, (dz ^. _2) == clinf mnc]
+     let entry' = [(mnc, checkOverloading (filter (\mn -> mnc ^. mname == mn ^. _2) (methodsInFiles (dz ^. _3))) (mnc ^. overl)) | mnc <- entry, dz <- mfiles, (dz ^. _2) == mnc ^. clinf]
+     let exit   = [(mnc, checkOverloading (filter (\mn -> mnc ^. mname == mn ^. _2) (methodsInFiles (dz ^. _3))) (mnc ^. overl)) | mnc <- mns, dz <- mfiles, (dz ^. _2) == mnc ^. clinf]
      let scope  = properScope ppdate
      let (env',ppdate') = addNewTriggerEntry env 0 entry' ppdate scope
      let env''  = addNewTriggerExit env' (length entry') exit scope     
@@ -300,13 +301,11 @@ filterDefEntryTriggers (mnc@(MCN ci mn (Over xs)):mncs) ts =
 --Creates the info to be added in the environment
 createTriggerEntry :: (MethodCN,(String,MethodName,[String],MethodInvocations)) -> Int -> Scope -> TriggersInfo
 createTriggerEntry (mnc,inf) n scope = 
- let mn  = mname mnc
-     cn  = clinf mnc 
-     ov  = overl mnc
-     rt  = inf ^. _1
-     mn' = inf ^. _2
+ let mn  = mnc ^. mname
+     cn  = mnc ^. clinf
+     ov  = mnc ^. overl
      xs  = inf ^. _3
- in if (mn == mn')
+ in if (mn == inf ^. _2)
     then let trnm = mn ++ "_ppden"++ (show n)
              nvar = "cv" ++ "_" ++ (show n)
              cn'  = cn ++ " " ++ nvar
@@ -314,7 +313,7 @@ createTriggerEntry (mnc,inf) n scope =
              tr   = TriggerDef trnm (map ((\[x,y] -> BindType x y).words.remGenerics') xs) cpe ""
              bs   = map ((\[x,y] -> BindType x y).words.remGenerics') xs             
          in TI trnm mn cn nvar EVEntry bs (Just tr) scope ov
-    else error $ "Problem when creating an entry trigger. Mismatch between method names " ++ mn ++ " and " ++ mn' ++ ".\n"
+    else error $ "Problem when creating an entry trigger. Mismatch between method names " ++ mn ++ " and " ++ inf ^. _2 ++ ".\n"
 
 addNewTriggerEntry :: Env -> Int -> [(MethodCN,(String,MethodName,[String],MethodInvocations))] -> PPDATE -> Scope -> (Env,PPDATE)
 addNewTriggerEntry env _ [] ppd _         = (env,ppd)
@@ -327,18 +326,17 @@ addNewTriggerEntry env n (x:xs) ppd scope =
 --Creates the info to be added in the environment
 createTriggerExit:: (MethodCN,(String,MethodName,[String],MethodInvocations)) -> Int -> Scope -> TriggersInfo
 createTriggerExit (mnc,inf) n scope = 
- let mn   = mname mnc
-     cn   = clinf mnc
-     ov   = overl mnc
+ let mn   = mnc ^. mname
+     cn   = mnc ^. clinf
+     ov   = mnc ^. overl
      rt   = inf ^. _1
-     mn'  = inf ^. _2
      xs'  = inf ^. _3
      trnm = mn ++ "_ppdex"
      nvar = "cv" ++ "_" ++ (show n)
      cn'  = cn ++ " " ++ nvar
      ret  = "ret_ppd" ++ (show n)
      xs   = map remGenerics' xs' in
- if (mn == mn')
+ if (mn == inf ^. _2)
  then if (rt == "void")
       then let bs  = map ((\[x,y] -> BindType x y).words.remGenerics') xs
                cpe = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words.remGenerics') xs) (EVExit [])
@@ -348,7 +346,7 @@ createTriggerExit (mnc,inf) n scope =
                cpe = NormalEvent (BindingVar (BindType cn nvar)) mn (map ((\[x,y] -> BindId y).words.remGenerics') xs) (EVExit [BindId ret]) 
                tr  = TriggerDef trnm bs cpe ""
            in TI trnm mn cn nvar (EVExit [BindId ret]) bs (Just tr) scope ov
- else error $ "Problem when creating an exit trigger. Mismatch between method names " ++ mn ++ " and " ++ mn' ++ ".\n"
+ else error $ "Problem when creating an exit trigger. Mismatch between method names " ++ mn ++ " and " ++ inf ^. _2 ++ ".\n"
 
 addNewTriggerExit :: Env -> Int -> [(MethodCN,(String,MethodName,[String],MethodInvocations))] -> Scope -> Env
 addNewTriggerExit env _ [] _         = env

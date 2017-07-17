@@ -36,13 +36,13 @@ operationalizeOldResultBind ppd oldExprTypesM =
 
 operationalizePrePostORB :: HT -> [(String, ClassInfo, JavaFilesInfo)] -> Triggers -> [(String, ClassInfo, [String])] -> Map.Map HTName [(String,Type)] -> UpgradePPD (HT,OldExprM)
 operationalizePrePostORB c vars trigs methods oldExprTypesM = 
- do let cn             = htName c
-    let p              = pre c
-    let p'             = post c
+ do let cn             = c ^. htName
+    let p              = c ^. pre
+    let p'             = c ^. post
     (xsPost, oldExprl) <- operationalizeOld p' cn
     let ysPost         = operationalizeResult xsPost
     let oldExprl'      = addType2NewVars cn oldExprTypesM oldExprl
-    let c'             = updatePost c ysPost
+    let c'             = post .~ ysPost $ c
     let oldExprl''     = bindOldExp c vars trigs methods oldExprl'
     return (bindCV c' vars trigs methods, Map.singleton cn oldExprl'')
 
@@ -56,22 +56,24 @@ bindCV :: HT -> [(String, ClassInfo, JavaFilesInfo)] -> Triggers -> [(String, Cl
 bindCV c vars es methods =
  let bindEntry = getClassVar c es EVEntry
      bindExit  = getClassVar c es (EVExit [])
-     varsc  = getVarsToControl (clinf $ methodCN c) vars
-     mnames = getMethodsToControl (clinf $ methodCN c) methods
-     pre'   = concat $ bindVars bindEntry varsc (pre c)
-     post'  = concat $ bindVars bindExit varsc (post c)
+     varsc  = getVarsToControl (_methodCN c ^. clinf) vars
+     mnames = getMethodsToControl (_methodCN c ^. clinf) methods
+     pre'   = concat $ bindVars bindEntry varsc (c ^. pre)
+     post'  = concat $ bindVars bindExit varsc (c ^. post)
      pre''  = concat $ bindMethods bindEntry mnames pre'
      post'' = concat $ bindMethods bindExit mnames post'
-     npre   = map (replaceSelfWith bindEntry) (newPRe c)
- in updateNewPre (updatePre (updatePost c post'') pre'') npre
+     npre   = map (replaceSelfWith bindEntry) (c ^. newPRe)
+ in c & pre .~ pre''
+      & post .~ post''
+      & newPRe .~ npre
 
 bindOldExp :: HT -> [(String, ClassInfo, JavaFilesInfo)] -> Triggers -> [(String, ClassInfo, [String])] -> OldExprL -> OldExprL
 bindOldExp c vars es _ []             = []
 bindOldExp c vars es ms ((x,y,z):xss) = 
  let bindEntry = getClassVar c es (EVEntry)
-     varsc     = getVarsToControl (clinf $ methodCN c) vars
+     varsc     = getVarsToControl (_methodCN c ^. clinf) vars
      x'        = concat $ bindVars bindEntry varsc x
-     ms'       = getMethodsToControl (clinf $ methodCN c) ms
+     ms'       = getMethodsToControl (_methodCN c ^. clinf) ms
      x''       = concat $ bindMethods bindEntry ms' x'
  in (x'',y,z):bindOldExp c vars es ms xss
 
@@ -199,17 +201,17 @@ operationalizeResult s =
 
 operationalizeForall :: HT -> Env -> OldExprM -> UpgradePPD ([Either (String, String) String], [Either (String, String) String])
 operationalizeForall c env oldExpM = 
- do let mn             = mname $ methodCN c
-    let cinfo          = clinf $ methodCN c
-    let p              = pre c
+ do let mn             = _methodCN c ^. mname
+    let cinfo          = _methodCN c ^. clinf
+    let p              = c ^. pre
     (enargs, enargswt) <- lookForAllEntryTriggerArgs env c
-    let p'             = post c 
+    let p'             = c ^. post
     (exargs, exargswt) <- lookForAllExitTriggerArgs env c
     let xs             = splitInQuantifiedExpression p "\\forall"
     let ys             = splitInQuantifiedExpression p' "\\forall"
     let tnewvars       = getConstTnv c oldExpM 
-    let xs_pre         = applyGenMethodForall xs (htName c) 1 enargs enargswt "_pre" []
-    let ys_post        = applyGenMethodForall ys (htName c) 1 exargs exargswt "_post" tnewvars
+    let xs_pre         = applyGenMethodForall xs (c ^. htName) 1 enargs enargswt "_pre" []
+    let ys_post        = applyGenMethodForall ys (c ^. htName) 1 exargs exargswt "_post" tnewvars
     return (xs_pre, ys_post)
 
 
@@ -325,17 +327,17 @@ lookforEnd n acum (x:xs) = if (x == ')')
 
 operationalizeExists :: HT -> Env -> OldExprM -> UpgradePPD ([Either (String, String) String], [Either (String, String) String])
 operationalizeExists c es oldExpM = 
- do let mn             = mname $ methodCN c
-    let cinfo          = clinf $ methodCN c
-    let p              = pre c
+ do let mn             = _methodCN c ^. mname
+    let cinfo          = _methodCN c ^. clinf
+    let p              = c ^. pre
     (enargs, enargswt) <- lookForAllEntryTriggerArgs es c
-    let p'             = post c 
+    let p'             = c ^. post
     (exargs, exargswt) <- lookForAllExitTriggerArgs es c
     let xs             = splitInQuantifiedExpression p "\\exists"
     let ys             = splitInQuantifiedExpression p' "\\exists"
     let tnewvars       = getConstTnv c oldExpM
-    let xs_pre         = applyGenMethodExists xs (htName c) 1 enargs enargswt "_pre" []
-    let ys_post        = applyGenMethodExists ys (htName c) 1 exargs exargswt "_post" tnewvars
+    let xs_pre         = applyGenMethodExists xs (c ^. htName) 1 enargs enargswt "_pre" []
+    let ys_post        = applyGenMethodExists ys (c ^. htName) 1 exargs exargswt "_post" tnewvars
     return (xs_pre, ys_post)
 
 

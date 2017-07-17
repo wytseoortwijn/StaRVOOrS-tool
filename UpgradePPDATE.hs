@@ -877,25 +877,25 @@ genHTs (Abs.HTriples cs) imps = checkOverl $ sequence $ map (getHT imps) cs
 
 getHT :: Imports -> Abs.HT -> UpgradePPD HT
 getHT imps (Abs.HT id pre' method post' ass) =
- do let mcn = MCN { clinf = getMethodClassInfo method, mname = getMethodMethodName method, overl = getMethodOverloading method }
+ do let mcn = MCN { _clinf = getMethodClassInfo method, _mname = getMethodMethodName method, _overl = getMethodOverloading method }
     env <- get
-    case checkImports (clinf mcn) imps of
+    case checkImports (mcn ^. clinf) imps of
          []     -> fail $ "Error: Hoare triple " ++ getIdAbs id ++ " is associated to class " 
-                          ++ clinf mcn ++ ", but the class is not imported.\n"
+                          ++ mcn ^. clinf ++ ", but the class is not imported.\n"
          (x:xs) -> if (not.null) xs 
-                   then fail $ "Error: Multiple imports for class " ++ clinf mcn
+                   then fail $ "Error: Multiple imports for class " ++ mcn ^. clinf
                    else do let cns = htsNames env
                            let ys  = map checkJML $ [getPre pre',getPost post'] ++ checkAssig ass
                            joinErrorJML ys (getIdAbs id)
                            put env { htsNames = (getIdAbs id):(htsNames env) }
-                           return (HT { htName   = getIdAbs id
-                                  , methodCN     = mcn
-                                  , pre          = genPre pre'
-                                  , post         = genPost post'
-                                  , assignable   = genAssig ass
-                                  , newPRe       = []
-                                  , chGet        = 0
-                                  , path2it      = ""
+                           return (HT { _htName   = getIdAbs id
+                                  , _methodCN     = mcn
+                                  , _pre          = genPre pre'
+                                  , _post         = genPost post'
+                                  , _assignable   = genAssig ass
+                                  , _newPRe       = []
+                                  , _chGet        = 0
+                                  , _path2it      = ""
                                   })
 
 genPre :: Abs.Pre -> Pre
@@ -953,8 +953,8 @@ checkOverl :: UpgradePPD HTriples -> UpgradePPD HTriples
 checkOverl hts = 
  case runStateT hts emptyEnv of
       Bad s         -> fail s
-      Ok (hts',env) -> let ys  = zip (map htName hts') (map methodCN hts')
-                           ys' = [(htn,mnc') | (htn,mnc') <- ys, overl mnc' /= OverNil]
+      Ok (hts',env) -> let ys  = zip (map (^. htName) hts') (map _methodCN hts')
+                           ys' = [(htn,mnc') | (htn,mnc') <- ys, (mnc' ^. overl) /= OverNil]
                        in if null ys'
                           then hts
                           else case runWriter $ sequence $ map (checkOV ys') [p | p <- ys, not (elem p ys')] of
@@ -964,11 +964,11 @@ checkOverl hts =
 
 checkOV :: [(HTName,MethodCN)] -> (HTName,MethodCN) -> Writer String Bool
 checkOV xs (htn,mnc) =
- let ys = [ mnc' | (_,mnc') <- xs, mname mnc == mname mnc', clinf mnc == clinf mnc']
+ let ys = [ mnc' | (_,mnc') <- xs, (mnc ^. mname) == (mnc' ^. mname), (mnc ^. clinf) == (mnc' ^. clinf)]
  in if null ys
     then return True
-    else do tell $ "Error: Type missing for the method " ++ mname mnc ++ " of the class "
-                   ++ clinf mnc ++ " in the Hoare triple " ++ htn ++ ".\n"
+    else do tell $ "Error: Type missing for the method " ++ mnc ^. mname ++ " of the class "
+                   ++ mnc ^. clinf ++ " in the Hoare triple " ++ htn ++ ".\n"
             return False
     
 
@@ -1118,16 +1118,16 @@ joinImport (xs:ys:iss) = xs ++ "." ++ joinImport (ys:iss)
 lookForAllEntryTriggerArgs :: Env -> HT -> UpgradePPD (String, String)
 lookForAllEntryTriggerArgs env c =
  let trs = allTriggers env
- in do tinfo <- getEntryTriggers (methodCN c) trs
+ in do tinfo <- getEntryTriggers (_methodCN c) trs
        let args  = map (\(BindType t id) -> Args t id) (tiBinds tinfo)
        return (getArgsGenMethods (tiCI tinfo,tiCVar tinfo, args))   
 
 getEntryTriggers :: MethodCN -> [TriggersInfo] -> UpgradePPD TriggersInfo
 getEntryTriggers mnc []         = fail $ "Error: Could not find an entry trigger associated to method "
-                                         ++ mname mnc ++ show (overl mnc) ++ " of the class " ++ clinf mnc ++ ".\n"
+                                         ++ mnc ^. mname ++ show (mnc ^. overl) ++ " of the class " ++ mnc ^. clinf ++ ".\n"
 getEntryTriggers mnc (tinfo:ts) =
- if (mname mnc) == (tiMN tinfo) && (clinf mnc) == (tiCI tinfo) 
-    && (cmpOverloading (overl mnc) (tiOver tinfo))
+ if (mnc ^. mname) == (tiMN tinfo) && (mnc ^. clinf) == (tiCI tinfo) 
+    && (cmpOverloading (mnc ^. overl) (tiOver tinfo))
     && tiTrvar tinfo == EVEntry
  then return tinfo
  else getEntryTriggers mnc ts
@@ -1135,8 +1135,8 @@ getEntryTriggers mnc (tinfo:ts) =
 
 lookForAllExitTriggerArgs :: Env -> HT -> UpgradePPD (String, String)
 lookForAllExitTriggerArgs env c =
- let mnc   = methodCN c
-     tr    = getTriggerDef (overl mnc) c (allTriggers env) 
+ let mnc   = _methodCN c
+     tr    = getTriggerDef (mnc ^. overl) c (allTriggers env) 
      tinfo = head [ t | t <- allTriggers env , Just tr == tiTrDef t]
      args  = map (\(BindType t id) -> Args t id) (tiBinds tinfo)
  in return (getArgsGenMethods (tiCI tinfo, tiCVar tinfo, args))

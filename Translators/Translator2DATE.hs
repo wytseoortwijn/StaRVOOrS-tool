@@ -282,9 +282,9 @@ accumTransitions (cn:cns) ns consts ts env pn scope =
 generateTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Scope -> (Transitions,Transitions,Transitions)
 generateTransitions p ns cs ts env pn scope = 
  let c             = lookForHT p cs ns
-     mn            = mname $ methodCN c
-     entrs         = lookForEntryTrigger (allTriggers env) (methodCN c) scope
-     entrs'        = [tr | tr <- entrs, not(isInfixOf (mn++"_ppden") tr)]
+     mn            = _methodCN c ^. mname
+     entrs         = lookForEntryTrigger (allTriggers env) (_methodCN c) scope
+     entrs'        = [tr | tr <- entrs, not(isInfixOf (mn ++ "_ppden") tr)]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
  in if null entrs
     then error $ "Translation: Missing entry trigger for method " ++ mn ++ ".\n"
@@ -306,12 +306,12 @@ makeTransitionAlg1 ns c env pn mn entrs =
 
 makeTransitionAlg1Cond :: NameState -> Trigger -> HT -> Env -> PropertyName -> Transition
 makeTransitionAlg1Cond ns e c env pn =
- let cn      = htName c
+ let cn      = c ^. htName
      oldExpM = oldExpTypes env
      (_,arg) = getValue $ lookForAllEntryTriggerArgs env c 
      c'      = "HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")"
      zs      = getExpForOld oldExpM cn
-     act     = " hppd" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
+     act     = " hppd" ++ show (_chGet c) ++ ".send(" ++ msg ++ ");"
      type_   = if null zs then "PPD" else "Old<Old_" ++ cn ++ ">"
      old     = if null zs then "" else "," ++ zs
      ident   = lookforClVar pn (propInForeach env)
@@ -338,16 +338,16 @@ makeExtraTransitionAlg2 :: Transitions -> HT -> Trigger -> NameState -> Env -> P
 makeExtraTransitionAlg2 [] _ _ _ _ _     = Nothing
 makeExtraTransitionAlg2 ts c e ns env pn = 
  let oldExpM = oldExpTypes env
-     cn      = htName c
+     cn      = c ^. htName
      zs      = getExpForOld oldExpM cn
      (_,arg) = getValue $ lookForAllEntryTriggerArgs env c 
-     pre'    = "HoareTriplesPPD." ++ (htName c) ++ "_pre(" ++ arg ++ ")"
+     pre'    = "HoareTriplesPPD." ++ (c ^. htName) ++ "_pre(" ++ arg ++ ")"
      type_   = if null zs then "PPD" else "Old<Old_" ++ cn ++ ">"
      old     = if null zs then "" else "," ++ zs
      ident   = lookforClVar pn (propInForeach env)
      ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
      msg     = "new Messages" ++ type_ ++ ident' ++ old ++ ")"
-     act     = " hppd" ++ show (chGet c) ++ ".send(" ++ msg ++ ");"
+     act     = " hppd" ++ show (_chGet c) ++ ".send(" ++ msg ++ ");"
      c'      = makeExtraTransitionAlg2Cond ts 
  in case c' of
          Nothing  -> Nothing 
@@ -374,8 +374,8 @@ avoidTriviallyFalseCond = filter (check.trim.cond.arrow)
 instrumentTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Scope -> Transitions
 instrumentTransitions p ns cs ts env pn scope = 
  let c             = lookForHT p cs ns
-     mn            = mname $ methodCN c
-     entrs         = lookForEntryTrigger (allTriggers env) (methodCN c) scope
+     mn            = _methodCN c ^. mname
+     entrs         = lookForEntryTrigger (allTriggers env) (_methodCN c) scope
      entrs'        = [tr | tr <- entrs, not(isInfixOf (mn++"_ppden") tr)]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
  in if null entrs
@@ -386,7 +386,7 @@ instrumentTransitions p ns cs ts env pn scope =
 
 instrumentTransitionAlg2 :: HT -> Transition -> Trigger -> Env -> PropertyName -> Transition
 instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env pn =
- let cn      = htName c
+ let cn      = c ^. htName
      oldExpM = oldExpTypes env
      (_,arg) = getValue $ lookForAllEntryTriggerArgs env c 
      zs      = getExpForOld oldExpM cn
@@ -395,14 +395,14 @@ instrumentTransitionAlg2 c t@(Transition q (Arrow e' c' act) q') e env pn =
      ident   = lookforClVar pn (propInForeach env)
      ident'  = if null ident then "(id" else "(" ++ ident ++ "::id"
      msg     = "new Messages" ++ type_ ++ ident' ++ old ++ ")"
-     act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) { hppd" ++ show (chGet c) ++ ".send(" ++ msg ++ "); " ++ "} ;"
+     act'    = " if (HoareTriplesPPD." ++ cn ++ "_pre(" ++ arg ++ ")) { hppd" ++ show (_chGet c) ++ ".send(" ++ msg ++ "); " ++ "} ;"
  in Transition q (Arrow e' c' (act ++ act')) q'
 
 
 lookForHT :: PropertyName -> HTriples -> NameState -> HT
 lookForHT p []     ns = error $ "Error: Could not find property "++ p ++ " on state " ++ ns ++ ".\n"
 lookForHT p (c:cs) ns =
- if (htName c == p)
+ if (c ^. htName == p)
  then c
  else lookForHT p cs ns
 
@@ -470,7 +470,7 @@ generateProp es ((c,n):ys) env acc =
 -- Included to interact with optimisation OptRecAway.hs --
 genRA :: HT -> Int -> Triggers -> Env -> [(MethodCN,Bool)] -> (String,[(MethodCN,Bool)])
 genRA c n es env acc = 
- let (b,acc') = checkIfRec (methodCN c) env acc
+ let (b,acc') = checkIfRec (_methodCN c) env acc
  in if True --TODO:replace by b once the optimisation OptRecAway.hs is implemented
     then (generateRAPost c n es env, acc')
     else (generatePropNonRec c n es env, acc')
@@ -493,11 +493,11 @@ generateRAPost c n es env =
 
 generateTriggerRA :: Env -> HT -> Int -> (String,String) -> String
 generateTriggerRA env c n w =
- let cn       = htName c
-     mnc      = methodCN c
-     mn       = mname mnc
-     ci       = clinf mnc
-     ov       = overl mnc
+ let cn       = c ^. htName
+     mnc      = _methodCN c
+     mn       = mnc ^. mname
+     ci       = mnc ^. clinf
+     ov       = mnc ^. overl
      oldExpM  = oldExpTypes env
      zs       = getOldExpr oldExpM cn
      nvar     = if null zs then "PPD" else "Old<Old_" ++ cn ++ ">"     
@@ -532,7 +532,7 @@ instrumentTriggers (e:es) cs env =
 lookupHTForTrigger :: TriggerDef -> ClassInfo -> HTriples -> (Bool, MethodName, [Bind])
 lookupHTForTrigger _ _ []      = (False,"", [])
 lookupHTForTrigger e ci (c:cs) = case compTrigger e of
-                                      NormalEvent _ id bs _ -> if (id == mname (methodCN c) && clinf (methodCN c) == ci)
+                                      NormalEvent _ id bs _ -> if (id == (_methodCN c ^. mname) && (_methodCN c ^. clinf) == ci)
                                                                then (True, id, bs)
                                                                else lookupHTForTrigger e ci cs
                                       _                     -> lookupHTForTrigger e ci cs

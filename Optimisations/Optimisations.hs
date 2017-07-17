@@ -17,7 +17,7 @@ import Control.Lens hiding(Context,pre)
 
 optimisedProvenHTs :: HTriples -> (HTName -> a -> a) -> a -> a
 optimisedProvenHTs [] f ps     = ps
-optimisedProvenHTs (c:cs) f ps = f (htName c) $ optimisedProvenHTs cs f ps
+optimisedProvenHTs (c:cs) f ps = f (c ^. htName) $ optimisedProvenHTs cs f ps
 
 refinePropertyOptTemplates :: HTName -> Templates -> Templates
 refinePropertyOptTemplates _ TempNil       = TempNil
@@ -63,11 +63,11 @@ removePropInState cn (cn':cns) = if (cn == cn')
 strengthenPre :: HTriples -> HTriples
 strengthenPre []      = []
 strengthenPre (h:hts) = 
- let newpre = (removeSelf.head.newPRe) h
-     pre'   = "(" ++ pre h ++ ") && " ++ newpre
- in if ((head.newPRe) h == "(true)")
+ let newpre = (removeSelf.head.(^. newPRe)) h
+     pre'   = "(" ++ h ^. pre ++ ") && " ++ newpre
+ in if ((head.(^. newPRe)) h == "(true)")
     then h:strengthenPre hts
-    else updatePre h pre':strengthenPre hts
+    else (pre .~ pre' $ h):strengthenPre hts
 
 ---------------------------------------------------------------
 -- Avoid strengthening Hoare triples with trivial conditions --

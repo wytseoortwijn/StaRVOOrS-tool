@@ -105,9 +105,8 @@ genMethodsForConstForall c env oldExpM =
     let newpost = flattenBody body_post
     let pre_opmethods  = concat $ extracMethodDefinitions body_pre
     let post_opmethods = concat $ extracMethodDefinitions body_post
-    let c'  = updatePre c newpre
-    let c'' = updatePost c' newpost
-    return (c'', pre_opmethods ++ post_opmethods)
+    let c'  = c & pre .~ newpre & post .~ newpost
+    return (c', pre_opmethods ++ post_opmethods)
 
 
 genMethodsForConstExists :: HT -> Env -> OldExprM -> UpgradePPD (HT, String)
@@ -117,9 +116,8 @@ genMethodsForConstExists c env oldExpM =
     let newpost = flattenBody body_post
     let pre_opmethods  = concat $ extracMethodDefinitions body_pre
     let post_opmethods = concat $ extracMethodDefinitions body_post
-    let c'  = updatePre c newpre
-    let c'' = updatePost c' newpost
-    return (c'', pre_opmethods ++ post_opmethods)
+    let c'  = c & pre .~ newpre & post .~ newpost
+    return (c', pre_opmethods ++ post_opmethods)
 
 
 auxNewVars :: Variables -> [String]
@@ -136,18 +134,18 @@ methodForPost c env oldExpM =
     let nargs     = if (null tnvs) then "" else "," ++ newargs
     let args      = addComma $ map unwords $ map (\s -> if isInfixOf "ret_ppd" (head $ tail s) then (head s):["ret"] else s)
                     $ map words $ splitOnIdentifier "," (argsPost ++ nargs)
-    return $ "  // " ++ (htName c) ++ "\n"
-             ++ "  public static boolean " ++ (htName c) ++ "_post(" ++ args ++ ") {\n"
-             ++ "    return " ++ (post c) ++ ";\n" 
+    return $ "  // " ++ (c ^. htName) ++ "\n"
+             ++ "  public static boolean " ++ (c ^. htName) ++ "_post(" ++ args ++ ") {\n"
+             ++ "    return " ++ (c ^. post) ++ ";\n" 
              ++ "  }\n\n"
 
 --check opt for new predicates for the precondition due to partial proof
 methodForPre :: HT -> Env -> UpgradePPD String
 methodForPre c env =
  do (argsPre, _) <- lookForAllEntryTriggerArgs env c
-    return $ "  // " ++ (htName c) ++ "\n"
-             ++ "  public static boolean " ++ (htName c) ++ "_pre(" ++ argsPre ++ ") {\n" 
-             ++ "    return " ++ pre c ++ ";\n"
+    return $ "  // " ++ (c ^. htName) ++ "\n"
+             ++ "  public static boolean " ++ (c ^. htName) ++ "_pre(" ++ argsPre ++ ") {\n" 
+             ++ "    return " ++ c ^. pre ++ ";\n"
              ++ "  }\n\n"
 
 
@@ -199,7 +197,7 @@ oldExprFileGen output_add ppd =
  let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      consts        = ppdate ^. htsGet
      oldExpM       = oldExpTypes env 
-     consts'       = [c | c <- consts, noOldExprInHT $ Map.lookup (htName c) oldExpM]    
+     consts'       = [c | c <- consts, noOldExprInHT $ Map.lookup (c ^. htName) oldExpM]    
  in if Map.null oldExpM
     then return ()
     else sequence_ [writeFile (output_add ++ (snd $ oldExpGen c oldExpM)) (fst $ oldExpGen c oldExpM) | c <- consts']
@@ -207,7 +205,7 @@ oldExprFileGen output_add ppd =
 
 oldExpGen :: HT -> OldExprM -> (String,String)
 oldExpGen c oldExpM = 
- let cn = htName c
+ let cn = c ^. htName
      nameClass = "Old_" ++ cn
      xs        = map (\(x,y,z) -> (y,z)) $ fromJust $ Map.lookup cn oldExpM
  in ("package ppArtifacts;\n\n"

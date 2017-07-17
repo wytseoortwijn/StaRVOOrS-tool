@@ -119,12 +119,12 @@ oExpr2Xml oexpr =
 generateOldExpr :: HTriples -> FilePath ->  [OldExpr]
 generateOldExpr [] _         = []
 generateOldExpr (c:cs) jpath = 
- let cn     = htName c
-     p      = post c
-     classI = clinf $ methodCN c
+ let cn     = c ^. htName
+     p      = c ^. post
+     classI = _methodCN c ^. clinf
      path   = jpath
-     tar    = path2it c
-     mn     = mname $ methodCN c
+     tar    = c ^. path2it
+     mn     = _methodCN c ^. mname
      xs     = splitOnIdentifier "\\old(" p
  in if (length xs == 1)
     then generateOldExpr cs jpath

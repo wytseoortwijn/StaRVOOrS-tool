@@ -6,11 +6,11 @@ import RefinementPPDATE
 import UpgradePPDATE
 import qualified Data.Map as Map
 import Data.Maybe
-
+import Control.Lens
 
 generateRA :: HT -> Int -> Env -> Property
 generateRA c n env = 
- Property (htName c)
+ Property (c ^. htName)
           (States [State "start" InitNil []] 
                   [State "postOK" InitNil []] 
                   [State "bad" InitNil []] 
@@ -20,9 +20,9 @@ generateRA c n env =
 
 makeTransitions :: HT -> Int -> Env -> Transitions
 makeTransitions c n env =
-   let trig    = tName $ getTriggerDef (overl $ methodCN c) c (allTriggers env) 
+   let trig    = tName $ getTriggerDef (_methodCN c ^. overl) c (allTriggers env) 
        bs      = snd $ getValue $ lookForAllExitTriggerArgs env c
-       cn      = htName c
+       cn      = c ^. htName
        oldExpM = oldExpTypes env
        checkId = "id.equals(idAuxPPD) && "
        zs      = if getOldExpr oldExpM cn == "" then "" else ",oldExpAux"

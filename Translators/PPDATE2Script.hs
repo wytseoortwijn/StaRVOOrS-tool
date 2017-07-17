@@ -151,11 +151,11 @@ writePPDHts hts =
 writePPDHts' :: HTriples -> String
 writePPDHts' []      = ""
 writePPDHts' (h:hts) = 
- "HT " ++ htName h ++ " {\n"
- ++ "PRE { " ++ pre h ++" }\n"
- ++ "METHOD { " ++ clinf (methodCN h) ++ "." ++ mname (methodCN h) ++" }\n"
- ++ "POST { " ++ post h ++" }\n"
- ++ "ASSIGNABLE { " ++ assignable h ++" }\n"
+ "HT " ++ h ^. htName ++ " {\n"
+ ++ "PRE { " ++ h ^. pre ++" }\n"
+ ++ "METHOD { " ++ (_methodCN h) ^. clinf ++ "." ++ (_methodCN h) ^. mname ++" }\n"
+ ++ "POST { " ++ h ^. post ++" }\n"
+ ++ "ASSIGNABLE { " ++ h ^. assignable ++" }\n"
  ++ "}\n\n"
  ++ writePPDHts' hts
 

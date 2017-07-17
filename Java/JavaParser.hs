@@ -6,6 +6,7 @@ import Language.Java.Syntax
 import Language.Java.Pretty
 import Language.Java.Lexer
 import Data.Maybe (fromJust)
+import Control.Lens hiding(Context,pre) 
 
 ---------------------------------------
 -- Manipulation of parsed java files --
@@ -100,8 +101,8 @@ splitV type' (v:vs) = (type',v):splitV type' vs
 
 getMethodsNames :: T.ClassInfo -> T.HTriples -> [T.MethodName]
 getMethodsNames _ []      = []
-getMethodsNames cl (c:cs) = if ((T.clinf $ T.methodCN c) == cl)  
-                            then (T.mname $ T.methodCN c):getMethodsNames cl cs
+getMethodsNames cl (c:cs) = if ((T._methodCN c ^. T.clinf) == cl)  
+                            then (T._methodCN c ^. T.mname):getMethodsNames cl cs
                             else getMethodsNames cl cs
 
 instrumentMethodMemberDecl :: [Decl] -> [T.MethodName] -> [Decl]

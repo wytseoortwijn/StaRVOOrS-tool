@@ -17,9 +17,9 @@ import Control.Lens hiding(Context,pre)
 lookForEntryTrigger :: [TriggersInfo] -> MethodCN -> Scope -> [Trigger]
 lookForEntryTrigger [] _ _               = []
 lookForEntryTrigger (tinfo:es) mnc scope = 
- let mn = mname mnc
-     ci = clinf mnc
-     ov = overl mnc
+ let mn = mnc ^. mname
+     ci = mnc ^. clinf
+     ov = mnc ^. overl
  in case (tiTrvar tinfo) of
         EVEntry -> if (mn == (tiMN tinfo) && ci == (tiCI tinfo) && cmpScope scope (tiScope tinfo)
                       && (cmpOverloading ov (tiOver tinfo) || ov == OverNil))
@@ -74,10 +74,10 @@ getListOfTypesAndMethods cl ((main, cl',ts):xs) =
 
 getMethodInvocations :: MethodCN -> [(String, ClassInfo, JavaFilesInfo)] -> MethodInvocations
 getMethodInvocations _ []                    = []
-getMethodInvocations mcn ((main, cl',ts):xs) = 
- let mn  = mname mcn
-     cl  = clinf mcn
-     ov  = overl mcn
+getMethodInvocations mnc ((main, cl',ts):xs) = 
+ let mn  = mnc ^. mname
+     cl  = mnc ^. clinf
+     ov  = mnc ^. overl
  in if (cl == cl') 
     then let ys = [ (t,id,args,minvs) | (t,id,args,minvs) <- methodsInFiles ts, id==mn]
          in if (not.null) ys
@@ -85,10 +85,10 @@ getMethodInvocations mcn ((main, cl',ts):xs) =
                  OverNil  -> (\x -> x ^. _4) $ head ys 
                  Over ovs -> let zs = [ y ^. _4 | y <- ys, map (head.words) (y ^. _3) == ovs]
                              in if null zs
-                                then getMethodInvocations mcn xs
+                                then getMethodInvocations mnc xs
                                 else head zs
-            else getMethodInvocations mcn xs
-    else getMethodInvocations mcn xs
+            else getMethodInvocations mnc xs
+    else getMethodInvocations mnc xs
 
 getListOfArgs :: MethodName -> [(Type, Id,[String],MethodInvocations)] -> [String]
 getListOfArgs mn []                = []
@@ -100,9 +100,9 @@ getConstTnv :: HT -> OldExprM -> Variables
 getConstTnv c oldExpM = 
   if Map.null oldExpM 
   then []
-  else case Map.lookup (htName c) oldExpM of
+  else case Map.lookup (c ^. htName) oldExpM of
             Nothing -> []
-            Just xs -> let cn    = htName c
+            Just xs -> let cn    = c ^. htName
                            vdec  = VarDecl cn VarInitNil
                            typE  = "Old_" ++ cn
                        in if null xs
@@ -127,10 +127,10 @@ getBindArgs' _                      = ""
 getInfoTrigger :: [TriggersInfo] -> Trigger -> HT -> Maybe TriggersInfo
 getInfoTrigger [] _ _          = Nothing
 getInfoTrigger (tinfo:ts) tr c = 
- let mnc = methodCN c
-     cl  = clinf mnc     
-     mn  = mname mnc
-     ov  = overl mnc
+ let mnc = _methodCN c
+     cl  = mnc ^. clinf
+     mn  = mnc ^. mname
+     ov  = mnc ^. overl
  in if (tiTN tinfo == tr) && (tiCI tinfo == cl) && (tiMN tinfo == mn)
     then if (cmpOverloading ov (tiOver tinfo))
          then Just tinfo
@@ -140,27 +140,27 @@ getInfoTrigger (tinfo:ts) tr c =
 
 getTriggerDef :: Overriding -> HT -> [TriggersInfo] -> TriggerDef 
 getTriggerDef OverNil c xs = 
- let mnc = methodCN c
-     cl  = clinf mnc
+ let mnc = _methodCN c
+     cl  = mnc ^. clinf
      tr  = mn ++ "_ppdex"
-     mn  = mname mnc
+     mn  = mnc ^. mname
      xs'  = [ tiTrDef tinfo | tinfo <- xs, isInfixOf tr (tiTN tinfo), cl == (tiCI tinfo), tiTrDef tinfo /= Nothing ]
  in case xs' of
-         []     -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
+         []     -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ c ^. htName ++ ".\n"
          tdef:_ -> fromJust tdef
 getTriggerDef (Over ts) c xs = 
- let mnc  = methodCN c
-     cl   = clinf mnc
+ let mnc  = _methodCN c
+     cl   = mnc ^. clinf
      tr   = mn ++ "_ppdex"
-     mn   = mname mnc
+     mn   = mnc ^. mname
      xs'  = [ tiTrDef tinfo | tinfo <- xs, isInfixOf tr (tiTN tinfo), cl == (tiCI tinfo), tiTrDef tinfo /= Nothing, Over ts == tiOver tinfo ]
  in if length xs' == 1
     then case head xs' of
-         Nothing   -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
+         Nothing   -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ c ^. htName ++ ".\n"
          Just tdef -> tdef
     else let xs'' = map fromJust xs'
          in case [ x | (ts',x) <- zip (map (map getBindTypeType.getCTArgs.compTrigger) xs'') xs'', ts == ts'] of
-                 []   -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ htName c ++ ".\n"
+                 []   -> error $ "Error: Problem when generating the exit trigger for the Hoare triple " ++ c ^. htName ++ ".\n"
                  x:xs -> x
 
 lookfor :: [(Trigger, [String])] -> Trigger -> [String]

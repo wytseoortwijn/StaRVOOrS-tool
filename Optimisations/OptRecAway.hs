@@ -5,6 +5,7 @@ import Types
 import CommonFunctions
 import UpgradePPDATE
 import Language.Java.Syntax hiding(VarDecl)
+import Control.Lens hiding(Context,pre)
 
 -----------------------------------------------------------------------
 -- If a method is recursive, then translate away replicated automata --
@@ -18,7 +19,7 @@ checkIfRec' mcn env acc =
              rec   = False --TODO: check if indirect recursion
          in if null minvs 
             then (False,(mcn,False):acc)
-            else if directRec (mname mcn) minvs
+            else if directRec (mcn ^. mname) minvs
                  then (True,(mcn,True):acc)
                  else (rec,(mcn,rec):acc)
     else (head xs,acc)
@@ -48,7 +49,7 @@ getInvocationsInMethodBody mcn env =
 
 generateRAOptimised' :: HT -> Int -> Env -> Property
 generateRAOptimised' c n env = 
-  Property (htName c)
+  Property (c ^. htName)
            (States [State "start" InitNil []] 
                   [] 
                   [State "bad" InitNil []] 
@@ -58,9 +59,9 @@ generateRAOptimised' c n env =
 
 makeTransitions :: HT -> Int -> Env -> Transitions
 makeTransitions c n env =
-   let trig    = tName $ getTriggerDef (overl $ methodCN c) c (allTriggers env) 
+   let trig    = tName $ getTriggerDef (_methodCN c ^. overl) c (allTriggers env) 
        bs      = snd $ getValue $ lookForAllExitTriggerArgs env c
-       cn      = htName c
+       cn      = c ^. htName
        oldExpM = oldExpTypes env
        zs      = if getOldExpr oldExpM cn == "" then "" else ",oldExpAux"
        nvar    = if null zs then "" else "CopyUtilsPPD.copy(msgPPD.getOldExpr(),oldExpAux); "
