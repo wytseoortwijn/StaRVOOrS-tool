@@ -9,6 +9,7 @@ import ParserXMLKeYOut
 import ReportGen
 import UpgradePPDATE
 import System.Exit
+import Control.Lens hiding(Context,pre)
 
 -------------------------------
 -- Static Analysis using KeY --
@@ -17,7 +18,7 @@ import System.Exit
 staticAnalysis :: FilePath -> UpgradePPD PPDATE -> FilePath -> [Flag] -> IO (Either [Proof] [Proof])
 staticAnalysis jpath ppd output_add flags =
  let ppdate      = getValue ppd
-     consts      = htsGet ppdate
+     consts      = view htsGet ppdate
  in if elem OnlyRV flags
     then do putStrLn "StaRVOOrS is ran in only runtime verification mode.\n"
             return $ Right []
@@ -30,8 +31,8 @@ staticAnalysis jpath ppd output_add flags =
 runAnalysis :: FilePath -> UpgradePPD PPDATE -> FilePath -> Flags -> IO (Either [Proof] [Proof])
 runAnalysis jpath ppd output_addr flags =
  let toAnalyse_add = output_addr ++ "workspace/files2analyse"
-     ppdate      = getValue ppd
-     consts      = htsGet ppdate
+     ppdate        = getValue ppd
+     consts        = view htsGet ppdate
  in do injectJMLannotations ppd jpath output_addr
        runKeY toAnalyse_add output_addr flags
        let xml_add = output_addr ++ "out.xml"

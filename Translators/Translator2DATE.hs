@@ -17,17 +17,18 @@ import qualified PrintActions as PrintAct
 import qualified PrintJml as PrintJML
 import TranslatorActions
 import Optimisations
+import Control.Lens hiding(Context,pre)
 
 
 translate :: UpgradePPD PPDATE -> FilePath -> IO ()
 translate ppd fpath =
  do let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
     putStrLn "Translating ppDATE to DATE."
-    writeFile fpath (writeImports (importsGet ppdate) (htsGet ppdate))
-    let consts = assocChannel2HTs 1 $ (htsGet ppdate)
-    let ppdate' = updateHTsPP ppdate consts
+    writeFile fpath (writeImports (view importsGet ppdate) (view htsGet ppdate))
+    let consts  = assocChannel2HTs 1 $ (view htsGet ppdate)
+    let ppdate' = set htsGet consts ppdate
     appendFile fpath (writeGlobal ppdate' env)
-    appendFile fpath (writeMethods (methodsGet ppdate')) 
+    appendFile fpath (writeMethods (view methodsGet ppdate')) 
     putStrLn $ "Translation completed."
 
 
@@ -51,14 +52,13 @@ writeImports xss const = let newImp = "import ppArtifacts.*;\n"
 
 writeGlobal :: PPDATE -> Env -> String
 writeGlobal ppdate env = 
- let global = ctxtGet $ globalGet ppdate
-     consts = htsGet ppdate
-     vars   = variables global
-     acts   = actes env
-     trs    = triggers global
-     prop   = property global
-     fors   = foreaches global         
-     temps  = templatesGet ppdate            
+ let acts   = actes env
+     consts = ppdate ^. htsGet
+     temps  = ppdate ^. templatesGet
+     vars   = ppdate ^. (globalGet . ctxtGet . variables)
+     trs    = ppdate ^. (globalGet . ctxtGet . triggers)
+     prop   = ppdate ^. (globalGet . ctxtGet . property)
+     fors   = ppdate ^. (globalGet . ctxtGet . foreaches)
  in "GLOBAL {\n\n" 
     ++ writeVariables vars consts acts (allCreateAct env)
     ++ writeTriggers trs consts acts env
@@ -423,17 +423,17 @@ lookForLeavingTransitions e ns (t@(Transition q (Arrow e' c act) q'):ts) =
 writeForeach :: Foreaches -> HTriples -> Env -> String
 writeForeach [] _ _                    = ""
 writeForeach (foreach:fors) consts env =
- let ctxt   = getCtxtForeach foreach
-     args   = getArgsForeach foreach 
-     vars   = variables ctxt
-     es     = triggers ctxt
-     prop   = property ctxt
-     acts   = actevents ctxt
-     fors'  = foreaches ctxt
+ let ctxt   = foreach ^. getCtxtForeach
+     args   = foreach ^. getArgsForeach
+     vars   = foreach ^. (getCtxtForeach . variables)
+     es     = foreach ^. (getCtxtForeach . triggers)
+     prop   = foreach ^. (getCtxtForeach . property)
+     acts   = foreach ^. (getCtxtForeach . actevents)
+     fors'  = foreach ^. (getCtxtForeach . foreaches)
  in "FOREACH (" ++ getForeachArgs args ++ ") {\n\n"
     ++ writeVariables vars [] [] []
     ++ writeTriggers es consts [] env
-    ++ writeProperties prop consts env (InFor $ getIdForeach foreach)
+    ++ writeProperties prop consts env (InFor $ foreach ^. getIdForeach)
     ++ writeForeach fors' consts env
     ++ "}\n\n"
     ++ writeForeach fors consts env
@@ -588,11 +588,11 @@ instantiateTemp for id args cai env =
      targs  = splitTempArgs (zip args (caiArgs cai)) emptyTargs  
      mp     = Map.union (makeRefTypeMap $ targRef targs) (makeMap $ targMN targs)
      trs    = addTriggerDef args cai env mp
-     ctxt   = getCtxtForeach for 
-     trs'   = (genTriggerForCreate id ch args): instantiateTrs (triggers ctxt) mp
-     ctxt'  = updateCtxtTrs ctxt (trs' ++ trs)
-     ctxt'' = updateCtxtProps ctxt' (instantiateProp (property ctxt) args cai)
- in Foreach (getArgsForeach for) ctxt'' (ForId (show (getIdForeach for) ++ "_"++ch))
+     ctxt   = for ^. getCtxtForeach
+     trs'   = (genTriggerForCreate id ch args): instantiateTrs (ctxt ^. triggers) mp
+     ctxt'  = triggers .~ (trs' ++ trs) $ ctxt
+     ctxt'' = over property (\ p -> instantiateProp p args cai) ctxt
+ in Foreach (for ^. getArgsForeach) ctxt'' (ForId (show (for ^. getIdForeach) ++ "_"++ch))
 
 instantiateTrs :: Triggers -> Map.Map Id String -> Triggers
 instantiateTrs [] _        = []

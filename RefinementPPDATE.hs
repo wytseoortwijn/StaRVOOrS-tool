@@ -18,9 +18,9 @@ import Control.Lens hiding(Context,pre)
 specRefinement :: UpgradePPD PPDATE -> Either [Proof] [Proof] -> Filename -> FilePath -> IO (UpgradePPD PPDATE)
 specRefinement ppdate (Left []) _ _  = return ppdate
 specRefinement ppdate (Right []) _ _ =
- if (null (htsGet $ getValue ppdate))
+ if (null (_htsGet $ getValue ppdate))
  then return ppdate
- else let ppdref = generateNewTriggers ppdate (htsGet $ getValue ppdate)  
+ else let ppdref = generateNewTriggers ppdate (_htsGet $ getValue ppdate)  
       in return $ translateActions $ replacePInit $ namedCreateActPPD ppdref
 specRefinement ppdate (Right proofs) fn output_addr =
  do let ppdref  = refinePPDATE ppdate proofs
@@ -52,18 +52,13 @@ removeGeneratedTriggers ppd =
 
 remGeneratedTriggers :: PPDATE -> PPDATE
 remGeneratedTriggers ppdate@(PPDATE _ (Global ctxt@(Ctxt [] [] [] PNIL (foreach:fors))) _ _ _ _) = 
- let ctxt''  = removeFromTrsCtxt (getCtxtForeach foreach)
-     fors'   = (updCtxtForeach foreach ctxt''):fors
-     ctxt''' = updateCtxtFors ctxt fors'
-     global' = Global ctxt'''
- in updateGlobalPP ppdate global'
-remGeneratedTriggers ppdate@(PPDATE _ (Global ctxt) _ _ _ _) = 
- let ctxt'   = removeFromTrsCtxt ctxt
-     global' = Global ctxt'
- in updateGlobalPP ppdate global'
+ let for'    = getCtxtForeach %~ removeFromTrsCtxt $ foreach
+     fors'   = for':fors
+ in ppdate & (globalGet . ctxtGet . foreaches) .~ fors'
+remGeneratedTriggers ppdate = (globalGet . ctxtGet) %~ removeFromTrsCtxt $ ppdate
 
 removeFromTrsCtxt :: Context -> Context 
-removeFromTrsCtxt ctxt@(Ctxt _ _ trs _ _) = updateCtxtTrs ctxt (removeFromTriggers trs)
+removeFromTrsCtxt ctxt = triggers %~ removeFromTriggers $ ctxt
 
 removeFromTriggers :: Triggers -> Triggers
 removeFromTriggers []       = []
@@ -80,21 +75,21 @@ refinePPDATE :: UpgradePPD PPDATE -> [Proof] -> UpgradePPD PPDATE
 refinePPDATE ppd proofs = 
  let ppdate    = getValue ppd 
      env       = getEnvVal ppd
-     consts    = htsGet ppdate
+     consts    = view htsGet ppdate
      nproved   = filter (\npr -> (not.null) (npr ^. _3)) $ map getInfoFromProof proofs
      proved    = filter (\pr -> null (pr ^. _3)) $ map getInfoFromProof proofs
      consts'   = [c | c <- consts, npr <- nproved, htName c == (npr ^. _2)]  
      cproved   = [c | c <- consts, pr <- proved, htName c == (pr ^. _2)]
      ppd'      = generateNewTriggers ppd consts'
      ppdate'   = getValue ppd'
-     global    = globalGet ppdate'
+     global    = ppdate' ^. globalGet
      triggers' = getAllTriggers global env
      consts''  = strengthenPre $ updateHTs nproved consts' triggers'
      env'      = getEnvVal ppd'     
      global'   = optimisedProvenHTs cproved refinePropertyOptGlobal global
-     temps     = templatesGet ppdate'
+     temps     = view templatesGet ppdate'
      temps'    = optimisedProvenHTs cproved refinePropertyOptTemplates temps
-     ppdate''  = updateTemplatesPP (updateHTsPP (updateGlobalPP ppdate' global') consts'') temps'
+     ppdate''  = ppdate' & globalGet .~ global' & htsGet .~ consts'' & templatesGet .~ temps'
  in do put env'
        return ppdate''
 
@@ -131,15 +126,13 @@ translateActInPPD :: PPDATE -> Env -> PPDATE
 translateActInPPD (PPDATE imps global temps cinvs hts ms) env = 
  PPDATE imps (translateActInGlobal global env) (translateActInTemps temps env) cinvs hts ms
 
-
 translateActInGlobal :: Global -> Env -> Global
 translateActInGlobal (Global ctxt) env = Global (translateActInCtxt ctxt env)
 
 translateActInCtxt :: Context -> Env -> Context
 translateActInCtxt ctxt env = 
- let prop' = translateActInProps (property ctxt) env
-     fors' = translateActInFors env (foreaches ctxt)
- in updateCtxtProps (updateCtxtFors ctxt fors') prop'
+ ctxt & property %~ (\ p -> translateActInProps p env)
+      & foreaches %~ (translateActInFors env)
  
 translateActInProps :: Property -> Env -> Property
 translateActInProps PNIL _                            = PNIL
@@ -150,7 +143,7 @@ translateActInFors :: Env -> Foreaches -> Foreaches
 translateActInFors env = map (translateActInFor env)
 
 translateActInFor :: Env -> Foreach -> Foreach
-translateActInFor env foreach = updCtxtForeach foreach (translateActInCtxt (getCtxtForeach foreach) env)
+translateActInFor env foreach = getCtxtForeach %~ (\ ctxt -> translateActInCtxt ctxt env) $ foreach
 
 translateActInTrans :: Env -> Transitions -> Transitions
 translateActInTrans env = map (translateActInTran env)
@@ -285,7 +278,7 @@ generateNewTriggers ppd consts =
      return ppdate'
 
 checkOverloading :: [(String,MethodName,[String],MethodInvocations)] -> Overriding -> (String,MethodName,[String],MethodInvocations)
-checkOverloading [] _             = error "Problem with overloading.\n"
+checkOverloading [] _             = error "Problem with overriding.\n"
 checkOverloading (val:xs) OverNil = val
 checkOverloading (val:xs) ov      = 
  if Over (map (getBindTypeType.makeBind) (val ^. _3)) == ov
@@ -398,11 +391,10 @@ remGenerics' s =
 --Returns the scope where the generated triggers should be placed
 properScope :: PPDATE -> Scope
 properScope ppd = 
- let global = ctxtGet $ globalGet ppd
-     vars   = variables global
-     actes  = actevents global
-     trs    = triggers global
-     props  = property global
+ let vars   = ppd ^. (globalGet . ctxtGet . variables)
+     actes  = ppd ^. (globalGet . ctxtGet . actevents)
+     trs    = ppd ^. (globalGet . ctxtGet . triggers)
+     props  = ppd ^. (globalGet . ctxtGet . property)
  in if and [null vars,null actes,null trs,PNIL == props]
     then InFor (ForId "TopLevel")
     else TopLevel

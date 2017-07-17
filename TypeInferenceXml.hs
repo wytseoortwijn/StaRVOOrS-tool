@@ -19,7 +19,7 @@ inferTypesOldExprs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO (Map.Map H
 inferTypesOldExprs ppd jpath output_add = 
  let ppdate  = getValue ppd
      env     = getEnvVal ppd
-     toXml   = generateOldExpr (htsGet ppdate) jpath
+     toXml   = generateOldExpr (_htsGet ppdate) jpath
  in if null toXml
     then return Map.empty
     else let jinfo   = javaFilesInfo env

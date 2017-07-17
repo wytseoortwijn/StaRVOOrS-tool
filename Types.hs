@@ -1,3 +1,5 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Types where
 
 import qualified Data.Map as Map
@@ -13,22 +15,13 @@ import Control.Lens hiding(Context)
 ------------
 
 data PPDATE = PPDATE
-  { importsGet     :: Imports
-  , globalGet      :: Global
-  , templatesGet   :: Templates
-  , cinvariantsGet :: CInvariants
-  , htsGet         :: HTriples
-  , methodsGet     :: Methods 
+  { _importsGet     :: Imports
+  , _globalGet      :: Global
+  , _templatesGet   :: Templates
+  , _cinvariantsGet :: CInvariants
+  , _htsGet         :: HTriples
+  , _methodsGet     :: Methods 
   } deriving (Show, Eq)
-
-updateHTsPP :: PPDATE -> HTriples -> PPDATE
-updateHTsPP (PPDATE imp global temps cinvs conts ms) conts' = PPDATE imp global temps cinvs conts' ms
-
-updateGlobalPP :: PPDATE -> Global -> PPDATE
-updateGlobalPP (PPDATE imp global temps cinvs conts ms) global' = PPDATE imp global' temps cinvs conts ms
-
-updateTemplatesPP :: PPDATE -> Templates -> PPDATE
-updateTemplatesPP (PPDATE imp global temps cinvs conts ms) temps' = PPDATE imp global temps' cinvs conts ms
 
 data Import = Import String deriving (Eq)
 
@@ -49,12 +42,12 @@ instance Show CInvariant where
 
 type CInvariants = [CInvariant]
 
-
 type HTName     = String
 type MethodName = String
 type Pre        = JMLExp
 type Post       = JMLExp
 type Assignable = String
+
 data MethodCN   = 
  MCN { clinf :: ClassInfo
      , mname :: MethodName
@@ -105,31 +98,16 @@ updateCH (HT cn m p po ass npre ch p2it) ch' = HT cn m p po ass npre ch' p2it
 updatePath :: HT -> String -> HT
 updatePath (HT cn m p po ass npre ch p2it) p2it' = HT cn m p po ass npre ch p2it'
 
-
-
 data Context =
-   Ctxt { variables :: Variables
-        , actevents :: ActEvents
-        , triggers  :: Triggers
-        , property  :: Property
-        , foreaches :: Foreaches
+   Ctxt { _variables :: Variables
+        , _actevents :: ActEvents
+        , _triggers  :: Triggers
+        , _property  :: Property
+        , _foreaches :: Foreaches
         }
   deriving (Eq,Show,Read)
 
-updateCtxtFors :: Context -> Foreaches -> Context
-updateCtxtFors (Ctxt vars acts trs props fors) fors' = Ctxt vars acts trs props fors'
-
-updateCtxtProps :: Context -> Property -> Context
-updateCtxtProps (Ctxt vars acts trs props fors) props' = Ctxt vars acts trs props' fors
-
-updateCtxtTrs :: Context -> Triggers -> Context
-updateCtxtTrs (Ctxt vars acts trs props fors) trs' = Ctxt vars acts trs' props fors
-
-data Global = Global
-  { ctxtGet  :: Context } deriving (Show, Eq)
-
-updateGlobal :: Global -> Context -> Global
-updateGlobal (Global ctxt) ctxt' = Global ctxt'
+data Global = Global { _ctxtGet  :: Context } deriving (Show, Eq)
 
 ---------------
 -- Templates --
@@ -175,13 +153,10 @@ type Foreaches = [Foreach]
 
 --ForId is introduced to keep track of the scope where a trigger is defined
 data Foreach = 
- Foreach { getArgsForeach :: [Args]
-         , getCtxtForeach :: Context
-         , getIdForeach :: ForId 
+ Foreach { _getArgsForeach :: [Args]
+         , _getCtxtForeach :: Context
+         , _getIdForeach :: ForId 
          } deriving (Eq,Show, Read)
-
-updCtxtForeach :: Foreach -> Context -> Foreach
-updCtxtForeach (Foreach args ctxt id) ctxt' = Foreach args ctxt' id
 
 data ForId = ForId Id deriving (Eq,Read)
 
@@ -629,3 +604,16 @@ data JavaFilesInfo = JavaFilesInfo
  , methodsInFiles :: [(Type,Id,[String],MethodInvocations)] 
                    --[(path_to_class,method_name,args,[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body)])]
  } deriving(Eq,Show)
+
+------------
+-- Lenses --
+------------
+
+-- ^. is view
+-- %~ is over
+-- .~ is set
+
+makeLenses ''PPDATE
+makeLenses ''Global
+makeLenses ''Context
+makeLenses ''Foreach

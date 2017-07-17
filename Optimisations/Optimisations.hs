@@ -7,6 +7,7 @@ import UpgradePPDATE
 import DL2JML
 import OptAvoidTrivialCond
 import OptRecAway
+import Control.Lens hiding(Context,pre)
 
 --------------------------------------------------------------
 -- Deductive verification to partially verify Hoare triples --
@@ -26,15 +27,15 @@ refineTemplate :: HTName -> Template -> Template
 refineTemplate cn temp = updateTemplateProp temp (removeStatesProp cn $ tempProp temp)
 
 refinePropertyOptGlobal :: HTName -> Global -> Global
-refinePropertyOptGlobal cn (Global ctxt) = Global $ refineContext cn ctxt
+refinePropertyOptGlobal cn global = ctxtGet %~ (refineContext cn) $ global
 
 refineContext :: HTName -> Context -> Context
-refineContext cn (Ctxt vars ies trigs prop fors) = 
- let prop' = removeStatesProp cn prop
- in Ctxt vars ies trigs prop' (map (refineForeach cn) fors)
+refineContext cn ctxt = 
+ ctxt & property %~ removeStatesProp cn 
+      & foreaches %~ (map (refineForeach cn))
 
 refineForeach :: HTName -> Foreach -> Foreach
-refineForeach cn foreach = updCtxtForeach foreach (refineContext cn (getCtxtForeach foreach))
+refineForeach cn foreach = getCtxtForeach %~ (refineContext cn) $ foreach
 
 removeStatesProp :: HTName -> Property -> Property
 removeStatesProp _ PNIL               = PNIL

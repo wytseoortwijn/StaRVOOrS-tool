@@ -2,7 +2,7 @@ module PPDATE2Script(ppd2Script) where
 
 import Types
 import CommonFunctions
-
+import Control.Lens hiding(Context,pre)
 
 ------------------------------
 -- ppDATE to input language --
@@ -107,8 +107,8 @@ writePPDForeaches fors@(f:fs) = unlines (map writePPDForeach fors)
  
 writePPDForeach :: Foreach -> String
 writePPDForeach foreach = 
- "FOREACH (" ++ addComma (map show (getArgsForeach foreach)) ++ ") {\n\n"
- ++ writePPDContext (getCtxtForeach foreach)
+ "FOREACH (" ++ addComma (map show (foreach ^. getArgsForeach)) ++ ") {\n\n"
+ ++ writePPDContext (foreach ^. getCtxtForeach)
  ++ "}\n\n"
 
 writePPDTemps :: Templates -> String

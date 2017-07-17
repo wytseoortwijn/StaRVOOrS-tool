@@ -19,8 +19,8 @@ import Control.Lens hiding(Context,pre)
 operationalizeOldResultBind :: UpgradePPD PPDATE -> Map.Map HTName [(String,Type)] -> UpgradePPD PPDATE
 operationalizeOldResultBind ppd oldExprTypesM =
  let (ppdate, env) =  fromOK $ runStateT ppd emptyEnv
-     global   = globalGet ppdate
-     consts   = htsGet ppdate
+     global   = view globalGet ppdate
+     consts   = view htsGet ppdate
      jinfo    = javaFilesInfo env
      methods  = map (\(x,y,z) -> (x,y,map (\y -> y ^. _2) (methodsInFiles z))) jinfo
      es       = getAllTriggers global env
@@ -28,10 +28,9 @@ operationalizeOldResultBind ppd oldExprTypesM =
      xs'      = map (\(Bad s) -> s) $ filter isBad $ map (\x -> runStateT x env) xs
      oldExpT  = Map.unions $ map (snd.goo env) xs
      consts'  = map (fst.goo env) xs
-     global'  = updateGlobal global (Ctxt (variables $ ctxtGet global) (actevents $ ctxtGet global) (triggers $ ctxtGet global) (property $ ctxtGet global) (foreaches $ ctxtGet global))
  in if (not.null) xs'
     then error $ unlines xs'
-    else ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ updateHTsPP (updateGlobalPP ppdate global') consts')
+    else ppd >>= (\x -> do put env { oldExpTypes = oldExpT } ; return $ ppdate & htsGet .~ consts')
                  where goo env = \ x -> fst $ fromOK $ runStateT x env
 
 

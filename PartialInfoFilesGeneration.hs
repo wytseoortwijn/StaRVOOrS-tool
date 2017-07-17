@@ -12,6 +12,7 @@ import qualified Data.Map as Map
 import Data.Maybe (fromJust)
 import TypeInferenceXml
 import Instrumentation
+import Control.Lens hiding(Context,pre)
 
 ----------------------------------------
 -- Instrumented Java files generation --
@@ -48,9 +49,9 @@ getSourceCodeFolderName s = let (xs,ys) = splitAtIdentifier '/' $ (reverse . ini
 htsJavaFileGen :: UpgradePPD PPDATE -> FilePath -> IO ()
 htsJavaFileGen ppd output_add = 
  let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-     imp           = importsGet ppdate
-     global        = globalGet ppdate
-     consts        = htsGet ppdate
+     imp           = view importsGet ppdate
+     global        = view globalGet ppdate
+     consts        = view htsGet ppdate
      oldExpM       = oldExpTypes env
      forallop'     = map (\c -> genMethodsForConstForall c env oldExpM) consts
      forallop      = map (goo env) forallop'
@@ -196,7 +197,7 @@ idGen =
 oldExprFileGen :: FilePath -> UpgradePPD PPDATE -> IO ()
 oldExprFileGen output_add ppd = 
  let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-     consts        = htsGet ppdate      
+     consts        = view htsGet ppdate      
      oldExpM       = oldExpTypes env 
      consts'       = [c | c <- consts, noOldExprInHT $ Map.lookup (htName c) oldExpM]    
  in if Map.null oldExpM
@@ -314,8 +315,8 @@ cloningGen =
 templatesFileGen :: FilePath -> UpgradePPD PPDATE -> IO ()
 templatesFileGen output_add ppd = 
  let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-     temps         = templatesGet ppdate 
-     imps          = getImports $ importsGet ppdate
+     temps         = view templatesGet ppdate 
+     imps          = getImports $ view importsGet ppdate
  in case temps of
          TempNil -> return ()
          Temp xs -> sequence_ $ [writeFile (output_add ++ (snd val)) (fst val) | val <- map (tempGen imps) xs]

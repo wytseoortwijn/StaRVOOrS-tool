@@ -7,6 +7,7 @@ import System.Directory
 import UpgradePPDATE
 import ErrM
 import JavaLanguage
+import Control.Lens hiding(Context,pre)
 
 --------------------------
 -- Code Instrumentation --
@@ -16,7 +17,7 @@ import JavaLanguage
 methodsInstrumentation :: UpgradePPD T.PPDATE -> FilePath -> FilePath -> IO ()
 methodsInstrumentation ppd jpath output_add =
  do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-    let consts        = T.htsGet ppdate
+    let consts        = T._htsGet ppdate
     if (null consts)
     then return ()
     else methodsInstrumentation' ppd jpath output_add
@@ -24,8 +25,8 @@ methodsInstrumentation ppd jpath output_add =
 methodsInstrumentation' :: UpgradePPD T.PPDATE -> FilePath -> FilePath -> IO ()
 methodsInstrumentation' ppd jpath output_add =
   do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-     let consts        = T.htsGet ppdate
-     let imp           = T.importsGet ppdate
+     let consts        = T._htsGet ppdate
+     let imp           = view T.importsGet ppdate
      sequence [ instrumentFile i consts jpath output_add
               | i <- imp, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
               ]

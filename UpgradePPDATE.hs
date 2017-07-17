@@ -1,3 +1,5 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module UpgradePPDATE where
 
 import Types
@@ -626,18 +628,17 @@ checkTempInCreate act env                     = return act
 getForeaches :: Abs.Foreaches -> Context -> Scope -> UpgradePPD Context
 getForeaches Abs.ForeachesNil ctxt _ = 
  do env <- get    
-    put env { actes = actes env ++ map show (actevents ctxt)} 
+    put env { actes = actes env ++ map show (ctxt ^. actevents)} 
     return ctxt
 getForeaches (Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ (Abs.ForeachesDef args actxt fors)) afors) _ _ = 
  fail "Error: StaRVOOrS does not support nested Foreaches.\n"
 getForeaches afors@(Abs.ForeachesDef _ (Abs.Ctxt _ _ _ _ Abs.ForeachesNil) _) ctxt scope = 
  let afors' = prepareForeaches afors
  in do env <- get
-       put env { actes = actes env ++ map show (actevents ctxt)}
+       put env { actes = actes env ++ map show (ctxt ^. actevents)}
        fors <- sequence $ map (uncurry getForeach) (zip afors' (createIds scope afors'))
        env' <- get
-       return (updateCtxtFors ctxt fors)
-
+       return (foreaches .~ fors $ ctxt)
 
 prepareForeaches :: Abs.Foreaches -> [Abs.Foreaches]
 prepareForeaches Abs.ForeachesNil                  = []
@@ -655,9 +656,9 @@ getForeach :: Abs.Foreaches -> ForId -> UpgradePPD Foreach
 getForeach (Abs.ForeachesDef args ctxt Abs.ForeachesNil) id = 
  do ctxt' <- getCtxt ctxt (InFor id)
     env <- get    
-    case foreaches ctxt' of
+    case ctxt' ^. foreaches of
       [] -> do let args'     = map getArgs args
-               let propn     = pName $ property ctxt'
+               let propn     = pName $ ctxt' ^. property
                let Args t cl = head $ args'               
                put env { propInForeach = (propn,t,cl):propInForeach env }               
                return $ Foreach args' ctxt' id
@@ -986,25 +987,21 @@ replacePInit :: UpgradePPD PPDATE -> UpgradePPD PPDATE
 replacePInit ppd = 
  let env    = getEnvVal ppd
      ppdate = getValue ppd
-     global = ctxtGet $ globalGet ppdate
-     es     = triggers global
-     vars   = variables global
-     acts   = actevents global
-     prop   = property global
-     fors   = foreaches global 
- in if or $ map checkPInitForeach fors
+     ctxt   = ppdate ^. (globalGet . ctxtGet)
+ in if or $ map checkPInitForeach $ ctxt ^. foreaches 
     then fail "Error: It is not possible to define a PINIT property within a FOREACH.\n"
-    else case getPInit prop of
+    else case getPInit (ctxt ^. property) of
               (p:ps) ->  
-                  let templates = templatesGet ppdate 
-                      prop'     = removePInit prop
+                  let templates = view templatesGet ppdate 
+                      prop'     = removePInit (ctxt ^. property)
                       tmpFors   = map (\pi -> pinit2foreach pi templates) (p:ps)
-                      fors'     = tmpFors ++ fors
-                      global'   = updateGlobal (globalGet ppdate) (Ctxt vars acts es prop' fors')
+                      fors'     = tmpFors ++ (ctxt ^. foreaches)
+                      ctxt'     = ctxt & property .~ prop' & foreaches .~ fors'
+                      ppdate'   = (globalGet . ctxtGet) .~ ctxt' $ ppdate
                       propns    = map piName (p:ps)
-                      pif       = map (\(x,Args t cl) -> (x,t,cl)) $ zip propns (map (head.getArgsForeach) tmpFors)
+                      pif       = map (\(x,Args t cl) -> (x,t,cl)) $ zip propns (map (head.view getArgsForeach) tmpFors)
                   in do put env { propInForeach = pif ++ propInForeach env  }
-                        return $ updateGlobalPP ppdate global'
+                        return ppdate'
               []     -> ppd
 
 getPInit :: Property -> [Property]
@@ -1019,7 +1016,7 @@ removePInit (Property name st trs props) = Property name st trs (removePInit pro
 
 checkPInitForeach :: Foreach -> Bool
 checkPInitForeach foreach = 
- (not.null) $ getPInit $ property $ getCtxtForeach foreach
+ (not.null) $ getPInit $ foreach ^. (getCtxtForeach . property)
 
 pinit2foreach :: Property -> Templates -> Foreach
 pinit2foreach (PINIT id tempid bound PNIL) templates = 
@@ -1139,8 +1136,7 @@ getEntryTriggers mnc (tinfo:ts) =
 lookForAllExitTriggerArgs :: Env -> HT -> UpgradePPD (String, String)
 lookForAllExitTriggerArgs env c =
  let mnc   = methodCN c
-     over  = overl mnc
-     tr    = getTriggerDef over c (allTriggers env) 
+     tr    = getTriggerDef (overl mnc) c (allTriggers env) 
      tinfo = head [ t | t <- allTriggers env , Just tr == tiTrDef t]
      args  = map (\(BindType t id) -> Args t id) (tiBinds tinfo)
  in return (getArgsGenMethods (tiCI tinfo, tiCVar tinfo, args))
@@ -1183,7 +1179,6 @@ data Env = Env
  , allCreateAct    :: [CreateActInfo]--list of all actions \create used in the transitions of the ppDATE
  }
   deriving (Show)
-
 
 type UpgradePPD a = CM.StateT Env Err a
 
@@ -1228,7 +1223,6 @@ updateInfo m mn einfo =
       Nothing -> Map.insert mn [einfo] m
       Just xs -> Map.insert mn (einfo:xs) m
 
-
 ----------------------------
 -- Monad State operations --
 ----------------------------
@@ -1248,3 +1242,8 @@ getHTNamesEnv ppd = let env = CM.execStateT ppd emptyEnv
                     in case env of
                             Bad _ -> []
                             Ok fs -> htsNames fs
+------------
+-- Lenses --
+------------
+
+--makeLenses ''Env

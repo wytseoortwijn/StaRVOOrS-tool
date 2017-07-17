@@ -18,11 +18,11 @@ import Control.Lens hiding(Context,pre,Empty)
 
 javaStaticAnalysis :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
 javaStaticAnalysis ppd jpath = 
- do let imports = T.importsGet (fst . fromOK $ runStateT ppd emptyEnv)
+ do let imports = T._importsGet (fst . fromOK $ runStateT ppd emptyEnv)
     info <- sequence [ getJavaInfo i jpath
                      | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
                      ] 
-    return $ ppd >>= (\x -> do env <- get ; checkMethodsExistance info (T.htsGet x) ; put (env { javaFilesInfo = info }) ; return x)
+    return $ ppd >>= (\x -> do env <- get ; checkMethodsExistance info (T._htsGet x) ; put (env { javaFilesInfo = info }) ; return x)
 
 getJavaInfo :: T.Import -> FilePath -> IO (T.JPath, T.ClassInfo,T.JavaFilesInfo)
 getJavaInfo i jpath = 

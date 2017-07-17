@@ -306,10 +306,10 @@ introduceOr (x:xs) = x ++ " || " ++ introduceOr xs
 
 getTriggersFors :: Foreaches -> Triggers
 getTriggersFors []     = []
-getTriggersFors (f:fs) = getTriggersCtxt (getCtxtForeach f) ++ getTriggersFors fs
+getTriggersFors (f:fs) = getTriggersCtxt (f ^. getCtxtForeach) ++ getTriggersFors fs
 
 getTriggersCtxt :: Context -> Triggers
-getTriggersCtxt (Ctxt vars ies trigs prop fors) = trigs ++ getTriggersFors fors
+getTriggersCtxt ctxt = ctxt ^. triggers ++ getTriggersFors (ctxt ^. foreaches)
 
 
 makeAddFile :: Import -> IO (String, ClassInfo)
