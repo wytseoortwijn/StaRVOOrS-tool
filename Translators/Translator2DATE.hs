@@ -34,7 +34,7 @@ translate ppd fpath =
 
 assocChannel2HTs :: Int -> HTriples -> HTriples
 assocChannel2HTs _ []     = []
-assocChannel2HTs n (c:cs) = updateCH c n:assocChannel2HTs (n+1) cs
+assocChannel2HTs n (c:cs) = (chGet .~ n $ c):assocChannel2HTs (n+1) cs
 
 ---------------------
 -- IMPORTS section --
@@ -576,10 +576,10 @@ writeTemplates (Temp temps) env consts =
 
 --Generates an abstract Foreach for the template
 generateRAtmp :: Template -> (Id, [Args], Foreach)
-generateRAtmp temp = (tempId temp, tempBinds temp, Foreach (filterRefTypes $ tempBinds temp) (generateCtxtForTemp temp) (ForId (tempId temp)))
+generateRAtmp temp = (temp ^. tempId, temp ^. tempBinds, Foreach (filterRefTypes $ temp ^. tempBinds) (generateCtxtForTemp temp) (ForId (temp ^. tempId)))
 
 generateCtxtForTemp :: Template -> Context
-generateCtxtForTemp temp = Ctxt (tempVars temp) (tempActEvents temp) (tempTriggers temp) (tempProp temp) []
+generateCtxtForTemp temp = Ctxt (temp ^. tempVars) (temp ^. tempActEvents) (temp ^. tempTriggers) (temp ^. tempProp) []
 
 --Creates an instance of the abstract Foreach
 instantiateTemp :: Foreach -> Id -> [Args] -> CreateActInfo -> Env -> Foreach

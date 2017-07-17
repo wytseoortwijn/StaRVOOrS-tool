@@ -163,8 +163,7 @@ translateActInTemps TempNil _       = TempNil
 translateActInTemps (Temp tmps) env = Temp $ map (translateActInTemp env) tmps
 
 translateActInTemp :: Env -> Template -> Template
-translateActInTemp env tmp = 
- updateTemplateProp tmp (translateActInProps (tempProp tmp) env)
+translateActInTemp env tmp = tempProp %~ (\ t -> translateActInProps t env) $ tmp
 
 ------------------------------------------------------
 -- Get information from the results produced by KeY --

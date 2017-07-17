@@ -24,7 +24,7 @@ refinePropertyOptTemplates _ TempNil       = TempNil
 refinePropertyOptTemplates cn (Temp temps) = Temp $ map (refineTemplate cn) temps
 
 refineTemplate :: HTName -> Template -> Template
-refineTemplate cn temp = updateTemplateProp temp (removeStatesProp cn $ tempProp temp)
+refineTemplate cn temp = tempProp %~ removeStatesProp cn $ temp
 
 refinePropertyOptGlobal :: HTName -> Global -> Global
 refinePropertyOptGlobal cn global = ctxtGet %~ (refineContext cn) $ global

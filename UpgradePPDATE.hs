@@ -674,14 +674,14 @@ getTemplate (Temp tmps) id = getTemplate' tmps id
 
 getTemplate' :: [Template] -> Id -> Template
 getTemplate' [x] _     = x
-getTemplate' (x:xs) id = if tempId x == id then x else getTemplate' xs id
+getTemplate' (x:xs) id = if (x ^. tempId) == id then x else getTemplate' xs id
 
 genTemplates :: Abs.Templates -> UpgradePPD Templates
 genTemplates Abs.TempsNil   = return TempNil
 genTemplates (Abs.Temps xs) = 
  do xs <- sequence $ map genTemplate xs
     env <- get
-    put env { tempsInfo = tempsInfo env ++ foldr (\ x xs -> (tempId x,tempBinds x) : xs) [] xs}
+    put env { tempsInfo = tempsInfo env ++ foldr (\ x xs -> (x ^. tempId, x ^. tempBinds) : xs) [] xs}
     return $ Temp xs 
  
 
@@ -705,12 +705,12 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                   in if ((not.null) s')
                      then fail s'
                      else do put env' { actes = actes env' ++ map show (getActEvents ies)}
-                             return $ Template { tempId        = getIdAbs id
-                                               , tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
-                                               , tempVars      = getValue $ getVars vars
-                                               , tempActEvents = getActEvents ies
-                                               , tempTriggers  = trigs'
-                                               , tempProp      = PINIT pname id' xs props
+                             return $ Template { _tempId        = getIdAbs id
+                                               , _tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
+                                               , _tempVars      = getValue $ getVars vars
+                                               , _tempActEvents = getActEvents ies
+                                               , _tempTriggers  = trigs'
+                                               , _tempProp      = PINIT pname id' xs props
                                                }
          ((Property pname states trans props, env'), s) -> 
                   let accep   = checkAllHTsExist (getAccepting states) cns pname (InTemp (getIdAbs id)) 
@@ -727,12 +727,12 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                   in if ((not.null) s')
                      then fail s'
                      else do put env' { actes = actes env' ++ map show (getActEvents ies)}
-                             return $ Template { tempId        = getIdAbs id
-                                               , tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
-                                               , tempVars      = getValue $ getVars vars
-                                               , tempActEvents = getActEvents ies
-                                               , tempTriggers  = trigs'
-                                               , tempProp      = Property pname states trans props
+                             return $ Template { _tempId        = getIdAbs id
+                                               , _tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
+                                               , _tempVars      = getValue $ getVars vars
+                                               , _tempActEvents = getActEvents ies
+                                               , _tempTriggers  = trigs'
+                                               , _tempProp      = Property pname states trans props
                                                }
 
 getExitTrsInfo :: Triggers -> [(ClassInfo,MethodName)]
@@ -1021,8 +1021,8 @@ checkPInitForeach foreach =
 pinit2foreach :: Property -> Templates -> Foreach
 pinit2foreach (PINIT id tempid bound PNIL) templates = 
  let temp = getTemplate templates tempid
-     args = tempBinds temp
-     ctxt = Ctxt (tempVars temp) (tempActEvents temp) (tempTriggers temp) (tempProp temp) []
+     args = temp ^. tempBinds
+     ctxt = Ctxt (temp ^. tempVars) (temp ^. tempActEvents) (temp ^. tempTriggers) (temp ^. tempProp) []
  in Foreach args ctxt (ForId "pinit")
 
 ------------------------
@@ -1135,8 +1135,7 @@ getEntryTriggers mnc (tinfo:ts) =
 
 lookForAllExitTriggerArgs :: Env -> HT -> UpgradePPD (String, String)
 lookForAllExitTriggerArgs env c =
- let mnc   = _methodCN c
-     tr    = getTriggerDef (mnc ^. overl) c (allTriggers env) 
+ let tr    = getTriggerDef (_methodCN c ^. overl) c (allTriggers env)
      tinfo = head [ t | t <- allTriggers env , Just tr == tiTrDef t]
      args  = map (\(BindType t id) -> Args t id) (tiBinds tinfo)
  in return (getArgsGenMethods (tiCI tinfo, tiCVar tinfo, args))

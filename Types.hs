@@ -80,18 +80,6 @@ data HT = HT
 
 type HTriples = [HT]
 
-updateCN :: HT -> HTName -> HT
-updateCN (HT cn m p po ass npre ch p2it) cn' = HT cn' m p po ass npre ch p2it
-
-updateNewPre :: HT -> [Pre] -> HT
-updateNewPre (HT cn m p po ass npre ch p2it) npre' = HT cn m p po ass npre' ch p2it
-
-updateCH :: HT -> Int -> HT
-updateCH (HT cn m p po ass npre ch p2it) ch' = HT cn m p po ass npre ch' p2it
-
-updatePath :: HT -> String -> HT
-updatePath (HT cn m p po ass npre ch p2it) p2it' = HT cn m p po ass npre ch p2it'
-
 data Context =
    Ctxt { _variables :: Variables
         , _actevents :: ActEvents
@@ -110,12 +98,12 @@ data Global = Global { _ctxtGet  :: Context } deriving (Show, Eq)
 data Templates = TempNil | Temp [Template] deriving (Eq,Show)
 
 data Template = Template
-  { tempId        :: Id
-  , tempBinds     :: [Args]
-  , tempVars      :: Variables
-  , tempActEvents :: ActEvents
-  , tempTriggers  :: Triggers 
-  , tempProp      :: Property
+  { _tempId        :: Id
+  , _tempBinds     :: [Args]
+  , _tempVars      :: Variables
+  , _tempActEvents :: ActEvents
+  , _tempTriggers  :: Triggers 
+  , _tempProp      :: Property
   } deriving (Show, Eq)
 
 updateTemplateProp :: Template -> Property -> Template
@@ -613,3 +601,4 @@ makeLenses ''Context
 makeLenses ''Foreach
 makeLenses ''HT
 makeLenses ''MethodCN
+makeLenses ''Template
