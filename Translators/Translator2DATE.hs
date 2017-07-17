@@ -656,7 +656,7 @@ instantiateProp PNIL _ _                               = PNIL
 instantiateProp (Property id sts trans props) args cai =  
  let ch      = caiCh cai
      sts'    = addNewInitState sts
-     trans'  = (Transition "start" (Arrow ("r"++ch) "" "") (head $ map getNameState $ getStarting sts)):trans
+     trans'  = (Transition "start" (Arrow ("r"++ch) "" "") (head $ map (^. getNS) $ getStarting sts)):trans
      targs   = splitTempArgs (zip args (caiArgs cai)) emptyTargs
      sts''   = instantiateHT (makeMap $ targHT targs) sts'
      trans'' = instantiateTrans (makeMap $ (targTr targs ++ targCond targs ++ targAct targs)) trans
@@ -739,7 +739,7 @@ instantiateHT mp sts =
 
 instantiateStates :: [State] -> Map.Map Id String -> [State]
 instantiateStates [] _      = []
-instantiateStates (s:ss) mp = updateHTns s (map (instantiateArg mp) $ getCNList s) : instantiateStates ss mp
+instantiateStates (s:ss) mp = (getCNList %~ map (instantiateArg mp) $ s) : instantiateStates ss mp
 
 instantiateArg :: Map.Map Id String -> Id -> String
 instantiateArg mp id = 

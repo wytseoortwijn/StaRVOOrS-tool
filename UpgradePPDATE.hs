@@ -118,8 +118,8 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
 checkAllHTsExist :: [State] -> [HTName] -> PropertyName -> Scope -> [String]
 checkAllHTsExist [] _ _ _            = []
 checkAllHTsExist (s:ss) cns pn scope = 
- let ns   = getNS s
-     cns' = getCNList s
+ let ns   = s ^. getNS
+     cns' = s ^. getCNList
      aux  = [x | x <- cns' , not (elem x cns)]
  in if (null aux || (tempScope scope))
     then checkAllHTsExist ss cns pn scope
@@ -528,7 +528,7 @@ uniqueNamesStates sts s =
                                        else "Error: In property " ++ s ++ ", the following state name is not unique: " ++ show xs ++ ".\n"
 
 uniqueNames :: [State] -> [NameState]
-uniqueNames sts = removeDuplicates $ map getNameState $ sameNameStates sts
+uniqueNames sts = removeDuplicates $ map (^.getNS) $ sameNameStates sts
 
 sameNameStates :: [State] -> [State]
 sameNameStates []     = []
@@ -542,7 +542,7 @@ getSameNameStates st (x:xs) =
  else getSameNameStates st xs
 
 stateEq :: State -> State -> Bool
-stateEq st st' = st == st' || getNameState st == getNameState st'
+stateEq st st' = st == st' || st ^. getNS == st' ^. getNS
 
 getTransitions :: PropertyName -> Abs.Transitions -> Env -> Scope -> Writer String (Transitions,Env)
 getTransitions id (Abs.Transitions ts) env scope = 

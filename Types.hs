@@ -281,27 +281,16 @@ instance Show InitialCode where
 type PropertyName = String
 type NameState = String
 
-data State = State NameState InitialCode [HTName] deriving (Eq,Read)
-
-getNameState :: State -> NameState
-getNameState (State nm _ _) = nm
-
-updateHTns :: State -> [HTName] -> State
-updateHTns (State nm i hts) hts' = State nm i hts'
+data State = State 
+ {_getNS :: NameState 
+ ,_getInitialCode :: InitialCode
+ ,_getCNList :: [HTName]}
+   deriving (Eq,Read)
 
 instance Show State where
- show (State ns initc hts) = ns ++ show initc ++ foo hts ++ "; "
+ show (State _ns _initc _hts) = _ns ++ show _initc ++ foo _hts ++ "; "
                                  where foo []  = ""
                                        foo hts = " (" ++ addComma' hts ++ ") "
-
-getCNList :: State -> [HTName]
-getCNList (State ns ic cns) = cns
-
-getNS :: State -> NameState
-getNS (State ns ic cns) = ns
-
-getInitialCode :: State -> InitialCode
-getInitialCode (State ns ic cns) = ic
 
 type Accepting = [State]
 type Bad = [State]
@@ -599,3 +588,4 @@ makeLenses ''Foreach
 makeLenses ''HT
 makeLenses ''MethodCN
 makeLenses ''Template
+makeLenses ''State
