@@ -522,16 +522,13 @@ data MethodContractApplication = MCA
 -- Types associated to the types inference --
 
 data OldExpr = OldExpr
-  { htID          :: Id
-  , classInf      :: ClassInfo
-  , targ          :: Target
-  , path          :: FilePath
-  , methoD        :: MethodName
-  , oldExprs      :: [OExpr]
+  { _htID          :: Id
+  , _classInf      :: ClassInfo
+  , _targ          :: Target
+  , _path          :: FilePath
+  , _methoD        :: MethodName
+  , _oldExprs      :: [OExpr]
   } deriving (Show, Eq)
-
-updateOldExprs :: OldExpr -> [OExpr] -> OldExpr
-updateOldExprs (OldExpr cn cinf targ pth m oexprs) oexprs' = OldExpr cn cinf targ pth m oexprs'
 
 data OExpr = OExpr
  { expr      :: String
@@ -589,3 +586,4 @@ makeLenses ''HT
 makeLenses ''MethodCN
 makeLenses ''Template
 makeLenses ''State
+makeLenses ''OldExpr

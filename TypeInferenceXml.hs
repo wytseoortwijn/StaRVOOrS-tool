@@ -23,18 +23,18 @@ inferTypesOldExprs ppd jpath output_add =
  in if null toXml
     then return Map.empty
     else let jinfo   = javaFilesInfo env
-             types   = removeDuplicates [(classInf c, getTypes (classInf c) jinfo) | c <- toXml]
+             types   = removeDuplicates [(c ^. classInf, getTypes (c ^. classInf) jinfo) | c <- toXml]
              toXml'  = map (\oexpr -> addType oexpr types jinfo) toXml
              xml_add = output_add ++ "tmp.xml"
-         in if (null [y | x <- toXml', y <- oldExprs x, inferType y == ""])
-            then do let oldExpTypes = foldr (\x xs -> Map.insert (htID x) (map toTuple $ oldExprs x) xs) Map.empty toXml'
+         in if (null [y | x <- toXml', y <- x ^. oldExprs, inferType y == ""])
+            then do let oldExpTypes = foldr (\x xs -> Map.insert (x ^. htID) (map toTuple $ x ^. oldExprs) xs) Map.empty toXml'
                     generateXmlFile toXml' jpath xml_add
                     return oldExpTypes
             else do generateXmlFile toXml' jpath xml_add
                     javaExprReader xml_add output_add
                     let new_xml_add = output_add ++ "tmp2.xml"
                     oldExpsJER <- parse new_xml_add
-                    let oldExpTypes = foldr (\x xs -> Map.insert (htID x) (map toTuple $ oldExprs x) xs) Map.empty oldExpsJER
+                    let oldExpTypes = foldr (\x xs -> Map.insert (x ^. htID) (map toTuple $ x ^. oldExprs) xs) Map.empty oldExpsJER
                     return oldExpTypes
                        where getTypes c jinfo = getListOfTypesAndVars c jinfo ++ getListOfTypesAndMethods c jinfo
                              toTuple (OExpr e t) = (e,t) 
@@ -47,15 +47,12 @@ inferTypesOldExprs ppd jpath output_add =
 --Runs the API which infer the types of \old expressions
 javaExprReader xml_add out_add = rawSystem "java" ["-jar","jer.jar",xml_add, out_add]
 
-
 addType :: OldExpr -> [(ClassInfo,[(Type,String)])] -> [(String, ClassInfo, JavaFilesInfo)] -> OldExpr
-addType oexpr ts minfs = 
- let xs = map (\(OExpr e t) -> OExpr e (checkType ts minfs oexpr e)) (oldExprs oexpr)
- in updateOldExprs oexpr xs
+addType oexpr ts minfs = oldExprs %~ map (\(OExpr e t) -> OExpr e (checkType ts minfs oexpr e)) $ oexpr
 
 checkType :: [(ClassInfo,[(Type,String)])] -> [(String, ClassInfo, JavaFilesInfo)] -> OldExpr -> String -> String
 checkType xs ys oexpr s = 
- let cinf = classInf oexpr
+ let cinf = oexpr ^. classInf
  in if (checkTypeArgs ys oexpr s == "") 
     then checkTypeClass xs cinf s
     else checkTypeArgs ys oexpr s
@@ -63,8 +60,8 @@ checkType xs ys oexpr s =
 checkTypeArgs :: [(String, ClassInfo, JavaFilesInfo)] -> OldExpr -> String -> String
 checkTypeArgs [] _ s                   = ""
 checkTypeArgs ((_,cinf,ys):xs) oexpr s = 
- let cinf'  = classInf oexpr
-     mn     = methoD oexpr
+ let cinf'  = oexpr ^. classInf
+     mn     = oexpr ^. methoD
      mfiles = methodsInFiles ys
  in if cinf' == cinf
     then if (null $ getListOfArgs mn mfiles)
@@ -99,12 +96,12 @@ generateXmlFile xs jpath output_add =
 
 oldExpr2Xml :: OldExpr -> String
 oldExpr2Xml oldExpr = 
- let xs = map oExpr2Xml (oldExprs oldExpr) in
- twoSpaces ++ "<contract Id=" ++ "\"" ++ htID oldExpr ++ "\"" 
- ++ " class=" ++ "\"" ++ classInf oldExpr ++ "\"\n" 
- ++ " path=" ++ "\"" ++ path oldExpr ++ "\"\n" 
- ++ " target=" ++ "\"" ++ targ oldExpr ++ "\""
- ++ " method=" ++ "\"" ++ methoD oldExpr ++ "\">\n" 
+ let xs = map oExpr2Xml (oldExpr ^. oldExprs) in
+ twoSpaces ++ "<contract Id=" ++ "\"" ++ oldExpr ^. htID ++ "\"" 
+ ++ " class=" ++ "\"" ++ oldExpr ^. classInf ++ "\"\n" 
+ ++ " path=" ++ "\"" ++ oldExpr ^. path ++ "\"\n" 
+ ++ " target=" ++ "\"" ++ oldExpr ^. targ ++ "\""
+ ++ " method=" ++ "\"" ++ oldExpr ^. methoD ++ "\">\n" 
  ++ concat xs
  ++ twoSpaces ++ "</contract>\n\n"
  
@@ -158,12 +155,12 @@ parse xml_fn =
      let oldExpr      = map (foldr (\p xs -> (makeOldExpr p):xs) [].(\(x, y) -> zip x y)) components
      let proof        = foldr foo [] $ zip oldExpr_info oldExpr
      return proof
-          where foo (x,oexpr) xs  = (OldExpr { htID     = x ^. _1
-                                             , classInf = x ^. _4 
-                                             , path     = fifth x
-                                             , methoD   = x ^. _2
-                                             , targ     = x ^. _3
-                                             , oldExprs = oexpr
+          where foo (x,oexpr) xs  = (OldExpr { _htID     = x ^. _1
+                                             , _classInf = x ^. _4 
+                                             , _path     = fifth x
+                                             , _methoD   = x ^. _2
+                                             , _targ     = x ^. _3
+                                             , _oldExprs = oexpr
                                              }) : xs
                 fifth (_,_,_,_,u) = u
 
