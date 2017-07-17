@@ -106,9 +106,6 @@ data Template = Template
   , _tempProp      :: Property
   } deriving (Show, Eq)
 
-updateTemplateProp :: Template -> Property -> Template
-updateTemplateProp (Template id bs vars ies trs prop) prop' = Template id bs vars ies trs prop'
-
 data TempArgs = TArgs --Arguments used to instantiate a template
  { targTr   :: [(Args,Act.Args)]--triggers
  , targAct  :: [(Args,Act.Args)]--actions
