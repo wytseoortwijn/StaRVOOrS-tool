@@ -75,7 +75,7 @@ refinePPDATE :: UpgradePPD PPDATE -> [Proof] -> UpgradePPD PPDATE
 refinePPDATE ppd proofs = 
  let ppdate    = getValue ppd 
      env       = getEnvVal ppd
-     consts    = view htsGet ppdate
+     consts    = ppdate ^. htsGet
      nproved   = filter (\npr -> (not.null) (npr ^. _3)) $ map getInfoFromProof proofs
      proved    = filter (\pr -> null (pr ^. _3)) $ map getInfoFromProof proofs
      consts'   = [c | c <- consts, npr <- nproved, htName c == (npr ^. _2)]  
@@ -87,7 +87,7 @@ refinePPDATE ppd proofs =
      consts''  = strengthenPre $ updateHTs nproved consts' triggers'
      env'      = getEnvVal ppd'     
      global'   = optimisedProvenHTs cproved refinePropertyOptGlobal global
-     temps     = view templatesGet ppdate'
+     temps     = ppdate' ^. templatesGet
      temps'    = optimisedProvenHTs cproved refinePropertyOptTemplates temps
      ppdate''  = ppdate' & globalGet .~ global' & htsGet .~ consts'' & templatesGet .~ temps'
  in do put env'

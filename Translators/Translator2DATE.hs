@@ -24,11 +24,11 @@ translate :: UpgradePPD PPDATE -> FilePath -> IO ()
 translate ppd fpath =
  do let (ppdate, env) = (\(Ok x) -> x) $ runStateT ppd emptyEnv
     putStrLn "Translating ppDATE to DATE."
-    writeFile fpath (writeImports (view importsGet ppdate) (view htsGet ppdate))
-    let consts  = assocChannel2HTs 1 $ (view htsGet ppdate)
-    let ppdate' = set htsGet consts ppdate
+    writeFile fpath (writeImports (ppdate ^. importsGet) (ppdate ^. htsGet))
+    let consts  = assocChannel2HTs 1 $ (ppdate ^. htsGet)
+    let ppdate' = htsGet .~ consts $ ppdate
     appendFile fpath (writeGlobal ppdate' env)
-    appendFile fpath (writeMethods (view methodsGet ppdate')) 
+    appendFile fpath (writeMethods (ppdate' ^. methodsGet))
     putStrLn $ "Translation completed."
 
 

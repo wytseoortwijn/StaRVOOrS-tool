@@ -25,8 +25,8 @@ methodsInstrumentation ppd jpath output_add =
 methodsInstrumentation' :: UpgradePPD T.PPDATE -> FilePath -> FilePath -> IO ()
 methodsInstrumentation' ppd jpath output_add =
   do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-     let consts        = T._htsGet ppdate
-     let imp           = view T.importsGet ppdate
+     let consts        = ppdate ^. T.htsGet
+     let imp           = ppdate ^. T.importsGet
      sequence [ instrumentFile i consts jpath output_add
               | i <- imp, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
               ]

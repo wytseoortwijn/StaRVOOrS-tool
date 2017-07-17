@@ -18,7 +18,7 @@ import Control.Lens hiding(Context,pre)
 staticAnalysis :: FilePath -> UpgradePPD PPDATE -> FilePath -> [Flag] -> IO (Either [Proof] [Proof])
 staticAnalysis jpath ppd output_add flags =
  let ppdate      = getValue ppd
-     consts      = view htsGet ppdate
+     consts      = ppdate ^. htsGet
  in if elem OnlyRV flags
     then do putStrLn "StaRVOOrS is ran in only runtime verification mode.\n"
             return $ Right []
@@ -32,7 +32,7 @@ runAnalysis :: FilePath -> UpgradePPD PPDATE -> FilePath -> Flags -> IO (Either 
 runAnalysis jpath ppd output_addr flags =
  let toAnalyse_add = output_addr ++ "workspace/files2analyse"
      ppdate        = getValue ppd
-     consts        = view htsGet ppdate
+     consts        = ppdate ^. htsGet
  in do injectJMLannotations ppd jpath output_addr
        runKeY toAnalyse_add output_addr flags
        let xml_add = output_addr ++ "out.xml"

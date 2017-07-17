@@ -60,7 +60,7 @@ fullyProvedInfo :: [PProof] -> String
 fullyProvedInfo ps = if (null ps)
                      then "* No Hoare triple(s) were fully proved.\n"
                      else "* " ++ show (length ps) ++ " Hoare triple(s) were fully proved:\n"
-                          ++ genListContractsName (map (view _2) ps)                          
+                          ++ genListContractsName (map (^. _2) ps)                          
 
 partiallyProvedInfo :: [PProof] -> String
 partiallyProvedInfo pps = if (null pps)
@@ -72,7 +72,7 @@ notProvedInfo :: [PProof] -> String
 notProvedInfo nps = if (null nps)
                     then ""
                     else "* " ++ show (length nps) ++ " Hoare triple(s) were not proved:\n"
-                         ++ genListContractsName (map (view _2) nps)
+                         ++ genListContractsName (map (^. _2) nps)
 
 genListContractsName :: [HTName] -> String
 genListContractsName []     = ""

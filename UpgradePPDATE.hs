@@ -992,14 +992,14 @@ replacePInit ppd =
     then fail "Error: It is not possible to define a PINIT property within a FOREACH.\n"
     else case getPInit (ctxt ^. property) of
               (p:ps) ->  
-                  let templates = view templatesGet ppdate 
+                  let templates = ppdate ^. templatesGet
                       prop'     = removePInit (ctxt ^. property)
                       tmpFors   = map (\pi -> pinit2foreach pi templates) (p:ps)
                       fors'     = tmpFors ++ (ctxt ^. foreaches)
                       ctxt'     = ctxt & property .~ prop' & foreaches .~ fors'
                       ppdate'   = (globalGet . ctxtGet) .~ ctxt' $ ppdate
                       propns    = map piName (p:ps)
-                      pif       = map (\(x,Args t cl) -> (x,t,cl)) $ zip propns (map (head.view getArgsForeach) tmpFors)
+                      pif       = map (\(x,Args t cl) -> (x,t,cl)) $ zip propns (map (head.(^. getArgsForeach)) tmpFors)
                   in do put env { propInForeach = pif ++ propInForeach env  }
                         return ppdate'
               []     -> ppd

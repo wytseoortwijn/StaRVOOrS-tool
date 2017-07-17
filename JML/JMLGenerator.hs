@@ -29,7 +29,7 @@ getHTs = genJMLConstsAll'
 genJMLConstsAll' :: UpgradePPD PPDATE -> HTjml
 genJMLConstsAll' ppd = 
  let ppdate = getValue ppd
-     cs     = view htsGet ppdate
+     cs     = ppdate ^. htsGet
  in map (over _4 (\ y -> "  /*@ \n" ++ y ++ "    @*/\n")) $ genJMLConsts' cs []
 
 genJMLConsts' :: HTriples -> HTjml -> HTjml

@@ -55,7 +55,7 @@ methodExists h = foldr (\ x xs -> checkMethod x h || xs) False
 checkMethod :: (T.JPath, T.ClassInfo, T.JavaFilesInfo) -> T.HT -> Bool
 checkMethod info h = 
  if (\(_,y,_) -> y) info == T.clinf (T.methodCN h) 
- then let minfo = T.methodsInFiles $ (view _3) info
+ then let minfo = T.methodsInFiles $ (^. _3) info
           mn    = T.mname $ T.methodCN h 
           ovl   = T.overl $ T.methodCN h 
       in (not.null) [ inf ^. _2 | inf <- minfo , (inf ^. _2) == mn, (ovl == T.OverNil || ovl == over (inf ^. _3))]

@@ -41,7 +41,7 @@ injectJMLannotations ppd jpath output_addr =
 generateTmpFilesAllConsts :: UpgradePPD PPDATE -> HTjml -> FilePath -> FilePath -> IO ()
 generateTmpFilesAllConsts ppd consts_jml output_add jpath =
  do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-    let imports       = view importsGet ppdate
+    let imports       = ppdate ^. importsGet
     let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
     let ys = map makeAddFile imports'
     sequence [ do 
@@ -122,7 +122,7 @@ lookForConstructorDef mn (xs:xss) =
 updateTmpFilesCInvs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 updateTmpFilesCInvs ppd output_add jpath = 
  do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-    let imports       = view importsGet ppdate
+    let imports       = ppdate ^. importsGet
     let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
     sequence $ map (\ i -> updateTmpFileCInv i output_add jpath (javaFilesInfo env)) imports'
 
@@ -166,8 +166,8 @@ annotateNullable (type', v) (xs:xss) =
 generateTmpFilesCInvs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 generateTmpFilesCInvs ppd output_add jpath = 
  let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-     imports       = view importsGet ppdate
-     cinvs         = view cinvariantsGet ppdate
+     imports       = ppdate ^. importsGet
+     cinvs         = ppdate ^. cinvariantsGet
      xs            = splitCInvariants cinvs []
      imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
  in sequence $ map (\ i -> generateTmpFileCInv i output_add jpath xs) imports'
@@ -229,8 +229,8 @@ getCInvs' ((cl', cinvs):xs) cl = if (cl' == cl)
 generateDummyBoolVars :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 generateDummyBoolVars ppd output_add jpath = 
  let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-     imports       = view importsGet ppdate
-     consts        = view htsGet ppdate
+     imports       = ppdate ^. importsGet
+     consts        = ppdate ^. htsGet
      xs            = splitClassHT consts
      join_xs       = joinClassHT xs []
      imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]

@@ -49,9 +49,9 @@ getSourceCodeFolderName s = let (xs,ys) = splitAtIdentifier '/' $ (reverse . ini
 htsJavaFileGen :: UpgradePPD PPDATE -> FilePath -> IO ()
 htsJavaFileGen ppd output_add = 
  let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-     imp           = view importsGet ppdate
-     global        = view globalGet ppdate
-     consts        = view htsGet ppdate
+     imp           = ppdate ^. importsGet
+     global        = ppdate ^. globalGet
+     consts        = ppdate ^. htsGet
      oldExpM       = oldExpTypes env
      forallop'     = map (\c -> genMethodsForConstForall c env oldExpM) consts
      forallop      = map (goo env) forallop'
@@ -197,7 +197,7 @@ idGen =
 oldExprFileGen :: FilePath -> UpgradePPD PPDATE -> IO ()
 oldExprFileGen output_add ppd = 
  let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-     consts        = view htsGet ppdate      
+     consts        = ppdate ^. htsGet
      oldExpM       = oldExpTypes env 
      consts'       = [c | c <- consts, noOldExprInHT $ Map.lookup (htName c) oldExpM]    
  in if Map.null oldExpM
@@ -315,8 +315,8 @@ cloningGen =
 templatesFileGen :: FilePath -> UpgradePPD PPDATE -> IO ()
 templatesFileGen output_add ppd = 
  let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-     temps         = view templatesGet ppdate 
-     imps          = getImports $ view importsGet ppdate
+     temps         = ppdate ^. templatesGet
+     imps          = getImports $ ppdate ^. importsGet
  in case temps of
          TempNil -> return ()
          Temp xs -> sequence_ $ [writeFile (output_add ++ (snd val)) (fst val) | val <- map (tempGen imps) xs]

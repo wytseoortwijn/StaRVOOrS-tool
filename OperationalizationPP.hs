@@ -19,8 +19,8 @@ import Control.Lens hiding(Context,pre)
 operationalizeOldResultBind :: UpgradePPD PPDATE -> Map.Map HTName [(String,Type)] -> UpgradePPD PPDATE
 operationalizeOldResultBind ppd oldExprTypesM =
  let (ppdate, env) =  fromOK $ runStateT ppd emptyEnv
-     global   = view globalGet ppdate
-     consts   = view htsGet ppdate
+     global   = ppdate ^. globalGet
+     consts   = ppdate ^. htsGet
      jinfo    = javaFilesInfo env
      methods  = map (\(x,y,z) -> (x,y,map (\y -> y ^. _2) (methodsInFiles z))) jinfo
      es       = getAllTriggers global env
