@@ -124,12 +124,10 @@ checkAllHTsExist (s:ss) cns pn scope =
  in if (null aux || (tempScope scope))
     then checkAllHTsExist ss cns pn scope
     else ("Error: On property " ++ pn
-         ++ ", in state " ++ ns ++ ", the Hoare triples(s) "
-         ++ commaAdd aux
-         ++ " do(es) not exist.\n") : checkAllHTsExist ss cns pn scope
-                              where commaAdd []       = ""
-                                    commaAdd [xs]     = xs
-                                    commaAdd (xs:xss) = xs ++ "," ++ commaAdd xss
+         ++ ", in state " ++ ns ++ ", the Hoare triple(s) ["
+         ++ addComma aux
+         ++ "] do(es) not exist.\n") : checkAllHTsExist ss cns pn scope
+
 -- Variables --
 
 getVars :: Abs.Variables -> UpgradePPD Variables

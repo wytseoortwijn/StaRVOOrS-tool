@@ -9,6 +9,7 @@ import Data.Maybe ( fromMaybe )
 import Language.Java.Syntax hiding(Type,VarDecl)
 import qualified AbsActions as Act
 import Control.Lens hiding(Context)
+import Data.List (intercalate)
 
 ------------
 -- ppDATE --
@@ -177,7 +178,7 @@ data Variable =
      } deriving (Eq,Ord,Read)
 
 instance Show Variable where
- show (Var modif t vdecls) = show modif ++ t ++ " " ++ addComma' (map show vdecls) ++ " ;"
+ show (Var modif t vdecls) = show modif ++ t ++ " " ++ intercalate "," (map show vdecls) ++ " ;"
 
 data VarModifier =
    VarModifierFinal
@@ -211,11 +212,6 @@ getVariableArgs (Var vm t (dec:decls)) = Args t (getVarDeclId dec) : getVariable
 
 getVarDeclId :: VarDecl -> Id
 getVarDeclId (VarDecl id _) = id
-
-addComma' :: [String] -> String
-addComma' []          = ""
-addComma' [xs]        = xs
-addComma' (xs:ys:xss) = xs ++ "," ++ addComma' (ys:xss)
 
 ------------------
 -- Useful types --
@@ -290,7 +286,7 @@ data State = State
 instance Show State where
  show (State _ns _initc _hts) = _ns ++ show _initc ++ foo _hts ++ "; "
                                  where foo []  = ""
-                                       foo hts = " (" ++ addComma' hts ++ ") "
+                                       foo hts = " (" ++ intercalate "," hts ++ ") "
 
 type Accepting = [State]
 type Bad = [State]
@@ -370,7 +366,7 @@ data TriggerDef = TriggerDef
 
 instance Show TriggerDef where 
  show (TriggerDef nm [] ct w) = nm ++ "() = { " ++ show ct ++ " }" ++ showWhere w
- show (TriggerDef nm xs ct w) = nm ++ "(" ++ addComma' (map show xs) ++ ") = { " ++ show ct ++ " }" ++ showWhere w
+ show (TriggerDef nm xs ct w) = nm ++ "(" ++ intercalate "," (map show xs) ++ ") = { " ++ show ct ++ " }" ++ showWhere w
 
 showWhere :: String -> String
 showWhere [] = ""
@@ -388,7 +384,7 @@ updCEne :: CompoundTrigger -> Binding -> CompoundTrigger
 updCEne (NormalEvent bind id bs tv) bind' = NormalEvent bind' id bs tv
 
 instance Show CompoundTrigger where
- show (NormalEvent b id binds tv) = show b ++ "." ++ id ++ "(" ++ addComma' (map show binds) ++ ")" ++ show tv
+ show (NormalEvent b id binds tv) = show b ++ "." ++ id ++ "(" ++ intercalate "," (map show binds) ++ ")" ++ show tv
  show (ClockEvent id n)           = id ++ "@" ++ show n
  show (OnlyId id)                 = id
  show (OnlyIdPar id)              = id ++ "()"

@@ -245,7 +245,7 @@ checkIfParseErrors es = let (ls, rs) = partitionEithers es
                            else Right rs
 
 addComma :: [String] -> String
-addComma = addComma'
+addComma = intercalate ","
 
 ---------------------------------------
 -- Manipulating the parsed .xml file --
