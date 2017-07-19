@@ -64,15 +64,19 @@ annotateTmpFiles i output_add jpath jinfo ys jxs consts_jml =
 ---------------------------------------------
 
 genTmpFilesConst :: (String, ClassInfo) -> HTjml -> String -> String
-genTmpFilesConst (main, cl) [] r                      = r
-genTmpFilesConst (main, cl) ((mn, cl', ov,jml):xs)  r = 
- do if (cl == cl') 
-    then do let (ys, zs) = if (mn == cl)
-                           then lookForConstructorDef mn (lines r)
-                           else lookForMethodDef mn ov (lines r)
-            let r' = (unlines ys) ++ jml ++ (unlines zs)
-            genTmpFilesConst (main, cl) xs r'
-    else genTmpFilesConst (main, cl) xs r
+genTmpFilesConst (main, cl) [] r     = r
+genTmpFilesConst (main, cl) (x:xs) r = 
+ let mn  = x ^. _1
+     cl' = x ^. _2
+     ov  = x ^. _3
+     jml = x ^. _4
+ in do if (cl == cl') 
+       then do let (ys, zs) = if (mn == cl)
+                              then lookForConstructorDef mn (lines r)
+                              else lookForMethodDef mn ov (lines r)
+               let r' = (unlines ys) ++ jml ++ (unlines zs)
+               genTmpFilesConst (main, cl) xs r'
+       else genTmpFilesConst (main, cl) xs r
 
 
 lookForMethodDef :: MethodName -> Overriding -> [String] -> ([String], [String])
