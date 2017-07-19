@@ -8,7 +8,7 @@ import Data.Char
 import UpgradePPDATE
 import ErrM
 import JavaLanguage
-import qualified System.IO
+import System.IO
 import Control.Lens hiding(Context,pre)
 
 -------------------------------------------------
