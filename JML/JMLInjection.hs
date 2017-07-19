@@ -18,13 +18,10 @@ import Control.Lens hiding(Context,pre)
 injectJMLannotations :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO ()
 injectJMLannotations ppd jpath output_addr = 
  let toAnalyse_add = output_addr ++ "workspace/files2analyse"
-     tmp_add       = output_addr ++ "workspace/tempFiles/"
- in do createDirectoryIfMissing False tmp_add
-       createDirectoryIfMissing False toAnalyse_add
-       prepareTmpFiles ppd tmp_add jpath
+ in do createDirectoryIfMissing False toAnalyse_add
        copyFiles jpath toAnalyse_add
-       generateTmpFilesAllConsts ppd (getHTs ppd) toAnalyse_add tmp_add  
-
+       prepareTmpFiles ppd toAnalyse_add jpath
+       return ()
 
 ------------------------------------- 
 -- Generating annotated temp files --
@@ -34,18 +31,21 @@ prepareTmpFiles :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
 prepareTmpFiles ppd output_add jpath = 
  do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
     let imports       = ppdate ^. importsGet
-    let cinvs         = ppdate ^. cinvariantsGet    
+    let cinvs         = ppdate ^. cinvariantsGet
     let ys            = splitCInvariants cinvs []
     let consts        = ppdate ^. htsGet
     let xs            = splitClassHT consts
     let join_xs       = joinClassHT xs []
     let jinfo         = javaFilesInfo env
+    let consts_jml    = getHTs ppd
     let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
-    sequence $ map (\ i -> annotateTmpFiles i output_add jpath jinfo ys join_xs ) imports'
+    sequence $ map (\ i -> annotateTmpFiles i output_add jpath jinfo ys join_xs consts_jml) imports'
+
 
 annotateTmpFiles :: Import -> FilePath -> FilePath -> [(String, ClassInfo, JavaFilesInfo)] 
-                    -> [(Class, CInvariants)] -> [(ClassInfo, [HTName])] -> IO ()
-annotateTmpFiles i output_add jpath jinfo ys jxs = 
+                    -> [(Class, CInvariants)] -> [(ClassInfo, [HTName])] 
+                    -> HTjml -> IO ()
+annotateTmpFiles i output_add jpath jinfo ys jxs consts_jml = 
   do (main, cl) <- makeAddFile i
      let jpath'      = jpath ++ "/" ++ main
      let output_add' = output_add ++ "/" ++ main
@@ -56,42 +56,23 @@ annotateTmpFiles i output_add jpath jinfo ys jxs =
      let dummyVars = generateDBMFile cl jxs r
      let cinvs     = generateTmpFileCInv cl ys dummyVars
      let nullable  = updateTmpFileCInv cl jinfo cinvs
-     writeFile tmp nullable
-     return ()
+     let contracts = genTmpFilesConst (main,cl) consts_jml nullable
+     writeFile tmp contracts     
 
 ---------------------------------------------
 -- Injecting JML annotations for contracts --
 ---------------------------------------------
 
-generateTmpFilesAllConsts :: UpgradePPD PPDATE -> HTjml -> FilePath -> FilePath -> IO ()
-generateTmpFilesAllConsts ppd consts_jml output_add jpath =
- do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-    let imports       = ppdate ^. importsGet
-    let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
-    let ys = map makeAddFile imports'
-    sequence [ do 
-                  (main, cl) <- y
-                  createDirectoryIfMissing True (output_add ++ "/" ++ main) 
-                  r <- readFile (jpath ++ "/" ++ main ++ "/" ++ cl ++ ".java")
-                  genTmpFilesConst (main, cl) output_add consts_jml r
-             | y <- ys
-             ]
-    return ()
-
-genTmpFilesConst :: (String, ClassInfo) -> FilePath -> HTjml -> String -> IO ()
-genTmpFilesConst (main, cl) output_add [] r                      = writeFile (output_add ++ "/" ++ main ++ "/" ++ (cl ++ ".java")) r
-genTmpFilesConst (main, cl) output_add ((mn, cl', ov,jml):xs)  r = 
+genTmpFilesConst :: (String, ClassInfo) -> HTjml -> String -> String
+genTmpFilesConst (main, cl) [] r                      = r
+genTmpFilesConst (main, cl) ((mn, cl', ov,jml):xs)  r = 
  do if (cl == cl') 
-    then do 
-            let output_add'' = output_add ++ "/" ++ main
-            createDirectoryIfMissing True output_add''
-            let tmp  = output_add'' ++ "/" ++ (cl ++ ".java")
-            let (ys, zs) = if (mn == cl)
+    then do let (ys, zs) = if (mn == cl)
                            then lookForConstructorDef mn (lines r)
                            else lookForMethodDef mn ov (lines r)
-            let r' = ((unlines ys) ++ jml ++ (unlines zs))
-            genTmpFilesConst (main, cl') output_add xs r'
-    else genTmpFilesConst (main, cl) output_add xs  r
+            let r' = (unlines ys) ++ jml ++ (unlines zs)
+            genTmpFilesConst (main, cl) xs r'
+    else genTmpFilesConst (main, cl) xs r
 
 
 lookForMethodDef :: MethodName -> Overriding -> [String] -> ([String], [String])
