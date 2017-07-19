@@ -21,12 +21,10 @@ injectJMLannotations ppd jpath output_addr =
      tmp_add       = output_addr ++ "workspace/files/"
      cinv_add      = output_addr ++ "workspace/filescinv"
      nulla_add     = output_addr ++ "workspace/filesnullable/"
-     filesnu_add   = output_addr ++ "workspace/filesnu"
  in do createDirectoryIfMissing False tmp_add
        createDirectoryIfMissing False toAnalyse_add
        createDirectoryIfMissing False nulla_add
        createDirectoryIfMissing False cinv_add
-       createDirectoryIfMissing False filesnu_add
        generateDummyBoolVars ppd tmp_add jpath
        generateTmpFilesCInvs ppd cinv_add tmp_add
        updateTmpFilesCInvs ppd nulla_add cinv_add
