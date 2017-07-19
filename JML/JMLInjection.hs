@@ -18,19 +18,46 @@ import Control.Lens hiding(Context,pre)
 injectJMLannotations :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO ()
 injectJMLannotations ppd jpath output_addr = 
  let toAnalyse_add = output_addr ++ "workspace/files2analyse"
-     tmp_add       = output_addr ++ "workspace/files/"
-     cinv_add      = output_addr ++ "workspace/filescinv"
-     nulla_add     = output_addr ++ "workspace/filesnullable/"
+     tmp_add       = output_addr ++ "workspace/tempFiles/"
  in do createDirectoryIfMissing False tmp_add
        createDirectoryIfMissing False toAnalyse_add
-       createDirectoryIfMissing False nulla_add
-       createDirectoryIfMissing False cinv_add
-       generateDummyBoolVars ppd tmp_add jpath
-       generateTmpFilesCInvs ppd cinv_add tmp_add
-       updateTmpFilesCInvs ppd nulla_add cinv_add
-       let consts_jml = JMLGenerator.getHTs ppd
+       prepareTmpFiles ppd tmp_add jpath
        copyFiles jpath toAnalyse_add
-       generateTmpFilesAllConsts ppd consts_jml toAnalyse_add nulla_add  
+       generateTmpFilesAllConsts ppd (getHTs ppd) toAnalyse_add tmp_add  
+
+
+------------------------------------- 
+-- Generating annotated temp files --
+-------------------------------------
+
+prepareTmpFiles :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
+prepareTmpFiles ppd output_add jpath = 
+ do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
+    let imports       = ppdate ^. importsGet
+    let cinvs         = ppdate ^. cinvariantsGet    
+    let ys            = splitCInvariants cinvs []
+    let consts        = ppdate ^. htsGet
+    let xs            = splitClassHT consts
+    let join_xs       = joinClassHT xs []
+    let jinfo         = javaFilesInfo env
+    let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
+    sequence $ map (\ i -> annotateTmpFiles i output_add jpath jinfo ys join_xs ) imports'
+
+annotateTmpFiles :: Import -> FilePath -> FilePath -> [(String, ClassInfo, JavaFilesInfo)] 
+                    -> [(Class, CInvariants)] -> [(ClassInfo, [HTName])] -> IO ()
+annotateTmpFiles i output_add jpath jinfo ys jxs = 
+  do (main, cl) <- makeAddFile i
+     let jpath'      = jpath ++ "/" ++ main
+     let output_add' = output_add ++ "/" ++ main
+     createDirectoryIfMissing True output_add'
+     let file        = jpath' ++ "/" ++ (cl ++ ".java")  
+     let tmp         = output_add' ++ "/" ++ (cl ++ ".java")
+     r <- readFile file
+     let dummyVars = generateDBMFile cl jxs r
+     let cinvs     = generateTmpFileCInv cl ys dummyVars
+     let nullable  = updateTmpFileCInv cl jinfo cinvs
+     writeFile tmp nullable
+     return ()
 
 ---------------------------------------------
 -- Injecting JML annotations for contracts --
@@ -117,26 +144,11 @@ lookForConstructorDef mn (xs:xss) =
 -- Add nullable to class variables --
 -------------------------------------
 
-updateTmpFilesCInvs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
-updateTmpFilesCInvs ppd output_add jpath = 
- do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-    let imports       = ppdate ^. importsGet
-    let imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
-    sequence $ map (\ i -> updateTmpFileCInv i output_add jpath (javaFilesInfo env)) imports'
-
-updateTmpFileCInv :: Import -> FilePath -> FilePath -> [(String, ClassInfo, JavaFilesInfo)] -> IO ()
-updateTmpFileCInv i output_add jpath jinfo =
-  do (main, cl) <- makeAddFile i
-     let jpath' = jpath ++ "/" ++ main
-     let output_add' = output_add ++ "/" ++ main
-     createDirectoryIfMissing True output_add'
-     let file        = jpath' ++ "/" ++ (cl ++ ".java")    
-     let tmp         = output_add' ++ "/" ++ (cl ++ ".java")
-     r <- readFile file
-     let varsc = getListOfTypesAndVars cl jinfo
-     let (ys, zs) = lookForClassBeginning cl (lines r)
-     writeFile tmp ((unlines ys) ++ (unlines (searchAndAnnotateVars zs varsc)))
-
+updateTmpFileCInv :: String -> [(String, ClassInfo, JavaFilesInfo)] -> String -> String
+updateTmpFileCInv cl jinfo r =
+ let varsc    = getListOfTypesAndVars cl jinfo
+     (ys, zs) = lookForClassBeginning cl (lines r)
+ in (unlines ys) ++ (unlines (searchAndAnnotateVars zs varsc))
 
 searchAndAnnotateVars :: [String] -> [(String, String)] -> [String]
 searchAndAnnotateVars xss []              = xss
@@ -145,7 +157,7 @@ searchAndAnnotateVars xss ((type',v):yss) = if (elem type' primitiveJavaTypes)
                                             else let xss' = annotateNullable (type',v) xss
                                                  in searchAndAnnotateVars xss' yss
 
---This method may need to be upgraded
+--TODO: This method may need to be upgraded
 annotateNullable :: (String, String) -> [String] -> [String]
 annotateNullable (type', v) []       = []
 annotateNullable (type', v) (xs:xss) = 
@@ -161,15 +173,6 @@ annotateNullable (type', v) (xs:xss) =
 -- Injecting JML annotations for Class Invariants --
 ----------------------------------------------------
 
-generateTmpFilesCInvs :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
-generateTmpFilesCInvs ppd output_add jpath = 
- let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-     imports       = ppdate ^. importsGet
-     cinvs         = ppdate ^. cinvariantsGet
-     xs            = splitCInvariants cinvs []
-     imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
- in sequence $ map (\ i -> generateTmpFileCInv i output_add jpath xs) imports'
-
 splitCInvariants :: CInvariants -> [(Class, CInvariants)] -> [(Class, CInvariants)]
 splitCInvariants [] acum           = acum
 splitCInvariants (cinv:cinvs) acum = splitCInvariants cinvs (updateAcum cinv acum)
@@ -181,17 +184,11 @@ updateAcum cinv@(CI class' body) ((cl, cinvs):as) =
  then (cl, cinv:cinvs):as
  else (cl,cinvs):updateAcum cinv as
 
-generateTmpFileCInv :: Import -> FilePath -> FilePath -> [(Class, CInvariants)] -> IO ()
-generateTmpFileCInv i output_add jpath xs =
-  do (main, cl) <- makeAddFile i
-     let output_add'' = output_add ++ "/" ++ main
-     createDirectoryIfMissing True output_add''
-     let file = jpath ++ main ++ "/" ++ (cl ++ ".java")
-     let tmp  = output_add'' ++ "/" ++ (cl ++ ".java")
-     r <- readFile file
-     let cinvs_jml = getCInvariants $ getCInvs' xs cl
-     let (ys, zs) = lookForClassBeginning cl (lines r)
-     writeFile tmp ((unlines ys) ++ cinvs_jml ++ (unlines zs)) 
+generateTmpFileCInv :: String -> [(Class, CInvariants)] -> String -> String
+generateTmpFileCInv cl xs r =
+ let cinvs_jml = getCInvariants $ getCInvs' xs cl
+     (ys, zs)  = lookForClassBeginning cl (lines r)
+ in (unlines ys) ++ cinvs_jml ++ (unlines zs) 
 
 lookForClassBeginning :: ClassInfo -> [String] -> ([String], [String])
 lookForClassBeginning c []       = error $  "Something went wrong when checking a class invariant for the class " ++ c  ++ ".\n"
@@ -224,29 +221,11 @@ getCInvs' ((cl', cinvs):xs) cl = if (cl' == cl)
 -- Injecting dummy boolean variables --
 ---------------------------------------
 
-generateDummyBoolVars :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO [()]
-generateDummyBoolVars ppd output_add jpath = 
- let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
-     imports       = ppdate ^. importsGet
-     consts        = ppdate ^. htsGet
-     xs            = splitClassHT consts
-     join_xs       = joinClassHT xs []
-     imports'      = [i | i <- imports,not (elem ((\ (Import s) -> s) i) importsInKeY)]
- in sequence $ map (\ i -> generateDBMFile i output_add jpath join_xs) imports'
-
-
-generateDBMFile :: Import -> FilePath -> FilePath -> [(ClassInfo, [HTName])] -> IO ()
-generateDBMFile i output_add jpath xs =
-  do (main, cl) <- makeAddFile i
-     createDirectoryIfMissing True output_add
-     let output_add'' = output_add ++ "/" ++ main
-     createDirectoryIfMissing True output_add''
-     let file = jpath ++ main ++ "/" ++ (cl ++ ".java")
-     let tmp  = output_add'' ++ "/" ++ (cl ++ ".java")
-     r <- readFile file
-     let dummy_vars = map genDummyVarJava $ lookForConstsNames cl xs
-     let (ys, zs) = lookForClassBeginning cl (lines r)
-     writeFile tmp ((unlines ys) ++ concat dummy_vars ++ (unlines zs)) 
+generateDBMFile :: String -> [(ClassInfo, [HTName])] -> String -> String
+generateDBMFile cl xs r =
+ let dummy_vars = map genDummyVarJava $ lookForConstsNames cl xs
+     (ys, zs)   = lookForClassBeginning cl (lines r)
+ in (unlines ys) ++ concat dummy_vars ++ (unlines zs) 
 
 
 genDummyVarJava :: HTName -> String
