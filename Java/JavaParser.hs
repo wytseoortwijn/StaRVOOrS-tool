@@ -7,6 +7,7 @@ import Language.Java.Pretty
 import Language.Java.Lexer
 import Data.Maybe (fromJust)
 import Control.Lens hiding(Context,pre) 
+import JavaLanguage
 
 ---------------------------------------
 -- Manipulation of parsed java files --
@@ -72,32 +73,36 @@ getMethodDecl (d:ds) =
                _                        -> getMethodDecl ds
       _             -> getMethodDecl ds
 
---TODO: Update when dealing with private values
 getMethodDeclId :: [Decl] -> [String]
 getMethodDeclId []     = []
 getMethodDeclId (d:ds) = 
  case d of
       MemberDecl md -> case md of 
-               MethodDecl xs _ _ (Ident id) _ _ _ 
-                          -> if (elem Public xs) 
-                             then id:getMethodDeclId ds
-                             else getMethodDeclId ds
+               MethodDecl _ _ _ (Ident id) _ _ _ 
+                          -> id:getMethodDeclId ds
                _          -> getMethodDeclId ds
       _             -> getMethodDeclId ds
 
-getTypeAndId :: MemberDecl -> (String, [String])
-getTypeAndId (FieldDecl _ type' vid) = (prettyPrint type', map getIdVar vid)
+getVarsInfo:: MemberDecl -> (String, String, [String])
+getVarsInfo (FieldDecl mods t vid) = (getModifier $ map prettyPrint mods, prettyPrint t, map getIdVar vid)
+
+getModifier :: [String] -> String
+getModifier []     = ""
+getModifier (x:xs) = 
+ if elem x javaModifiers
+ then x
+ else getModifier xs
 
 getIdVar :: VarDecl -> String
 getIdVar (VarDecl (VarId (Ident id)) _) = id
 
-splitVars :: [(String, [String])] -> [(String,String)]
+splitVars :: [(String,String, [String])] -> [(String,String,String)]
 splitVars []                 = []
-splitVars (tv:tvs) = (uncurry splitV) tv ++ splitVars tvs
+splitVars (tv:tvs) = splitV tv ++ splitVars tvs
 
-splitV :: String -> [String] -> [(String, String)]
-splitV _ []         = []
-splitV type' (v:vs) = (type',v):splitV type' vs
+splitV :: (String,String, [String]) -> [(String,String, String)]
+splitV (_,_,[])        = []
+splitV (mods,t,(v:vs)) = (mods, t,v):splitV (mods,t,vs)
 
 getMethodsNames :: T.ClassInfo -> T.HTriples -> [T.MethodName]
 getMethodsNames _ []      = []

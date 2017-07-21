@@ -1,7 +1,7 @@
 module TypeInferenceXml(inferTypesOldExprs) where
 
 import Types
-import Text.XML.HaXml hiding(path)
+import Text.XML.HaXml hiding(path,Modifier)
 import Text.XML.HaXml.Parse
 import Text.XML.HaXml.Posn
 import CommonFunctions
@@ -36,15 +36,16 @@ inferTypesOldExprs ppd jpath output_add =
                     oldExpsJER <- parse new_xml_add
                     let oldExpTypes = foldr (\x xs -> Map.insert (x ^. htID) (map toTuple $ x ^. oldExprs) xs) Map.empty oldExpsJER
                     return oldExpTypes
-                       where getTypes c jinfo = getListOfTypesAndVars c jinfo ++ getListOfTypesAndMethods c jinfo
-                             toTuple (OExpr e t) = (e,t) 
+                       where getTypes c jinfo    = filterMod $ getListOfTypesAndVars c jinfo ++ getListOfTypesAndMethods c jinfo
+                             toTuple (OExpr e t) = (e,t)
+                             filterMod           = map (\ val -> (val ^. _2,val ^. _3))
 
 
 --------------------
 -- Type inference --
 --------------------
 
---Runs the API which infer the types of \old expressions
+--Runs the API which infers the types of \old expressions
 javaExprReader xml_add out_add = rawSystem "java" ["-jar","jer.jar",xml_add, out_add]
 
 addType :: OldExpr -> [(ClassInfo,[(Type,String)])] -> [(String, ClassInfo, JavaFilesInfo)] -> OldExpr

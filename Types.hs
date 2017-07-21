@@ -6,7 +6,7 @@ import qualified Data.Map as Map
 import System.FilePath
 import System.Console.GetOpt
 import Data.Maybe ( fromMaybe )
-import Language.Java.Syntax hiding(Type,VarDecl)
+import Language.Java.Syntax hiding(Type,VarDecl,Modifier)
 import qualified AbsActions as Act
 import Control.Lens hiding(Context)
 import Data.List (intercalate)
@@ -558,10 +558,12 @@ options =
 ------------------------
 
 data JavaFilesInfo = JavaFilesInfo
- { varsInFiles    :: [(Type, Id)]
- , methodsInFiles :: [(Type,Id,[String],MethodInvocations)] 
-                   --[(path_to_class,method_name,args,[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body)])]
+ { varsInFiles    :: [(Modifier, Type, Id)]
+ , methodsInFiles :: [(Type,Id,[String],MethodInvocations,Modifier)] 
+                   --[(returned_type,method_name,arguments,methodsInvokedIn_method_name_body,modifier)]
  } deriving(Eq,Show)
+
+type Modifier = String
 
 ------------
 -- Lenses --

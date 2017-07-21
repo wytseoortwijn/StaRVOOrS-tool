@@ -277,7 +277,7 @@ generateNewTriggers ppd consts =
      put env''
      return ppdate'
 
-checkOverloading :: [(String,MethodName,[String],MethodInvocations)] -> Overriding -> (String,MethodName,[String],MethodInvocations)
+checkOverloading :: [(Type,MethodName,[String],MethodInvocations,Modifier)] -> Overriding -> (Type,MethodName,[String],MethodInvocations,Modifier)
 checkOverloading [] _             = error "Problem with overriding.\n"
 checkOverloading (val:xs) OverNil = val
 checkOverloading (val:xs) ov      = 
@@ -298,7 +298,7 @@ filterDefEntryTriggers (mnc@(MCN ci mn (Over xs)):mncs) ts =
  else filterDefEntryTriggers mncs ts
 
 --Creates the info to be added in the environment
-createTriggerEntry :: (MethodCN,(String,MethodName,[String],MethodInvocations)) -> Int -> Scope -> TriggersInfo
+createTriggerEntry :: (MethodCN,(String,MethodName,[String],MethodInvocations,Modifier)) -> Int -> Scope -> TriggersInfo
 createTriggerEntry (mnc,inf) n scope = 
  let mn  = mnc ^. mname
      cn  = mnc ^. clinf
@@ -314,7 +314,7 @@ createTriggerEntry (mnc,inf) n scope =
          in TI trnm mn cn nvar EVEntry bs (Just tr) scope ov
     else error $ "Problem when creating an entry trigger. Mismatch between method names " ++ mn ++ " and " ++ inf ^. _2 ++ ".\n"
 
-addNewTriggerEntry :: Env -> Int -> [(MethodCN,(String,MethodName,[String],MethodInvocations))] -> PPDATE -> Scope -> (Env,PPDATE)
+addNewTriggerEntry :: Env -> Int -> [(MethodCN,(Type,MethodName,[String],MethodInvocations,Modifier))] -> PPDATE -> Scope -> (Env,PPDATE)
 addNewTriggerEntry env _ [] ppd _         = (env,ppd)
 addNewTriggerEntry env n (x:xs) ppd scope =
  let tinfo = createTriggerEntry x n scope
@@ -323,7 +323,7 @@ addNewTriggerEntry env n (x:xs) ppd scope =
 
 
 --Creates the info to be added in the environment
-createTriggerExit:: (MethodCN,(String,MethodName,[String],MethodInvocations)) -> Int -> Scope -> TriggersInfo
+createTriggerExit:: (MethodCN,(String,MethodName,[String],MethodInvocations,Modifier)) -> Int -> Scope -> TriggersInfo
 createTriggerExit (mnc,inf) n scope = 
  let mn   = mnc ^. mname
      cn   = mnc ^. clinf
@@ -347,7 +347,7 @@ createTriggerExit (mnc,inf) n scope =
            in TI trnm mn cn nvar (EVExit [BindId ret]) bs (Just tr) scope ov
  else error $ "Problem when creating an exit trigger. Mismatch between method names " ++ mn ++ " and " ++ inf ^. _2 ++ ".\n"
 
-addNewTriggerExit :: Env -> Int -> [(MethodCN,(String,MethodName,[String],MethodInvocations))] -> Scope -> Env
+addNewTriggerExit :: Env -> Int -> [(MethodCN,(Type,MethodName,[String],MethodInvocations,Modifier))] -> Scope -> Env
 addNewTriggerExit env _ [] _         = env
 addNewTriggerExit env n (x:xs) scope =
  let tinfo  = createTriggerExit x n scope

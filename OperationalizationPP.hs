@@ -51,7 +51,6 @@ operationalizePrePostORB c vars trigs methods oldExprTypesM =
 -- bind class variables --
 --------------------------
 
---Note: if classes with the same name in different folders allowed, then fix this method
 bindCV :: HT -> [(String, ClassInfo, JavaFilesInfo)] -> Triggers -> [(String, ClassInfo, [String])] -> HT
 bindCV c vars es methods =
  let bindEntry = getClassVar c es EVEntry
@@ -135,7 +134,7 @@ isCharExpression = (\c -> isIdentifierSymbol c || c == '.')
 getVarsToControl :: ClassInfo -> [(String, ClassInfo, JavaFilesInfo)] -> [String]
 getVarsToControl cl []       = []
 getVarsToControl cl (val:xs) = if (cl == (val ^. _2))
-                               then map snd $ varsInFiles (val ^. _3)
+                               then map (^. _3) $ varsInFiles (val ^. _3)
                                else getVarsToControl cl xs
 ----------
 -- \old --

@@ -53,10 +53,11 @@ annotateTmpFiles i output_add jpath jinfo ys jxs consts_jml =
      let file        = jpath' ++ "/" ++ (cl ++ ".java")  
      let tmp         = output_add' ++ "/" ++ (cl ++ ".java")
      r <- readFile file
-     let dummyVars = generateDBMFile cl jxs r
-     let cinvs     = generateTmpFileCInv cl ys dummyVars
-     let nullable  = updateTmpFileCInv cl jinfo cinvs
-     let contracts = genTmpFilesConst (main,cl) consts_jml nullable
+     let dummyVars  = generateDBMFile cl jxs r
+     let cinvs      = generateTmpFileCInv cl ys dummyVars
+     let nullable   = updateTmpFileCInv cl jinfo cinvs
+     let specPublic = updateSpecPublic cl jinfo nullable
+     let contracts  = genTmpFilesConst (main,cl) consts_jml specPublic
      writeFile tmp contracts     
 
 ---------------------------------------------
@@ -120,13 +121,60 @@ lookForConstructorDef mn (xs:xss) =
              beginl = (clean.head) ys 
          in if (null beginl || elem beginl javaModifiers)
             then if ((head zs) == '(')
-                 then ([], xs:xss)                      
+                 then ([], xs:xss)
                  else (xs:a, b)
             else (xs:a, b)
                 where (a, b) = lookForConstructorDef mn xss
 
+-------------------------------------------
+-- Adds spec_public to private variables --
+-------------------------------------------
+
+updateSpecPublic :: String -> [(String, ClassInfo, JavaFilesInfo)] -> String -> String
+updateSpecPublic cl jinfo r = 
+ let varsc    = getListOfTypesAndVars cl jinfo
+     methodsc = getListOfTypesAndMethods cl jinfo
+     (ys, zs) = lookForClassBeginning cl (lines r)
+ in (unlines ys) ++ (unlines (searchAndAnnotateMethods (searchAndAnnotateVarsSP zs varsc) methodsc))
+
+searchAndAnnotateVarsSP :: [String] -> [(String, String, String)] -> [String]
+searchAndAnnotateVarsSP xss []     = xss
+searchAndAnnotateVarsSP xss (ys:yss) = 
+ if not (ys ^._1 == "private")
+ then searchAndAnnotateVarsSP xss yss
+ else let xss' = annotateSpecPublic ys xss
+      in searchAndAnnotateVarsSP xss' yss
+
+annotateSpecPublic :: (String,String, String) -> [String] -> [String]
+annotateSpecPublic (mod,t,v) []       = []
+annotateSpecPublic (mod,t,v) (xs:xss) = 
+ let ident = t ++ " " ++ v
+     ys    = splitOnIdentifier ident xs
+ in if (length ys == 1)
+    then xs:annotateSpecPublic (mod,t, v) xss
+    else let xs' = (head ys) ++ " /*@ spec_public @*/ " ++ ident ++ (head.tail) ys
+         in xs':xss
+
+searchAndAnnotateMethods :: [String] -> [(String, String, String)] -> [String]
+searchAndAnnotateMethods xss []     = xss
+searchAndAnnotateMethods xss (ys:yss) = 
+ if not (ys ^._3 == "private")
+ then searchAndAnnotateMethods xss yss
+ else let xss' = annotateSpecPublicM ys xss
+      in searchAndAnnotateMethods xss' yss
+
+annotateSpecPublicM :: (String,String, String) -> [String] -> [String]
+annotateSpecPublicM (t,v,mod) []       = []
+annotateSpecPublicM (t,v,mod) (xs:xss) = 
+ let ident = t ++ " " ++ v
+     ys    = splitOnIdentifier ident xs
+ in if (length ys == 1)
+    then xs:annotateSpecPublicM (t, v, mod) xss
+    else let xs' = (head ys) ++ " /*@ spec_public @*/ " ++ ident ++ (head.tail) ys
+         in xs':xss
+
 -------------------------------------
--- Add nullable to class variables --
+-- Adds nullable to class variables --
 -------------------------------------
 
 updateTmpFileCInv :: String -> [(String, ClassInfo, JavaFilesInfo)] -> String -> String
@@ -135,21 +183,22 @@ updateTmpFileCInv cl jinfo r =
      (ys, zs) = lookForClassBeginning cl (lines r)
  in (unlines ys) ++ (unlines (searchAndAnnotateVars zs varsc))
 
-searchAndAnnotateVars :: [String] -> [(String, String)] -> [String]
-searchAndAnnotateVars xss []              = xss
-searchAndAnnotateVars xss ((type',v):yss) = if (elem type' primitiveJavaTypes)
-                                            then searchAndAnnotateVars xss yss
-                                            else let xss' = annotateNullable (type',v) xss
-                                                 in searchAndAnnotateVars xss' yss
+searchAndAnnotateVars :: [String] -> [(String, String, String)] -> [String]
+searchAndAnnotateVars xss []               = xss
+searchAndAnnotateVars xss ((mods,t,v):yss) = 
+ if (elem t primitiveJavaTypes)
+ then searchAndAnnotateVars xss yss
+ else let xss' = annotateNullable (t,v) xss
+      in searchAndAnnotateVars xss' yss
 
 --TODO: This method may need to be upgraded
 annotateNullable :: (String, String) -> [String] -> [String]
-annotateNullable (type', v) []       = []
-annotateNullable (type', v) (xs:xss) = 
- let ident = type' ++ " " ++ v
+annotateNullable (t, v) []       = []
+annotateNullable (t, v) (xs:xss) = 
+ let ident = t ++ " " ++ v
      ys    = splitOnIdentifier ident xs
  in if (length ys == 1)
-    then xs:annotateNullable (type', v) xss
+    then xs:annotateNullable (t, v) xss
     else let xs' = (head ys) ++ " /*@ nullable @*/ " ++ ident ++ (head.tail) ys
          in xs':xss
 

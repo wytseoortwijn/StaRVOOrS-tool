@@ -71,22 +71,22 @@ wrongMethod h = "Problem in the Hoare triple " ++ h ^. T.htName
 --
 --Gets the variables of all the java files involved in the verification process
 --
-getVariables :: ClassDecl -> [(String, String)]
-getVariables = splitVars . (map getTypeAndId) . (getVarDecl'.getMemberDecl.getDecls.getClassBody)
+getVariables :: ClassDecl -> [(String,String, String)]
+getVariables = splitVars . (map getVarsInfo) . (getVarDecl'.getMemberDecl.getDecls.getClassBody)
 
 --
 --Gets the method declarations of all the java files involved in the verification process
 --      
-getMethods :: ClassDecl -> [(String, String, [String],[Exp])]
+getMethods :: ClassDecl -> [(String, String, [String],[Exp],String)]
 getMethods = (map methodsDetails) . (getMethodDecl.getDecls.getClassBody)
 
 -------------------------
 -- Auxiliary Functions --
 -------------------------
 
-methodsDetails :: MemberDecl -> (String, String, [String],[Exp])
-methodsDetails (MethodDecl _ _ Nothing (Ident mn) args _ body)   = ("void",mn,map prettyPrint args, getMethodsInvocation body)
-methodsDetails (MethodDecl _ _ (Just rt) (Ident mn) args _ body) = (prettyPrint rt,mn,map prettyPrint args, getMethodsInvocation body)
+methodsDetails :: MemberDecl -> (String, String, [String],[Exp],String)
+methodsDetails (MethodDecl mods _ Nothing (Ident mn) args _ body)   = ("void",mn,map prettyPrint args, getMethodsInvocation body,getModifier $ map prettyPrint mods)
+methodsDetails (MethodDecl mods _ (Just rt) (Ident mn) args _ body) = (prettyPrint rt,mn,map prettyPrint args, getMethodsInvocation body,getModifier $ map prettyPrint mods)
 
 --
 --Gets all method invocations within a method definition

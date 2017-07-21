@@ -59,17 +59,17 @@ removeDuplicates' (p@(xs,ys):xss) =
     then removeDuplicates' xss 
     else p:removeDuplicates' xss
 
-getListOfTypesAndVars :: ClassInfo -> [(String, ClassInfo, JavaFilesInfo)] -> [(Type, Id)]
+getListOfTypesAndVars :: ClassInfo -> [(String, ClassInfo, JavaFilesInfo)] -> [(Modifier,Type, Id)]
 getListOfTypesAndVars cl []                  = []
 getListOfTypesAndVars cl ((main, cl',ts):xs) = if (cl == cl') 
                                                then varsInFiles ts
                                                else getListOfTypesAndVars cl xs
 
-getListOfTypesAndMethods :: ClassInfo -> [(String, ClassInfo, JavaFilesInfo)] -> [(Type, Id)]
+getListOfTypesAndMethods :: ClassInfo -> [(String, ClassInfo, JavaFilesInfo)] -> [(Type, Id,Modifier)]
 getListOfTypesAndMethods cl []                  = []
 getListOfTypesAndMethods cl ((main, cl',ts):xs) = 
  if (cl == cl') 
- then [(xy ^. _1, xy ^. _2) | xy <- methodsInFiles ts]
+ then [(xy ^. _1, xy ^. _2, xy ^. _5) | xy <- methodsInFiles ts]
  else getListOfTypesAndMethods cl xs
 
 getMethodInvocations :: MethodCN -> [(String, ClassInfo, JavaFilesInfo)] -> MethodInvocations
@@ -79,7 +79,7 @@ getMethodInvocations mnc ((main, cl',ts):xs) =
      cl  = mnc ^. clinf
      ov  = mnc ^. overl
  in if (cl == cl') 
-    then let ys = [ (t,id,args,minvs) | (t,id,args,minvs) <- methodsInFiles ts, id==mn]
+    then let ys = [ val | val <- methodsInFiles ts, val ^. _2==mn]
          in if (not.null) ys
             then case ov of 
                  OverNil  -> (\x -> x ^. _4) $ head ys 
@@ -90,11 +90,11 @@ getMethodInvocations mnc ((main, cl',ts):xs) =
             else getMethodInvocations mnc xs
     else getMethodInvocations mnc xs
 
-getListOfArgs :: MethodName -> [(Type, Id,[String],MethodInvocations)] -> [String]
-getListOfArgs mn []                = []
-getListOfArgs mn ((t,mn',ts,_):xs) = if (mn == mn') 
-                                     then ts
-                                     else getListOfArgs mn xs
+getListOfArgs :: MethodName -> [(Type, Id,[String],MethodInvocations,Modifier)] -> [String]
+getListOfArgs mn []                  = []
+getListOfArgs mn ((t,mn',ts,_,_):xs) = if (mn == mn') 
+                                       then ts
+                                       else getListOfArgs mn xs
 
 getConstTnv :: HT -> OldExprM -> Variables
 getConstTnv c oldExpM = 
