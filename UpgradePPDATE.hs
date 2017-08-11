@@ -1064,7 +1064,7 @@ getJML :: Abs.JML -> String -> Writer String JMLExp
 getJML jml str = 
  let jml' = printTree jml in
  case ParJML.parse jml' of
-      Bad s -> do tell $ "Parse error on the \n" ++ jml'--"Parse error on the " ++ str
+      Bad s -> do tell $ "Parse error on the \n" ++ jml'
                   return "Parse error"
       Ok _  -> return jml' 
 
@@ -1160,9 +1160,9 @@ getAllTriggers (Global (Ctxt vars ies trigs prop fors)) env =
  in trs ++ [ fromJust (tiTrDef t) | t <- allTriggers env, tiTrDef t /= Nothing, not (elem (fromJust $ tiTrDef t) trs)]
 
 
---------------------------------------------------------------------
--- Environment with variables, triggers and foreaches information --
---------------------------------------------------------------------
+----------------------------------------------
+-- Environment with ppDATE spec information --
+----------------------------------------------
 
 data Env = Env
  { allTriggers     :: [TriggersInfo]
@@ -1239,8 +1239,4 @@ getHTNamesEnv ppd = let env = CM.execStateT ppd emptyEnv
                     in case env of
                             Bad _ -> []
                             Ok fs -> htsNames fs
-------------
--- Lenses --
-------------
 
---makeLenses ''Env
