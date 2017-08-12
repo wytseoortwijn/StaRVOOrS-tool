@@ -430,30 +430,26 @@ getWhereClause (Abs.WhereClauseDef wexp) = (concat.lines.printTree) wexp
 getProperty :: Abs.Properties -> [Id] -> Env -> Scope -> Writer (String,String,String) (Property,Env)
 getProperty Abs.PropertiesNil _ env _                                               = return (PNIL,env)
 getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms env scope = 
- case runWriter (getProperty props enms env scope) of
-      ((p,env'), s) -> 
-                do tell s
-                   return (PINIT { piName  = getIdAbs id
-                                 , tmpId   = getIdAbs id'
-                                 , bounds  = map getIdAbs ids'
-                                 , piProps = p
-                                 }, env')
+ do (p,env') <- getProperty props enms env scope
+    return (PINIT { piName  = getIdAbs id
+                  , tmpId   = getIdAbs id'
+                  , bounds  = map getIdAbs ids'
+                  , piProps = p
+                  }, env')
 getProperty (Abs.ProperiesDef id (Abs.PropKindNormal states trans) props) enms env scope =
  case runWriter (getTransitions (getIdAbs id) trans env scope) of
       ((t,env'),s') ->
-           let props' = getProperty props enms env' scope
-               ts = map (trigger.arrow) t
-           in case runWriter props' of
-                   ((p,env''), s) -> 
-                        do let xs      = [x | x <- ts, not (elem x enms)]
-                           let id'     = getIdAbs id
-                           let states' = getStates' states
-                           case runWriter (checkStatesWF states' id' t) of
-                                (_,s'') -> do tell $ mkErrTuple s (addComma xs) s' s''
-                                              return (Property { pName        = id'
-                                                               , pStates      = states'
-                                                               , pTransitions = t
-                                                               , pProps       = p },env'')
+           do let ts = map (trigger.arrow) t
+              (p,env'') <- getProperty props enms env' scope
+              let xs      = [x | x <- ts, not (elem x enms)]
+              let id'     = getIdAbs id
+              let states' = getStates' states
+              let s''     = execWriter $ checkStatesWF states' id' t
+              pass $ return ((), \s -> mkErrTuple s (addComma xs) s' s'')
+              return (Property { pName        = id'
+                               , pStates      = states'
+                               , pTransitions = t
+                               , pProps       = p },env'')
 
 mkErrTuple :: (String, String,String) -> String -> String -> String -> (String,String,String)
 mkErrTuple s xs s' s'' = ((mAppend xs (s ^. _1)), s' ++ s ^. _2, s ^. _3 ++ s'')
@@ -566,25 +562,25 @@ stateEq st st' = st == st' || st ^. getNS == st' ^. getNS
 
 getTransitions :: PropertyName -> Abs.Transitions -> Env -> Scope -> Writer String (Transitions,Env)
 getTransitions id (Abs.Transitions ts) env scope = 
- case runWriter (sequence $ map (getTransition' id env scope) ts) of
-      (xs,s) -> do let trans = map fst xs
-                   let envs  = map snd xs
-                   let env'  = joinEnvsCreate envs emptyEnv
-                   writer ((trans,env'),s)
+ do xs <- sequence $ map (getTransition' id env scope) ts
+    let trans = map fst xs
+    let envs  = map snd xs
+    let env'  = joinEnvsCreate envs emptyEnv
+    return (trans,env')
 
 getTransition' :: PropertyName -> Env -> Scope -> Abs.Transition -> Writer String (Transition,Env)
 getTransition' id env scope (Abs.Transition (Abs.NameState q1) (Abs.NameState q2) ar) = 
  case runWriter (getArrow ar env scope) of
       ((xs,env'),s) -> 
-                do let err = "Error: Parsing error in an action of a transition from state " 
-                             ++ getIdAbs q1 ++ " to state " 
-                             ++ getIdAbs q2 ++ " in property " ++ id ++ ".\n"
-                   let s' = if null s then "" else err ++ s
-                   tell s'                  
-                   return (Transition { fromState = getIdAbs q1
-                                      , arrow = xs
-                                      , toState = getIdAbs q2
-                                      },env')
+          do let err = "Error: Parsing error in an action of a transition from state " 
+                        ++ getIdAbs q1 ++ " to state " 
+                        ++ getIdAbs q2 ++ " in property " ++ id ++ ".\n"
+             let s' = if null s then "" else err ++ s
+             tell s'                  
+             return (Transition { fromState = getIdAbs q1
+                                , arrow = xs
+                                , toState = getIdAbs q2
+                                },env')
 
 getArrow :: Abs.Arrow -> Env -> Scope -> Writer String (Arrow,Env)
 getArrow (Abs.Arrow id mark Abs.Cond1) env scope        = 
