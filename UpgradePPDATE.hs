@@ -77,11 +77,11 @@ getCtxt (Abs.Ctxt vars ies trigs prop foreaches) scope =
     env <- get
     let prop' = getProperty prop (map tiTN (allTriggers env)) env scope
     let cns   = htsNames env
-    let ies'  = getActEvents ies   
+    let ies'  = getActEvents ies  
     case runWriter prop' of
-         ((PNIL,env'),_)                              -> do put env'
-                                                            getForeaches foreaches (Ctxt vars' ies' trigs' PNIL []) scope
-         ((PINIT pname id xs props,env'),s)           -> 
+         ((PNIL,env'),_)                    -> do put env'
+                                                  getForeaches foreaches (Ctxt vars' ies' trigs' PNIL []) scope
+         ((PINIT pname id xs props,env'),s) -> 
                   let trs = (addComma.removeDuplicates) [tr | tr <- (splitOnIdentifier "," (s ^. _1)), not (elem tr (map ((\x -> x ++ "?").show) ies'))]
                       s'  = if (not.null) trs
                             then "Error: Trigger(s) [" ++ trs 
@@ -181,37 +181,36 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                then "Error: Multiple definitions for trigger " 
                     ++ id'' ++ ".\n" ++ show scope ++ "\n" 
                else ""
-    do case runWriter (getBindsArgs binds) of
-         (bs, s) ->
-           let err0 = if (not.null) s 
-                      then err ++ "Error: Trigger declaration [" ++ id'' 
-                           ++ "] uses wrong argument(s) [" ++ s ++ "].\n"
-                      else err
-           in case runWriter (getCompTriggers ce) of
-                 (ce',s') ->
-                   let err1 = if (not.null) s'
-                              then err0 ++ ("Error: Trigger declaration [" ++ id'' 
-                                   ++ "] uses wrong argument(s) [" ++ s' ++ "] in the method component.\n")
-                              else err0
-                       argss = map getBindTypeId bs
-                   in case ce' of
-                          NormalEvent (BindingVar bind) mn args' eventv
-                               -> let allArgs = map getBindIdId (filter (\ c -> c /= BindStar) args') in
-                                  case eventv of
-                                       EVEntry  -> let id  = getIdBind bind
-                                                       wc' = getWhereClause wc
-                                                       wcs = [x | x <- argss, not(elem x allArgs)]
-                                                       vs  = filter (\ x -> x /= id) $ checkVarsInitialisation wcs (getVarsWC wc)
-                                                    in if ((not.null) vs) 
-                                                       then fail $ err1 ++ "Error: Missing Initialization of variable(s) " 
-                                                                   ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n"
-                                                       else
-                                                         case runWriter ((checkAllArgs argss allArgs bind)) of
-                                                          (b,zs) ->
-                                                            case runWriter (checkSpecialCases b mn bind bs [] zs id'' env scope) of 
-                                                             (b',s'') -> 
-                                                                if b' then
-                                                                  if (not.null) err1 then fail err1 else
+    let (bs, s) = runWriter $ getBindsArgs binds
+    let err0    = if (not.null) s 
+                  then err ++ "Error: Trigger declaration [" ++ id'' 
+                       ++ "] uses wrong argument(s) [" ++ s ++ "].\n"
+                  else err
+    let (ce',s') = runWriter (getCompTriggers ce)
+    let err1 = if (not.null) s'
+               then err0 ++ ("Error: Trigger declaration [" ++ id'' 
+                    ++ "] uses wrong argument(s) [" ++ s' ++ "] in the method component.\n")
+               else err0
+    let argss = map getBindTypeId bs
+    case ce' of
+         NormalEvent (BindingVar bind) mn args' eventv
+            -> let allArgs = map getBindIdId (filter (\ c -> c /= BindStar) args') in
+               case eventv of
+                    EVEntry  -> let id  = getIdBind bind
+                                    wc' = getWhereClause wc
+                                    wcs = [x | x <- argss, not(elem x allArgs)]
+                                    vs  = filter (\ x -> x /= id) $ checkVarsInitialisation wcs (getVarsWC wc)
+                                in if ((not.null) vs) 
+                                   then fail $ err1 ++ "Error: Missing Initialization of variable(s) " 
+                                               ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n"
+                                   else case runWriter ((checkAllArgs argss allArgs bind)) of
+                                             (b,zs) ->
+                                              case runWriter (checkSpecialCases b mn bind bs [] zs id'' env scope) of 
+                                                   (b',s'') -> 
+                                                          if b' 
+                                                          then if (not.null) err1 
+                                                               then fail err1 
+                                                               else
                                                                   do let einfo = if null s''
                                                                                  then show bind
                                                                                  else s''
@@ -225,20 +224,19 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                                                      let ti = TI id'' mn ci cinm EVEntry bs (Just tr) scope ov
                                                                      put env { allTriggers = ti : allTriggers env }
                                                                      return tr
-                                                                else fail (err1 ++ s'')
-                                       EVExit rs -> let id  = getIdBind bind
-                                                        wc' = getWhereClause wc
-                                                        wcs = [x | x <- argss, not(elem x allArgs)]
-                                                        rs' = map getIdBind rs
-                                                        vs  = filter (\ x -> (not (elem x rs')) && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
-                                                    in if ((not.null) vs) 
-                                                       then fail $ err1 ++ "Error: Missing Initialization of variable(s) " 
-                                                                   ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n"
-                                                       else
-                                                        case runWriter ((checkAllArgs argss allArgs bind)) of
-                                                          (b,zs) ->
-                                                            case runWriter (checkSpecialCases b mn bind bs rs zs id'' env scope) of 
-                                                              (b',s'') -> 
+                                                          else fail (err1 ++ s'')
+                    EVExit rs -> let id  = getIdBind bind
+                                     wc' = getWhereClause wc
+                                     wcs = [x | x <- argss, not(elem x allArgs)]
+                                     rs' = map getIdBind rs
+                                     vs  = filter (\ x -> (not (elem x rs')) && (x /= id)) $ checkVarsInitialisation wcs (getVarsWC wc)
+                                  in if ((not.null) vs) 
+                                     then fail $ err1 ++ "Error: Missing Initialization of variable(s) " 
+                                                 ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n"
+                                     else case runWriter ((checkAllArgs argss allArgs bind)) of
+                                               (b,zs) ->
+                                                  case runWriter (checkSpecialCases b mn bind bs rs zs id'' env scope) of 
+                                                       (b',s'') -> 
                                                                 if (b' && (checkRetVar rs argss))
                                                                 then if (not.null) err1 then fail err1 else
                                                                      do (ci,cinm) <- getClassVarName id'' mn bs bind s'' scope args
@@ -252,18 +250,18 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                                                         put env { allTriggers = ti : allTriggers env }
                                                                         return tr
                                                                 else fail (err1 ++ s'')
-                                       _        -> return TriggerDef { _tName = id''
-                                                                     , _args  = bs
-                                                                     , _compTrigger = ce'
-                                                                     , _whereClause = getWhereClause wc
-                                                                     }
-                          _  -> if (not.null) err1 then fail err1 else
-                                do put env { allTriggers = TI id'' "" "" "" EVNil bs Nothing scope OverNil: allTriggers env }
-                                   return TriggerDef { _tName = id''
-                                                     , _args  = bs
-                                                     , _compTrigger = ce'
-                                                     , _whereClause = getWhereClause wc
-                                                     }
+                    _        -> return TriggerDef { _tName = id''
+                                                  , _args  = bs
+                                                  , _compTrigger = ce'
+                                                  , _whereClause = getWhereClause wc
+                                                  }
+         _  -> if (not.null) err1 then fail err1 else
+               do put env { allTriggers = TI id'' "" "" "" EVNil bs Nothing scope OverNil: allTriggers env }
+                  return TriggerDef { _tName = id''
+                                    , _args  = bs
+                                    , _compTrigger = ce'
+                                    , _whereClause = getWhereClause wc
+                                    }
 
 generateOverloading :: [Bind] -> [Bind] -> Overriding
 generateOverloading bs [] = Over []
@@ -1133,10 +1131,10 @@ joinImport (xs:ys:iss) = xs ++ "." ++ joinImport (ys:iss)
 
 lookForAllEntryTriggerArgs :: Env -> HT -> UpgradePPD (String, String)
 lookForAllEntryTriggerArgs env c =
- let trs = allTriggers env
- in do tinfo <- getEntryTriggers (_methodCN c) trs
-       let args  = map (\(BindType t id) -> Args t id) (tiBinds tinfo)
-       return (getArgsGenMethods (tiCI tinfo,tiCVar tinfo, args))   
+ do let trs = allTriggers env
+    tinfo <- getEntryTriggers (_methodCN c) trs
+    let args  = map (\(BindType t id) -> Args t id) (tiBinds tinfo)
+    return (getArgsGenMethods (tiCI tinfo,tiCVar tinfo, args))   
 
 getEntryTriggers :: MethodCN -> [TriggersInfo] -> UpgradePPD TriggersInfo
 getEntryTriggers mnc []         = fail $ "Error: Could not find an entry trigger associated to method "
