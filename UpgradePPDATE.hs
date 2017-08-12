@@ -430,8 +430,7 @@ getWhereClause (Abs.WhereClauseDef wexp) = (concat.lines.printTree) wexp
 getProperty :: Abs.Properties -> [Id] -> Env -> Scope -> Writer (String,String,String) (Property,Env)
 getProperty Abs.PropertiesNil _ env _                                               = return (PNIL,env)
 getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms env scope = 
- let props' = getProperty props enms env scope
- in case runWriter props' of
+ case runWriter (getProperty props enms env scope) of
       ((p,env'), s) -> 
                 do tell s
                    return (PINIT { piName  = getIdAbs id
@@ -440,22 +439,21 @@ getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms env sc
                                  , piProps = p
                                  }, env')
 getProperty (Abs.ProperiesDef id (Abs.PropKindNormal states trans) props) enms env scope =
- let trans' = getTransitions (getIdAbs id) trans env scope in
- case runWriter trans' of
+ case runWriter (getTransitions (getIdAbs id) trans env scope) of
       ((t,env'),s') ->
            let props' = getProperty props enms env' scope
                ts = map (trigger.arrow) t
            in case runWriter props' of
                    ((p,env''), s) -> 
-                        do let xs      = [x | x <- ts, not(elem x enms)]
+                        do let xs      = [x | x <- ts, not (elem x enms)]
                            let id'     = getIdAbs id
                            let states' = getStates' states
-                           case runWriter (checkStatesWF states' id') of
-                                (ys,s'') -> do tell $ mkErrTuple s (addComma xs) s' s''
-                                               return (Property { pName        = id'
-                                                                , pStates      = states'
-                                                                , pTransitions = t
-                                                                , pProps       = p },env'')
+                           case runWriter (checkStatesWF states' id' t) of
+                                (_,s'') -> do tell $ mkErrTuple s (addComma xs) s' s''
+                                              return (Property { pName        = id'
+                                                               , pStates      = states'
+                                                               , pTransitions = t
+                                                               , pProps       = p },env'')
 
 mkErrTuple :: (String, String,String) -> String -> String -> String -> (String,String,String)
 mkErrTuple s xs s' s'' = ((mAppend xs (s ^. _1)), s' ++ s ^. _2, s ^. _3 ++ s'')
@@ -489,7 +487,7 @@ getStarting' :: Abs.Starting -> Starting
 getStarting' (Abs.StartingDef ss) = map getState ss
 
 getState :: Abs.State -> State
-getState (Abs.State (Abs.NameState id) ic Abs.CNSNil) = State (getIdAbs id) (getInitCode ic) []
+getState (Abs.State (Abs.NameState id) ic Abs.CNSNil)    = State (getIdAbs id) (getInitCode ic) []
 getState (Abs.State (Abs.NameState id) ic (Abs.CNS cns)) = State (getIdAbs id) (getInitCode ic) (map (getIdAbs.getConstNameAbs) cns)
 
 getInitCode :: Abs.InitialCode -> InitialCode
@@ -497,33 +495,57 @@ getInitCode Abs.InitNil      = InitNil
 getInitCode (Abs.InitProg p) = InitProg (getJava p)
 
 --Check if the states are well-formed
-checkStatesWF :: States -> PropertyName -> Writer String States
-checkStatesWF sts s =
- do oneStarting sts s
-    uniqueNamesStates sts s
+checkStatesWF :: States -> PropertyName -> Transitions -> Writer String ()
+checkStatesWF sts pn trans =
+ do oneStarting sts pn
+    stateTransE trans sts pn
+    uniqueNamesStates sts pn
 
 --Checks if there is one (and only one) starting state
-oneStarting :: States -> PropertyName -> Writer String States
-oneStarting sts s = 
- if length (getStarting sts) /= 1
- then writer (sts, "Error: There is more than one starting state " ++ "in property " ++ s ++ ".\n")
- else return sts
+oneStarting :: States -> PropertyName -> Writer String ()
+oneStarting sts pn = 
+ case length (getStarting sts) of
+      0 -> tell ("Error: There is no starting state " ++ "in property " ++ pn ++ ".\n")
+      1 -> return ()
+      otherwise -> tell ("Error: There is more than one starting state " ++ "in property " ++ pn ++ ".\n")
 
+--Checks if all the states used in the transitions exist
+stateTransE :: Transitions -> States -> PropertyName -> Writer String ()
+stateTransE trans sts pn = 
+ let all  = map (^. getNS) $ allStates sts
+     stsT = concatMap (\ t -> [fromState t,toState t]) trans
+     xs   = [y | y <- stsT , not (elem y all)]
+ in if null xs
+    then return ()
+    else tell (msg xs) 
+               where msg xs = if length xs > 1
+                              then "Error: In property " ++ pn 
+                                   ++ ", the following state names used in the transitions do not exist: " 
+                                   ++ show xs ++ ".\n"
+                              else "Error: In property " ++ pn
+                                   ++ ", the following state name used in the transitions do not exist: "
+                                   ++ show xs ++ ".\n"
 
 --Checks if the names of the states are unique.
-uniqueNamesStates :: States -> PropertyName -> Writer String States
-uniqueNamesStates sts s = 
- let accp = uniqueNames $ getAccepting sts
-     bad  = uniqueNames $ getBad sts
-     norm = uniqueNames $ getNormal sts
-     all  = accp ++ bad ++ norm
+uniqueNamesStates :: States -> PropertyName -> Writer String ()
+uniqueNamesStates sts pn = 
+ let all = uniqueNames $ allStates sts
  in if null all
-    then return sts
-    else do tell (msg all) 
-            return sts
-                        where msg xs = if length xs > 1
-                                       then "Error: In property " ++ s ++ ", the following state names are not unique: " ++ show xs ++ ".\n"
-                                       else "Error: In property " ++ s ++ ", the following state name is not unique: " ++ show xs ++ ".\n"
+    then return ()
+    else tell (msg all) 
+               where msg xs = if length xs > 1
+                              then "Error: In property " ++ pn
+                                   ++ ", the following state names are not unique: " ++ show xs ++ ".\n"
+                              else "Error: In property " ++ pn
+                                   ++ ", the following state name is not unique: " ++ show xs ++ ".\n"
+
+allStates :: States -> [State]
+allStates sts =
+ let accp = getAccepting sts
+     bad  = getBad sts
+     norm = getNormal sts
+     star = getStarting sts
+ in star ++ accp ++ bad ++ norm
 
 uniqueNames :: [State] -> [NameState]
 uniqueNames sts = removeDuplicates $ map (^.getNS) $ sameNameStates sts
