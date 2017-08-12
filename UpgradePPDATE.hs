@@ -203,28 +203,25 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                 in if ((not.null) vs) 
                                    then fail $ err1 ++ "Error: Missing Initialization of variable(s) " 
                                                ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n"
-                                   else case runWriter ((checkAllArgs argss allArgs bind)) of
-                                             (b,zs) ->
-                                              case runWriter (checkSpecialCases b mn bind bs [] zs id'' env scope) of 
-                                                   (b',s'') -> 
-                                                          if b' 
-                                                          then if (not.null) err1 
-                                                               then fail err1 
-                                                               else
-                                                                  do let einfo = if null s''
-                                                                                 then show bind
-                                                                                 else s''
-                                                                     let ov = generateOverloading bs (getCTArgs ce')
-                                                                     (ci,cinm) <- getClassVarName id'' mn bs bind s'' scope args
-                                                                     let tr = TriggerDef { _tName = id''
-                                                                                         , _args  = bs
-                                                                                         , _compTrigger = ce'
-                                                                                         , _whereClause = getWhereClause wc
-                                                                                         }
-                                                                     let ti = TI id'' mn ci cinm EVEntry bs (Just tr) scope ov
-                                                                     put env { allTriggers = ti : allTriggers env }
-                                                                     return tr
-                                                          else fail (err1 ++ s'')
+                                   else do let (b,zs)   = runWriter ((checkAllArgs argss allArgs bind))
+                                           let (b',s'') = runWriter (checkSpecialCases b mn bind bs [] zs id'' env scope)
+                                           if b' 
+                                           then if (not.null) err1 
+                                                then fail err1 
+                                                else do let einfo = if null s''
+                                                                    then show bind
+                                                                    else s''
+                                                        let ov = generateOverloading bs (getCTArgs ce')
+                                                        (ci,cinm) <- getClassVarName id'' mn bs bind s'' scope args
+                                                        let tr = TriggerDef { _tName = id''
+                                                                            , _args  = bs
+                                                                            , _compTrigger = ce'
+                                                                            , _whereClause = getWhereClause wc
+                                                                            }
+                                                        let ti = TI id'' mn ci cinm EVEntry bs (Just tr) scope ov
+                                                        put env { allTriggers = ti : allTriggers env }
+                                                        return tr
+                                           else fail (err1 ++ s'')
                     EVExit rs -> let id  = getIdBind bind
                                      wc' = getWhereClause wc
                                      wcs = [x | x <- argss, not(elem x allArgs)]
@@ -233,23 +230,22 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                   in if ((not.null) vs) 
                                      then fail $ err1 ++ "Error: Missing Initialization of variable(s) " 
                                                  ++ show vs ++  " in trigger declaration [" ++ id'' ++ "].\n"
-                                     else case runWriter ((checkAllArgs argss allArgs bind)) of
-                                               (b,zs) ->
-                                                  case runWriter (checkSpecialCases b mn bind bs rs zs id'' env scope) of 
-                                                       (b',s'') -> 
-                                                                if (b' && (checkRetVar rs argss))
-                                                                then if (not.null) err1 then fail err1 else
-                                                                     do (ci,cinm) <- getClassVarName id'' mn bs bind s'' scope args
-                                                                        let ov = generateOverloading bs (getCTArgs ce')
-                                                                        let tr = TriggerDef { _tName = id''
-                                                                                            , _args  = bs
-                                                                                            , _compTrigger = ce'
-                                                                                            , _whereClause = wc'
-                                                                                            }
-                                                                        let ti = TI id'' mn ci cinm (EVExit rs) bs (Just tr) scope ov
-                                                                        put env { allTriggers = ti : allTriggers env }
-                                                                        return tr
-                                                                else fail (err1 ++ s'')
+                                     else do let (b,zs)   = runWriter ((checkAllArgs argss allArgs bind))
+                                             let (b',s'') = runWriter (checkSpecialCases b mn bind bs rs zs id'' env scope) 
+                                             if (b' && (checkRetVar rs argss))
+                                             then if (not.null) err1 
+                                                  then fail err1 
+                                                  else do (ci,cinm) <- getClassVarName id'' mn bs bind s'' scope args
+                                                          let ov = generateOverloading bs (getCTArgs ce')
+                                                          let tr = TriggerDef { _tName = id''
+                                                                              , _args  = bs
+                                                                              , _compTrigger = ce'
+                                                                              , _whereClause = wc'
+                                                                              }
+                                                          let ti = TI id'' mn ci cinm (EVExit rs) bs (Just tr) scope ov
+                                                          put env { allTriggers = ti : allTriggers env }
+                                                          return tr
+                                             else fail (err1 ++ s'')
                     _        -> return TriggerDef { _tName = id''
                                                   , _args  = bs
                                                   , _compTrigger = ce'
