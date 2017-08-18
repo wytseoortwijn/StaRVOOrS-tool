@@ -596,7 +596,8 @@ getArrow (Abs.Arrow id mark (Abs.Cond2 cond)) env scope =
                                           let acts = [CAI y z "" x scope | (x,(y,z)) <- zip ac'' (map getIdAndArgs ac'')]
                                           let env' = env { allCreateAct = acts ++ (allCreateAct env)}
                                           return $ (Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, 
-                                                           action = foldr (\ x xs -> x ++ "; " ++ xs) [] $ map PrintAct.printTree ac' },env')
+                                                           --action = foldr (\ x xs -> x ++ "; " ++ xs) [] $ map PrintAct.printTree ac' },env')
+                                                           action = act' },env')
       
 
 isCreateAct :: Act.Action -> Bool

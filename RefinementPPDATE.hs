@@ -16,7 +16,7 @@ import Control.Lens hiding(Context,pre)
 
 
 specRefinement :: UpgradePPD PPDATE -> Either [Proof] [Proof] -> Filename -> FilePath -> IO (UpgradePPD PPDATE)
-specRefinement ppdate (Left []) _ _  = return ppdate
+specRefinement ppdate (Left []) _ _  = return $ translateActions $ replacePInit $ namedCreateActPPD ppdate
 specRefinement ppdate (Right []) _ _ =
  if (null (_htsGet $ getValue ppdate))
  then return ppdate
