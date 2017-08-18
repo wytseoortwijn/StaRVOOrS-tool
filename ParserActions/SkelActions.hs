@@ -21,7 +21,7 @@ transAction x = case x of
   ActBlock actions -> failure x
   ActCreate template argss -> failure x
   ActBang idact -> failure x
-  ActCond idacts action -> failure x
+  ActCond conds action -> failure x
   ActSkip -> failure x
   ActLog string params -> failure x
   ActArith arith -> failure x
@@ -69,4 +69,8 @@ transParams x = case x of
 transParam :: Param -> Result
 transParam x = case x of
   Param idact -> failure x
+transCond :: Cond -> Result
+transCond x = case x of
+  Cond idact -> failure x
+  CondPar conds -> failure x
 

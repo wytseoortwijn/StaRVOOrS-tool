@@ -16,7 +16,7 @@ data Action
     | ActBlock Actions
     | ActCreate Template [Args]
     | ActBang IdAct
-    | ActCond [IdAct] Action
+    | ActCond [Cond] Action
     | ActSkip
     | ActLog String Params
     | ActArith Arith
@@ -62,5 +62,8 @@ data Params = ParamsNil | Params [Param]
   deriving (Eq, Ord, Show, Read)
 
 data Param = Param IdAct
+  deriving (Eq, Ord, Show, Read)
+
+data Cond = Cond IdAct | CondPar [Cond]
   deriving (Eq, Ord, Show, Read)
 
