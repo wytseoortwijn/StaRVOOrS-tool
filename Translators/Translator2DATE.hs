@@ -459,28 +459,23 @@ generateReplicatedAutomata :: HTriples -> Triggers -> Env -> String
 generateReplicatedAutomata cs es env = 
  let n        = length cs
      ys       = zip cs [1..n]
- in generateProp es ys env []
+ in generateProp es ys env
 
-generateProp :: Triggers -> [(HT,Int)] -> Env -> [(MethodCN,Bool)] -> String
-generateProp _ [] _ _              = ""
-generateProp es ((c,n):ys) env acc = 
- let (ra,acc') = genRA c n es env acc
- in ra ++ generateProp es ys env acc'
+generateProp :: Triggers -> [(HT,Int)] -> Env -> String
+generateProp _ [] _            = ""
+generateProp es ((c,n):ys) env = 
+ let ra = genRA c n es env
+ in ra ++ generateProp es ys env
 
 -- Included to interact with optimisation OptRecAway.hs --
-genRA :: HT -> Int -> Triggers -> Env -> [(MethodCN,Bool)] -> (String,[(MethodCN,Bool)])
-genRA c n es env acc = 
- let (b,acc') = checkIfRec (_methodCN c) env acc
- in if True --TODO:replace by b once the optimisation OptRecAway.hs is implemented
-    then (generateRAPost c n es env, acc')
-    else (generatePropNonRec c n es env, acc')
-
+genRA :: HT -> Int -> Triggers -> Env -> String
+genRA c n es env = generateRAPost c n es env
 
 --Generates automaton to control a postcondition
 generateRAPost :: HT -> Int -> Triggers -> Env -> String
 generateRAPost c n es env = 
  let tr      = generateTriggerRA env c n ("idPPD = msgPPD.id;","idPPD = id;")
-     prop    = generateRAString es env c n Nothing
+     prop    = generateRAString es env c n
      cn      = snd prop
      oldExpM = oldExpTypes env
      zs      = getOldExpr oldExpM cn
@@ -508,9 +503,9 @@ generateTriggerRA env c n w =
     ++ init (concatMap getTrigger (instrumentTriggers [ntr] [c] env)) ++ wtr
 
 
-generateRAString :: Triggers -> Env -> HT -> Int -> Maybe () -> (String,HTName)
-generateRAString es env c n rec =
-  let ra = if rec == Nothing then generateRA c n env else generateRAOptimised c n env
+generateRAString :: Triggers -> Env -> HT -> Int -> (String,HTName)
+generateRAString es env c n =
+  let ra = generateRA c n env
       cn = pName ra
   in ("PROPERTY " ++ cn ++ "\n{\n\n"
      ++ writeStates (pStates ra)
@@ -542,25 +537,6 @@ getClassInfo e env =
  let trs = [tr | tr <- allTriggers env, tiTN tr == e ^. tName]
  in head $ map tiCI trs
 
---
---Method added for Optimisation OptRecAway.hs --
---
-generatePropNonRec :: HT -> Int -> Triggers -> Env -> String
-generatePropNonRec c n es env = 
- let tr      = generateTriggerRA env c n ("idPPD" ++ show n ++ " = msgPPD.id;","idPPD"++ show n ++ " = new Integer(42);")
-     prop    = generateRAString es env c n (Just ())
-     cn      = snd prop
-     oldExpM = oldExpTypes env
-     zs      = getOldExpr oldExpM cn
-     nvar    = "VARIABLES {\n"
-     nvar'   = if null zs 
-               then "" 
-               else nvar ++ "Old_" ++ cn ++ " oldExpAux = new " ++ "Old_" ++ cn ++ "();\n}\n\n"
- in "FOREACH (Integer idPPD" ++ show n ++ ") {\n\n"
-    ++ nvar'
-    ++ "EVENTS {\n" ++ tr ++ "}\n\n"
-    ++ fst prop
-    ++ "}\n\n"
 
 ---------------
 -- Templates --

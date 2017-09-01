@@ -6,7 +6,6 @@ import CommonFunctions
 import UpgradePPDATE
 import DL2JML
 import OptAvoidTrivialCond
-import OptRecAway
 import Control.Lens hiding(Context,pre)
 
 --------------------------------------------------------------
@@ -75,14 +74,4 @@ strengthenPre (h:hts) =
 
 simplify :: [String] -> [String]
 simplify = avoidStrengthening 
-
------------------------------------------------------------------------
--- If a method is recursive, then translate away replicated automata --
------------------------------------------------------------------------
-
-checkIfRec :: MethodCN -> Env -> [(MethodCN,Bool)] -> (Bool,[(MethodCN,Bool)])
-checkIfRec = checkIfRec'
-
-generateRAOptimised :: HT -> Int -> Env -> Property
-generateRAOptimised = generateRAOptimised'
 
