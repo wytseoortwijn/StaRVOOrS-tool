@@ -26,25 +26,58 @@ import Control.Lens hiding(Context,pre)
 
 upgradePPD :: Abs.AbsPPDATE -> UpgradePPD PPDATE
 upgradePPD (Abs.AbsPPDATE imports global temps cinvs consts methods) =
+ chainExec (imports, global, temps, cinvs, consts, methods) (PPDATE [] nilGlobal TempNil [] [] []) emptyEnv [] 1
+          where nilGlobal = undefined --Hack. This should not affect the execution of the tool.
+                              
+chainExec :: (Abs.Imports, Abs.Global, Abs.Templates, Abs.CInvariants, Abs.HTriples, Abs.Methods) -> PPDATE -> Env -> [String] -> Int -> UpgradePPD PPDATE
+chainExec ppdatep ppd env errs 6 = 
+ if null errs
+ then do put env
+         return ppd
+ else fail $ concat errs
+chainExec ppdatep ppd env errs n = 
+ case n of
+      1 -> let ppd'  = importsGet .~ genImports (ppdatep ^. _1) $ ppd
+               ppd'' = methodsGet .~ genMethods (ppdatep ^. _6) $ ppd' 
+           in chainExec ppdatep ppd'' env errs 2
+      2 -> case runStateT (genHTs (ppdatep ^. _5) (ppd ^. importsGet)) env of
+                Bad s              -> chainExec ppdatep ppd env (s:errs) 3
+                Ok (consts', env') -> let dcs = getDuplicate $ htsNames env'
+                                      in if not (null dcs)
+                                         then chainExec ppdatep ppd env' (duplicateHT dcs:errs) 3
+                                         else chainExec ppdatep (htsGet .~ consts' $ ppd) env' errs 3
+      3 -> case runStateT (genTemplates (ppdatep ^. _3)) env of
+                Bad s            -> chainExec ppdatep ppd env (s:errs) 4
+                Ok (temps',env') -> chainExec ppdatep (templatesGet .~ temps' $ ppd) env' errs 4
+      4 -> case runStateT (genGlobal (ppdatep ^. _2)) env of
+                Bad s              -> chainExec ppdatep ppd env (s:errs) 5
+                Ok (global', env') -> chainExec ppdatep (globalGet .~ global' $ ppd) env' errs 5
+      5 -> case runStateT (genClassInvariants (ppdatep ^. _4)) env of
+                Bad s            -> chainExec ppdatep ppd env (s:errs) 6
+                Ok (cinvs',env') -> chainExec ppdatep (cinvariantsGet .~ cinvs' $ ppd) env' errs 6
+
+
+--Deprecated
+upgradePPD' :: Abs.AbsPPDATE -> UpgradePPD PPDATE
+upgradePPD' (Abs.AbsPPDATE imports global temps cinvs consts methods) =
  do let imports' = genImports imports
     let methods' = genMethods methods
     case runStateT (genHTs consts imports') emptyEnv of
          Bad s             -> fail s
          Ok (consts', env) ->
-            let cns = htsNames env
-                dcs = getDuplicate cns
-            in case runStateT (genTemplates temps) env of
+            let dcs = getDuplicate $ htsNames env
+            in if not (null dcs) then fail $ duplicateHT dcs
+               else case runStateT (genTemplates temps) env of
                     Bad s             -> fail s
                     Ok (temps',env') ->
                        case runStateT (genGlobal global) env' of
-                            Bad s               -> fail $ s ++ duplicateHT dcs
+                            Bad s               -> fail $ s
                             Ok (global', env'') -> 
                                case runStateT (genClassInvariants cinvs) env'' of
                                     Bad s              -> fail s
                                     Ok (cinvs',env''') -> 
                                              do put env'''
-                                                return (PPDATE imports' global' temps' cinvs' consts' methods')                               
-
+                                                return (PPDATE imports' global' temps' cinvs' consts' methods')
    
 -------------
 -- Imports --
@@ -209,10 +242,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                                   if b' 
                                   then if (not.null) err1 
                                        then fail err1 
-                                       else do let einfo = if null s''
-                                                           then show bind
-                                                           else s''
-                                               let ov = generateOverloading bs (getCTArgs ce')
+                                       else do let ov = generateOverloading bs (getCTArgs ce')
                                                (ci,cinm) <- getClassVarName id'' mn bs bind s'' scope args
                                                let tr = TriggerDef { _tName = id''
                                                                    , _args  = bs
@@ -233,7 +263,7 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                           then fail $ err1 ++ "Error: Missing Initialization of variable(s) " 
                                       ++ show vs ++ " in trigger declaration [" ++ id'' ++ "].\n"
                           else do let (b,zs)   = runWriter ((checkAllArgs argss allArgs bind))
-                                  let (b',s'') = runWriter (checkSpecialCases b mn bind bs rs zs id'' env scope) 
+                                  let (b',s'') = runWriter (checkSpecialCases b mn bind bs rs zs id'' env scope)
                                   if (b' && (checkRetVar rs argss))
                                   then if (not.null) err1 
                                        then fail err1 
@@ -281,9 +311,9 @@ checkSpecialCases b mn bind bs rs zs id env scope =
                                   (True,s)  -> writer (True,s)
                                   (False,s) -> if tempScope scope
                                                then writer (True,s)
-                                               else fail $ "Error: Trigger declaration [" ++ id ++ "] uses wrong argument(s) [" 
-                                                           ++ addComma zs ++ "] in the method component.\n"                             
-                        else fail s
+                                               else writer (False, "Error: Trigger declaration [" ++ id ++ "] uses wrong argument(s) [" 
+                                                           ++ addComma zs ++ "] in the method component.\n")
+                        else writer (False, s)
 
 --Method handling new
 checkMNforNew :: MethodName -> Bind -> [Bind] -> [Bind] -> Trigger ->  [String] -> Writer String Bool
@@ -292,15 +322,14 @@ checkMNforNew mn bind bs rs id zs =
       BindId id -> if (mn /= "new")
                    then return False
                    else if null rs
-                        then fail $ "Error: new cannot be associated to an entry trigger.\n"
+                        then writer (False,"Error: new cannot be associated to an entry trigger.\n")
                         else if elem (BindType id (getBindIdId (head rs))) bs
                              then if null zs 
                                   then return True
-                                  else fail $ "Error: Trigger declaration [" ++ id 
-                                              ++ "] uses wrong argument(s) [" ++ addComma zs 
-                                              ++ "] in the method component.\n"
-                             else do tell $ "Error: Wrong exit object in trigger " ++ id ++ "\n."
-                                     return False
+                                  else writer (False, "Error: Trigger declaration [" ++ id 
+                                                      ++ "] uses wrong argument(s) [" ++ addComma zs 
+                                                      ++ "] in the method component.\n")
+                             else writer (False, "Error: Wrong exit object in trigger " ++ id ++ "\n.")
       _         -> return False
 
 --Method handling channels
@@ -1113,7 +1142,7 @@ getPost (Abs.Post post) = getJML post "postcondition"
 
 duplicateHT :: [HTName] -> String
 duplicateHT []     = ""
-duplicateHT (c:cs) = "Error: Multiple definitions for Hoare triple " ++ c ++ ".\n" ++ duplicateHT cs
+duplicateHT (c:cs) = "Error: In section HTRIPLES, multiple definitions for Hoare triple " ++ c ++ ".\n" ++ duplicateHT cs
 
 getDuplicate :: [HTName] -> [HTName]
 getDuplicate []     = []

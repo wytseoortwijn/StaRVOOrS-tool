@@ -569,9 +569,9 @@ type Modifier = String
 -- Lenses --
 ------------
 
--- ^. is view
--- %~ is over
--- .~ is set
+-- ^. is view, e.g. ppd ^. importsGet
+-- %~ is over, e.g. importsGet %~ foo $ ppd
+-- .~ is set, e.g. importsGet .~ imps $ ppd
 
 makeLenses ''PPDATE
 makeLenses ''Global
