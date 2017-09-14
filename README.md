@@ -5,8 +5,8 @@ In order to compile StaRVOOrS you must have installed a Haskell compiler: ghc-7.
 
 At the time of compiling, you can let cabal doing it for you as follows:
 
-cabal configure
-cabal build
+    cabal configure
+    cabal build
 
 Note that you will probably have to install the following packages:
 
