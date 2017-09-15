@@ -1,18 +1,22 @@
 
-# StaRVOOrS 1.5 
+# StaRVOOrS 1.6
 
+In order to compile StaRVOOrS you must have installed a Haskell compiler: ghc-7.8.3 or later recommended.
 
-In order to work with the source code you have to install the following packages:
+At the time of compiling, you can let cabal doing it for you as follows:
+
+    cabal configure
+    cabal build
+
+Note that you will probably have to install the following packages:
 
  language-java >= 0.2.7
- 
- haxml >= 1.25.3 
+
+ haxml >= 1.25.3
 
  split >= 0.2.2
 
- lens >= 4.15.3 
-
-To install them, you must have a Haskell compiler: ghc-7.8.3 or later recommended
+ lens >= 4.15.3
 
 Then, for more recent compilers, use the standard Cabal method of installation:
 
@@ -33,4 +37,3 @@ For older compilers, use:
 In addition, to use the compiled code you have to download the APIs for KeY and LARVA:
 
 http://cse-212294.cse.chalmers.se/starvoors/files/APIs/StaRVOOrS_APIs.zip
-
