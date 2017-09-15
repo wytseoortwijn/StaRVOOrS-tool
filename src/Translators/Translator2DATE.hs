@@ -567,7 +567,7 @@ instantiateTemp for id args cai env =
      ctxt   = for ^. getCtxtForeach
      trs'   = (genTriggerForCreate id ch args): instantiateTrs (ctxt ^. triggers) mp
      ctxt'  = triggers .~ (trs' ++ trs) $ ctxt
-     ctxt'' = over property (\ p -> instantiateProp p args cai) ctxt
+     ctxt'' = over property (\ p -> instantiateProp p args cai) ctxt'
  in Foreach (for ^. getArgsForeach) ctxt'' (ForId (show (for ^. getIdForeach) ++ "_"++ch))
 
 instantiateTrs :: Triggers -> Map.Map Id String -> Triggers
@@ -636,7 +636,7 @@ instantiateProp (Property id sts trans props) args cai =
      trans'  = (Transition "start" (Arrow ("r"++ch) "" "") (head $ map (^. getNS) $ getStarting sts)):trans
      targs   = splitTempArgs (zip args (caiArgs cai)) emptyTargs
      sts''   = instantiateHT (makeMap $ targHT targs) sts'
-     trans'' = instantiateTrans (makeMap $ (targTr targs ++ targCond targs ++ targAct targs)) trans
+     trans'' = instantiateTrans (makeMap $ (targTr targs ++ targCond targs ++ targAct targs)) trans'
  in Property (id++"_"++ch) sts'' trans'' props
 
 genTriggerForCreate :: Id -> Channel -> [Args] -> TriggerDef
