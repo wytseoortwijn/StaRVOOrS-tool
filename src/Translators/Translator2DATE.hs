@@ -79,7 +79,7 @@ writeVariables vars [] [] [] =
  else "VARIABLES {\n" ++ writeVariables' vars ++ "}\n\n"
 writeVariables vars consts acts creates = 
  let actChann    = if (null acts) then "" else concatMap makeChannelsAct (removeDuplicates acts) 
-     createChann = if (null creates) then "" else concatMap (makeChannelsAct.caiCh) creates
+     createChann = if (null creates) then "" else makeChannels (length creates) "cact"
      constsChann = if (null consts) then "" else makeChannels (length consts) "hppd"
      extraChann  = actChann ++ createChann ++ constsChann
  in if (null vars) 

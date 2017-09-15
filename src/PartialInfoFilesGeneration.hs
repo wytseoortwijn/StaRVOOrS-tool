@@ -197,18 +197,20 @@ oldExprFileGen output_add ppd =
  let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      consts        = ppdate ^. htsGet
      oldExpM       = oldExpTypes env 
+     imps          = getImports $ ppdate ^. importsGet
      consts'       = [c | c <- consts, noOldExprInHT $ Map.lookup (c ^. htName) oldExpM]    
  in if Map.null oldExpM
     then return ()
-    else sequence_ [writeFile (output_add ++ (snd $ oldExpGen c oldExpM)) (fst $ oldExpGen c oldExpM) | c <- consts']
+    else sequence_ [writeFile (output_add ++ (snd $ oldExpGen c oldExpM imps)) (fst $ oldExpGen c oldExpM imps) | c <- consts']
                      where noOldExprInHT v = v /= Nothing && (not.null.fromJust) v 
 
-oldExpGen :: HT -> OldExprM -> (String,String)
-oldExpGen c oldExpM = 
+oldExpGen :: HT -> OldExprM -> String -> (String,String)
+oldExpGen c oldExpM imps = 
  let cn = c ^. htName
      nameClass = "Old_" ++ cn
      xs        = map (\(x,y,z) -> (y,z)) $ fromJust $ Map.lookup cn oldExpM
  in ("package ppArtifacts;\n\n"
+    ++ imps ++ "\n\n"
     ++ "public class " ++ nameClass ++ " {\n\n"
     ++ varDeclOldExpr xs
     ++ "  public " ++ nameClass ++ "() { }\n\n"
