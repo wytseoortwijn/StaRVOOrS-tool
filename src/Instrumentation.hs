@@ -45,35 +45,42 @@ instrumentFile i consts jpath output_add =
     let decls' = instrumentMethodMemberDecl' decls mns
     let output_add' = output_add ++ main
     let r'  = unlines $ addInstrumentedMethodsInFile (lines r) decls'
-    let r'' = addNewImportInfo r' decls' cl
+    let r'' = addNewImportInfo r' decls' cl mns
     createDirectoryIfMissing True output_add'
     writeFile (output_add' ++ "/" ++ (cl ++ ".java")) r''
 
 
-addNewImportInfo :: String -> [(String,String,String)] -> T.ClassInfo -> String
-addNewImportInfo s [] _     = s
-addNewImportInfo s (_:_) cl = let xs = splitOnIdentifier "package" (clean s)
-                              in if (length xs == 1)
-                                 then let s'    = lines s
-                                      in unlines $ addFidDec s' cl
-                                 else let s'    = lines ((head.tail) xs)
-                                          begin = (head xs) ++ "package" ++ (head s') ++ "\n"
-                                      in begin ++ "\nimport ppArtifacts.IdPPD;\n" ++ unlines (addFidDec (tail s') cl)
+addNewImportInfo :: String -> [(String,String,String)] -> T.ClassInfo -> [T.MethodName] -> String
+addNewImportInfo s [] _ _       = s
+addNewImportInfo s (_:_) cl mns =
+  let xs = splitOnIdentifier "package" (clean s)
+  in if (length xs == 1)
+     then let s'    = lines s
+          in unlines $ addFidDec s' cl mns
+     else let s'    = lines ((head.tail) xs)
+              begin = (head xs) ++ "package" ++ (head s') ++ "\n"
+          in begin ++ "\nimport ppArtifacts.IdPPD;\n" ++ unlines (addFidDec (tail s') cl mns)
 
-addFidDec :: [String] -> T.ClassInfo -> [String]
-addFidDec [] _         = []
-addFidDec (xs:xss) cl  = if (clean xs == "")
-                         then xs:addFidDec xss cl
-                         else let ys = splitOnIdentifier ("class " ++ cl) xs
-                              in if (length ys == 1)
-                                 then xs:addFidDec xss cl
-                                 else xs:addFidDec' xss 
+addFidDec :: [String] -> T.ClassInfo -> [T.MethodName] -> [String]
+addFidDec [] _ _          = []
+addFidDec (xs:xss) cl mns = 
+ if (clean xs == "")
+ then xs:addFidDec xss cl mns
+ else let ys = splitOnIdentifier ("class " ++ cl) xs
+      in if (length ys == 1)
+         then xs:addFidDec xss cl mns
+         else xs:addFidDec' xss mns
 
-addFidDec' :: [String] -> [String]
-addFidDec' []       = []
-addFidDec' (xs:xss) = if (clean xs == "")
-                      then (xs ++ "\n  public IdPPD fid = new IdPPD();\n"):xss 
-                      else xs:addFidDec' xss
+addFidDec' :: [String] -> [T.MethodName] -> [String]
+addFidDec' [] _         = []
+addFidDec' (xs:xss) mns = 
+ if (clean xs == "")
+ then let fids = concatMap (genFid.("fid_"++)) mns 
+      in (xs ++ fids):xss 
+ else xs:addFidDec' xss mns
+
+genFid :: String -> String
+genFid fid = "\n  public IdPPD " ++ fid ++ " = new IdPPD();\n"
 
 -- Added due to bug in the java library
 addInstrumentedMethodsInFile :: [String] -> [(String, String, String)] -> [String]

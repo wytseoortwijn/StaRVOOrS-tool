@@ -143,12 +143,12 @@ generateMethods :: Decl -> [T.MethodName] -> (Maybe Decl, Decl, [T.MethodName])
 generateMethods md@(MemberDecl (MethodDecl public xs type' (Ident id) param ex mbody)) mns = 
  if (elem id mns)
  then if (type' /= Nothing)
-      then let new_body    = makeNewBodyRet (id ++ "Aux") param
+      then let new_body    = makeNewBodyRet id param
                new_method  = MethodDecl public xs type' (Ident id) param ex new_body
                id_arg = FormalParam [] (RefType (ClassRefType (ClassType [(Ident "Integer",[])]))) False (VarId (Ident "id"))
                method_inst = MethodDecl public xs type' (Ident (id ++ "Aux")) (param ++ [id_arg]) ex mbody
            in (Just (MemberDecl new_method), MemberDecl method_inst, filter (/= id) mns)
-      else let new_body    = makeNewBodyVoid (id ++ "Aux") param
+      else let new_body    = makeNewBodyVoid id param
                new_method  = MethodDecl public xs type' (Ident id) param ex new_body
                id_arg = FormalParam [] (RefType (ClassRefType (ClassType [(Ident "Integer",[])]))) False (VarId (Ident "id"))
                method_inst = MethodDecl public xs type' (Ident (id ++ "Aux")) (param ++ [id_arg]) ex mbody
@@ -158,15 +158,15 @@ generateMethods md@(MemberDecl (MethodDecl public xs type' (Ident id) param ex m
 
 makeNewBodyRet :: T.MethodName -> [FormalParam] -> MethodBody
 makeNewBodyRet mn fps = 
- let expNames = makeNewArgsInCall fps
- in MethodBody (Just (Block [BlockStmt (Return (Just (MethodInv (MethodCall (Name [Ident mn]) expNames))))]))
+ let expNames = makeNewArgsInCall fps mn
+ in MethodBody (Just (Block [BlockStmt (Return (Just (MethodInv (MethodCall (Name [Ident (mn ++ "Aux")]) expNames))))]))
 
 makeNewBodyVoid :: T.MethodName -> [FormalParam] -> MethodBody
 makeNewBodyVoid mn fps = 
- let expNames = makeNewArgsInCall fps
- in MethodBody (Just (Block [BlockStmt (ExpStmt (MethodInv (MethodCall (Name [Ident mn]) expNames)))]))
+ let expNames = makeNewArgsInCall fps mn
+ in MethodBody (Just (Block [BlockStmt (ExpStmt (MethodInv (MethodCall (Name [Ident (mn ++ "Aux")]) expNames)))]))
 
-makeNewArgsInCall :: [FormalParam] -> [Exp]
-makeNewArgsInCall []       = [MethodInv (MethodCall (Name [Ident "fid",Ident "getNewId"]) [])]
-makeNewArgsInCall ((FormalParam _ _ _ (VarId (Ident id))):fps) = 
- (ExpName (Name [Ident id])) : makeNewArgsInCall fps
+makeNewArgsInCall :: [FormalParam] -> T.MethodName -> [Exp]
+makeNewArgsInCall [] mn      = [MethodInv (MethodCall (Name [Ident ("fid_"++mn),Ident "getNewId"]) [])]
+makeNewArgsInCall ((FormalParam _ _ _ (VarId (Ident id))):fps) mn = 
+ (ExpName (Name [Ident id])) : makeNewArgsInCall fps mn
