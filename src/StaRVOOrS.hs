@@ -21,7 +21,7 @@ import MonitorGeneration
 -------------
 
 version :: String
-version = "StaRVOOrS 1.6.1.3"
+version = "StaRVOOrS 1.6.1.4"
 
 -- version meaning   +--------- version ID
 --                   | +------- version ID

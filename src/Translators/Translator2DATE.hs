@@ -283,7 +283,7 @@ generateTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> 
 generateTransitions p ns cs ts env pn scope = 
  let c             = lookForHT p cs ns
      mn            = _methodCN c ^. mname
-     entrs         = lookForEntryTrigger (allTriggers env) (_methodCN c) scope
+     entrs         = lookForEntryTrigger (allTriggers env) (_methodCN c) (normaliseScope scope)
      entrs'        = [tr | tr <- entrs, not(isInfixOf (mn ++ "_ppden") tr)]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
  in if null entrs
@@ -375,7 +375,7 @@ instrumentTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -
 instrumentTransitions p ns cs ts env pn scope = 
  let c             = lookForHT p cs ns
      mn            = _methodCN c ^. mname
-     entrs         = lookForEntryTrigger (allTriggers env) (_methodCN c) scope
+     entrs         = lookForEntryTrigger (allTriggers env) (_methodCN c) (normaliseScope scope)
      entrs'        = [tr | tr <- entrs, not(isInfixOf (mn++"_ppden") tr)]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
  in if null entrs

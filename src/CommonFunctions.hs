@@ -195,6 +195,16 @@ filterRefTypes (arg:args) =
       "HTriple"    -> filterRefTypes args
       _            -> arg:filterRefTypes args
 
+--Maps translated template scope in Date to the scope of the template in the ppDATE
+normaliseScope :: Scope -> Scope
+normaliseScope (InFor xs) = 
+ if (isInfixOf "_cact" (show xs))
+ then case splitOn "_cact" (show xs) of
+           [] -> error $ "Error when normalising a scope " ++ show (InFor xs)
+           ys -> InTemp (head ys)           
+ else InFor xs
+normaliseScope scope      = scope
+
 -------------------------
 -- Methods for parsing --
 -------------------------
