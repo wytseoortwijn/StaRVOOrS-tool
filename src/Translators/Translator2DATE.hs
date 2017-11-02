@@ -286,7 +286,7 @@ generateTransitions p ns cs ts env pn scope =
      entrs         = lookForEntryTrigger (allTriggers env) (_methodCN c) (normaliseScope scope)
      entrs'        = [tr | tr <- entrs, not(isInfixOf (mn ++ "_ppden") tr)]
      (lts, nonlts) = foldr (\x xs -> (fst x ++ fst xs,snd x ++ snd xs)) ([],[]) $ map (\e -> lookForLeavingTransitions e ns ts) entrs'
- in if null entrs
+ in if (null entrs)
     then error $ "Translation: Missing entry trigger for method " ++ mn ++ ".\n"
     else if (null lts)
          then (ts,makeTransitionAlg1 ns c env pn mn entrs,[])

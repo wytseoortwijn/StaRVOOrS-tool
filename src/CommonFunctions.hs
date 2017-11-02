@@ -15,17 +15,26 @@ import Control.Lens hiding(Context,pre)
 
 
 lookForEntryTrigger :: [TriggersInfo] -> MethodCN -> Scope -> [Trigger]
-lookForEntryTrigger [] _ _               = []
-lookForEntryTrigger (tinfo:es) mnc scope = 
+lookForEntryTrigger [] _ _                 = []
+lookForEntryTrigger tinfs mnc (InTemp xs)  = 
+ case lookForEntryTrigger' tinfs mnc (InTemp xs) of 
+      [] -> lookForEntryTrigger' tinfs mnc TopLevel
+      ys -> ys
+lookForEntryTrigger tinfs mnc scope = lookForEntryTrigger' tinfs mnc scope
+
+
+lookForEntryTrigger' :: [TriggersInfo] -> MethodCN -> Scope -> [Trigger]
+lookForEntryTrigger' [] _ _               = []
+lookForEntryTrigger' (tinfo:es) mnc scope = 
  let mn = mnc ^. mname
      ci = mnc ^. clinf
      ov = mnc ^. overl
  in case (tiTrvar tinfo) of
         EVEntry -> if (mn == (tiMN tinfo) && ci == (tiCI tinfo) && cmpScope scope (tiScope tinfo)
                       && (cmpOverloading ov (tiOver tinfo) || ov == OverNil))
-                   then (tiTN tinfo):lookForEntryTrigger es mnc scope
-                   else lookForEntryTrigger es mnc scope
-        _       -> lookForEntryTrigger es mnc scope
+                   then (tiTN tinfo):lookForEntryTrigger' es mnc scope
+                   else lookForEntryTrigger' es mnc scope
+        _       -> lookForEntryTrigger' es mnc scope
 
 cmpScope :: Scope -> Scope -> Bool
 cmpScope (InFor (ForId id')) (InTemp id) = isInfixOf id id' 
