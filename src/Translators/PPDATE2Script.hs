@@ -153,7 +153,7 @@ writePPDHts' []      = ""
 writePPDHts' (h:hts) = 
  "HT " ++ h ^. htName ++ " {\n"
  ++ "PRE { " ++ h ^. pre ++" }\n"
- ++ "METHOD { " ++ (_methodCN h) ^. clinf ++ "." ++ (_methodCN h) ^. mname ++" }\n"
+ ++ "METHOD { " ++ (_methodCN h) ^. clinf ++ "." ++ (_methodCN h) ^. mname ++ show ((_methodCN h) ^. overl) ++ " }\n"
  ++ "POST { " ++ h ^. post ++" }\n"
  ++ "ASSIGNABLE { " ++ h ^. assignable ++" }\n"
  ++ "}\n\n"
