@@ -85,12 +85,15 @@ refinePPDATE ppd proofs =
      global    = ppdate' ^. globalGet
      triggers' = getAllTriggers global env
      consts''  = strengthenPre $ updateHTs nproved consts' triggers'
-     env'      = getEnvVal ppd'     
+     env'      = getEnvVal ppd'
+     chan      = map (caiArgs %~ (map (optimisedProvenHTs cproved rArgsByNull))) $ allCreateAct env'
+     chan'     = map (caiAct %~ (optimisedProvenHTs cproved rActionsByNull)) $ chan
+     env''     = env' { allCreateAct = chan' }
      global'   = optimisedProvenHTs cproved refinePropertyOptGlobal global
      temps     = ppdate' ^. templatesGet
      temps'    = optimisedProvenHTs cproved refinePropertyOptTemplates temps
      ppdate''  = ppdate' & globalGet .~ global' & htsGet .~ consts'' & templatesGet .~ temps'
- in do put env'
+ in do put env''
        return ppdate''
 
 -----------------------------------------------------------------
@@ -111,11 +114,11 @@ namedCreateAct env =
 
 genChannelNames :: [(CreateActInfo,Int)] -> [CreateActInfo]
 genChannelNames []                 = []
-genChannelNames ((cai,n):xs) = (cai {caiCh = "cact"++show n}):genChannelNames xs
+genChannelNames ((cai,n):xs) = (caiCh .~ ("cact"++show n) $ cai):genChannelNames xs
 
----
---
----
+---------------------------------------------------------------------------------------
+-- Translates actions specific to ppDATEs into Larva artifacts (i.e. DATE's actions) --
+---------------------------------------------------------------------------------------
 
 translateActions :: UpgradePPD PPDATE -> UpgradePPD PPDATE
 translateActions ppd =
@@ -164,6 +167,7 @@ translateActInTemps (Temp tmps) env = Temp $ map (translateActInTemp env) tmps
 
 translateActInTemp :: Env -> Template -> Template
 translateActInTemp env tmp = tempProp %~ (\ t -> translateActInProps t env) $ tmp
+
 
 ------------------------------------------------------
 -- Get information from the results produced by KeY --

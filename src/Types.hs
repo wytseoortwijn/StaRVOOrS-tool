@@ -254,11 +254,11 @@ data TriggersInfo =
     } deriving (Show,Eq)
 
 data CreateActInfo = 
- CAI { caiId    :: Id
-     , caiArgs  :: [Act.Args]
-     , caiCh    :: Channel
-     , caiAct   :: Act.Action
-     , caiScope :: Scope
+ CAI { _caiId    :: Id
+     , _caiArgs  :: [Act.Args]
+     , _caiCh    :: Channel
+     , _caiAct   :: Act.Action
+     , _caiScope :: Scope
      } deriving (Show,Eq)
 
 --------------
@@ -583,3 +583,4 @@ makeLenses ''Template
 makeLenses ''State
 makeLenses ''OldExpr
 makeLenses ''TriggerDef
+makeLenses ''CreateActInfo

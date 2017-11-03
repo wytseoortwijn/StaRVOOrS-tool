@@ -624,9 +624,7 @@ getArrow (Abs.Arrow id mark (Abs.Cond2 cond)) env scope =
                                           let ac'' = filter isCreateAct ac'
                                           let acts = [CAI y z "" x scope | (x,(y,z)) <- zip ac'' (map getIdAndArgs ac'')]
                                           let env' = env { allCreateAct = acts ++ (allCreateAct env)}
-                                          return $ (Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, 
-                                                           --action = foldr (\ x xs -> x ++ "; " ++ xs) [] $ map PrintAct.printTree ac' },env')
-                                                           action = act' },env')
+                                          return $ (Arrow { trigger = getIdAbs id ++ addQuestionMark mark, cond = printTree cexp, action = act' },env')
       
 
 isCreateAct :: Act.Action -> Bool
@@ -808,15 +806,15 @@ wellFormedActions ppd =
 
 wellFormedAction:: Env -> CreateActInfo -> Writer String Bool
 wellFormedAction env cai = 
- let xs = [ tmp | tmp <- tempsInfo env, fst tmp == caiId cai]
+ let xs = [ tmp | tmp <- tempsInfo env, fst tmp == (cai ^. caiId)]
  in if null xs
-    then writer (False, "Error: In an action create, the template " ++ caiId cai ++ " does not exist.\n")
+    then writer (False, "Error: In an action create, the template " ++ cai ^. caiId ++ " does not exist.\n")
     else let tempArgs = snd $ head $ xs
-             ys       = splitTempArgs (zip tempArgs (caiArgs cai)) emptyTargs
-         in if length tempArgs /= length (caiArgs cai)
+             ys       = splitTempArgs (zip tempArgs (cai ^. caiArgs)) emptyTargs
+         in if length tempArgs /= length (cai ^. caiArgs)
             then writer (False, "Error: In an action create, the amount of arguments does not match the arguments in template "
-                                ++ caiId cai ++ ".\n")
-            else case runWriter $ checkTempArgs ys env (caiScope cai) of
+                                ++ cai ^. caiId ++ ".\n")
+            else case runWriter $ checkTempArgs ys env (cai ^. caiScope) of
                       (xs,s) -> if and xs
                                 then return True
                                 else writer (False,s)

@@ -5,6 +5,11 @@ import ParserActions.PrintActions
 import UpgradePPDATE
 import qualified Types as T
 import Data.Maybe
+import Control.Lens
+
+---------------------------------------------------------------------------------------
+-- Translates actions specific to ppDATEs into Larva artifacts (i.e. DATE's actions) --
+---------------------------------------------------------------------------------------
 
 translateAct :: Actions -> Env -> Actions
 translateAct (Actions acts) env = Actions $ map (translateAction' env) acts
@@ -18,7 +23,7 @@ translateAction' _ (ActBang (IdAct id))                     = ActProg (Prog (IdA
 translateAction' _ (ActLog s parms)                         = ActProg (Prog (IdAct "System.out.printf") (ArgsS s:fromParm2Arg parms))
 translateAction' env act@(ActCreate (Temp (IdAct id)) args) = 
  let creates = allCreateAct env    
-     ch      = T.caiCh $ fromJust $ getChannel act creates
+     ch      = (fromJust $ getChannel act creates) ^. T.caiCh
      args'   = head [xs | (id',xs) <- tempsInfo env, id == id']
      fargs   = map fst $ filterRefTypes $ zip args args'
  in ActProg (Prog (IdAct (ch++".send")) ([ArgsNew (Prog (IdAct ("Tmp_"++id)) fargs)]))
@@ -31,7 +36,7 @@ fromParm2Arg (Params xs) = map (\(Param id) -> ArgsId id) xs
 getChannel :: Action -> [T.CreateActInfo] -> Maybe T.CreateActInfo
 getChannel act@(ActCreate (Temp (IdAct id)) args) []         = Nothing
 getChannel act@(ActCreate (Temp (IdAct id)) args) (cai:acts) = 
- if act == (T.caiAct cai)
+ if act == (cai ^. T.caiAct)
  then Just cai
  else getChannel act acts
 getChannel _ _                                               = Nothing

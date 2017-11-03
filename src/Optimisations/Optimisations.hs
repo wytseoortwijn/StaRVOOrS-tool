@@ -7,6 +7,10 @@ import UpgradePPDATE
 import Translators.DL2JML
 import Optimisations.OptAvoidTrivialCond
 import Control.Lens hiding(Context,pre)
+import ParserActions.ParserAct
+import qualified ParserActions.AbsActions as Abs
+import ParserActions.PrintActions
+import ErrM
 
 --------------------------------------------------------------
 -- Deductive verification to partially verify Hoare triples --
@@ -30,7 +34,7 @@ refinePropertyOptGlobal cn global = ctxtGet %~ (refineContext cn) $ global
 
 refineContext :: HTName -> Context -> Context
 refineContext cn ctxt = 
- ctxt & property %~ removeStatesProp cn 
+ ctxt & property %~ cproved2null cn . removeStatesProp cn
       & foreaches %~ (map (refineForeach cn))
 
 refineForeach :: HTName -> Foreach -> Foreach
@@ -55,6 +59,45 @@ removePropInState cn []        = []
 removePropInState cn (cn':cns) = if (cn == cn')
                                  then cns
                                  else cn':removePropInState cn cns
+
+-- Replaces fully proved Hoare triples used as arguments in actions \create by null
+cproved2null :: HTName -> Property -> Property
+cproved2null _ PNIL               = PNIL
+cproved2null _ p@(PINIT _ _ _ _)  = p
+cproved2null cn prop = 
+ let trans = pTransitions prop 
+ in Property (pName prop) (pStates prop) (replaceByNull cn trans) (cproved2null cn (pProps prop))
+
+replaceByNull :: HTName -> Transitions -> Transitions
+replaceByNull cn = foldr (\ x xs -> (rTransByNull cn x) : xs) []
+
+rTransByNull :: HTName -> Transition -> Transition
+rTransByNull cn tran = tran { arrow = rArrowByNull cn (arrow tran) } 
+
+rArrowByNull :: HTName -> Arrow -> Arrow
+rArrowByNull cn arr = 
+ case parse (action arr) of 
+      Bad s -> error s
+      Ok (Abs.Actions ac) -> 
+          let acts = map (rActionsByNull cn) ac
+              arr' = printTree acts
+          in arr { action = arr' }
+
+rActionsByNull :: HTName -> Abs.Action -> Abs.Action
+rActionsByNull cn (Abs.ActCreate id args) = Abs.ActCreate id (map (rArgsByNull cn) args)
+rActionsByNull cn act = act 
+
+rArgsByNull :: HTName -> Abs.Args -> Abs.Args
+rArgsByNull cn (Abs.ArgsId (Abs.IdAct id)) = 
+ if (trim id == cn)
+ then Abs.ArgsId (Abs.IdAct "null")
+ else Abs.ArgsId (Abs.IdAct id)
+rArgsByNull cn (Abs.ArgsS s)               =
+ if (trim s == cn)
+ then Abs.ArgsS "null"
+ else Abs.ArgsS s
+rArgsByNull cn arg                         = arg
+
 
 
 -- Strengthen preconditions --

@@ -275,9 +275,11 @@ generateAllTransitions ((State ns ic l@(_:_)):xs) cs ts env pn scope =
 accumTransitions :: [HTName] -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Scope -> Transitions
 accumTransitions [] _ _ ts _ _ _                    = ts
 accumTransitions (cn:cns) ns consts ts env pn scope =
- let (nonlts,gentrans,lts) = generateTransitions cn ns consts ts env pn scope
-     instrans = instrumentTransitions cn ns consts lts env pn scope
- in accumTransitions cns ns consts (nonlts++instrans) env pn scope ++ gentrans
+ if cn == "null"
+ then accumTransitions cns ns consts ts env pn scope
+ else let (nonlts,gentrans,lts) = generateTransitions cn ns consts ts env pn scope
+          instrans = instrumentTransitions cn ns consts lts env pn scope
+      in accumTransitions cns ns consts (nonlts++instrans) env pn scope ++ gentrans
 
 generateTransitions :: HTName -> NameState -> HTriples -> Transitions -> Env -> PropertyName -> Scope -> (Transitions,Transitions,Transitions)
 generateTransitions p ns cs ts env pn scope = 
@@ -547,7 +549,7 @@ writeTemplates TempNil _ _             = ""
 writeTemplates (Temp temps) env consts = 
  let creates = removeDuplicates $ allCreateAct env
      skell   = map generateRAtmp temps
-     xs      = [ instantiateTemp for id args cai env | (id,args,for) <- skell , cai <- creates, id == caiId cai ] 
+     xs      = [ instantiateTemp for id args cai env | (id,args,for) <- skell , cai <- creates, id == cai ^. caiId ] 
  in writeForeach xs consts env
 
 --Generates an abstract Foreach for the template
@@ -560,8 +562,8 @@ generateCtxtForTemp temp = Ctxt (temp ^. tempVars) (temp ^. tempActEvents) (temp
 --Creates an instance of the abstract Foreach
 instantiateTemp :: Foreach -> Id -> [Args] -> CreateActInfo -> Env -> Foreach
 instantiateTemp for id args cai env = 
- let ch     = caiCh cai
-     targs  = splitTempArgs (zip args (caiArgs cai)) emptyTargs  
+ let ch     = cai ^. caiCh
+     targs  = splitTempArgs (zip args (cai ^. caiArgs)) emptyTargs  
      mp     = Map.union (makeRefTypeMap $ targRef targs) (makeMap $ targMN targs)
      trs    = addTriggerDef args cai env mp
      ctxt   = for ^. getCtxtForeach
@@ -598,11 +600,11 @@ newWhereClause s =
 --Adds existing triggers definition to an instance of a template
 addTriggerDef :: [Args] -> CreateActInfo -> Env -> Map.Map Id String -> Triggers
 addTriggerDef args cai env mp = 
- let refs  = targRef $ splitTempArgs (zip args (caiArgs cai)) emptyTargs
-     targs = targTr $ splitTempArgs (zip args (caiArgs cai)) emptyTargs
-     scope = caiScope cai
+ let refs  = targRef $ splitTempArgs (zip args (cai ^. caiArgs)) emptyTargs
+     targs = targTr $ splitTempArgs (zip args (cai ^. caiArgs)) emptyTargs
+     scope = cai ^. caiScope
      trs   = allTriggers env 
- in [ adaptTrigger (fromJust $ tiTrDef tr) refs mp (tiCI tr) | tr <- trs, tiScope tr == scope, targ <- targs, (showActArgs $ snd targ) == tiTN tr]
+ in [ adaptTrigger (fromJust $ tiTrDef tr) refs mp (tiCI tr) | tr <- trs, tiScope tr == scope, targ <- targs, (showActArgs $ snd targ) == tiTN tr, tiTrDef tr /= Nothing]
     
 adaptTrigger :: TriggerDef -> [(Args,Act.Args)] -> Map.Map Id String -> ClassInfo -> TriggerDef
 adaptTrigger tr [] _ _      = tr & whereClause .~ ""
@@ -631,10 +633,10 @@ adaptTrigger tr targs mp ci =
 instantiateProp :: Property -> [Args] -> CreateActInfo -> Property
 instantiateProp PNIL _ _                               = PNIL
 instantiateProp (Property id sts trans props) args cai =  
- let ch      = caiCh cai
+ let ch      = cai ^. caiCh
      sts'    = addNewInitState sts
      trans'  = (Transition "start" (Arrow ("r"++ch) "" "") (head $ map (^. getNS) $ getStarting sts)):trans
-     targs   = splitTempArgs (zip args (caiArgs cai)) emptyTargs
+     targs   = splitTempArgs (zip args (cai ^. caiArgs)) emptyTargs
      sts''   = instantiateHT (makeMap $ targHT targs) sts'
      trans'' = instantiateTrans (makeMap $ (targTr targs ++ targCond targs ++ targAct targs)) trans'
  in Property (id++"_"++ch) sts'' trans'' props
