@@ -723,11 +723,12 @@ genTemplates (Abs.Temps xs) =
     env <- get
     put env { tempsInfo = tempsInfo env ++ foldr (\ x xs -> (x ^. tempId, x ^. tempBinds) : xs) [] xs}
     return $ Temp xs 
- 
+
 
 genTemplate :: Abs.Template -> UpgradePPD Template
 genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) = 
- do trigs' <- getTriggers trs (InTemp (getIdAbs id)) (map ((uncurry makeArgs).getArgsAbs) args)
+ do args' <- hasReferenceType (map ((uncurry makeArgs).getArgsAbs) args) (getIdAbs id)
+    trigs' <- getTriggers trs (InTemp (getIdAbs id)) args'
     env <- get
     let cns   = htsNames env
     let prop' = getProperty prop (map (^. tName) trigs') env (InTemp (getIdAbs id))
@@ -746,7 +747,7 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                      then fail s'
                      else do put env' { actes = actes env' ++ map show (getActEvents ies)}
                              return $ Template { _tempId        = getIdAbs id
-                                               , _tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
+                                               , _tempBinds     = args'
                                                , _tempVars      = getValue $ getVars vars
                                                , _tempActEvents = getActEvents ies
                                                , _tempTriggers  = trigs'
@@ -761,14 +762,14 @@ genTemplate (Abs.Temp id args (Abs.Body vars ies trs prop)) =
                       s'      = s ^. _2 ++ errs ++ s ^. _3
                                 ++ if props /= PNIL 
                                    then "Error: In template " ++ getIdAbs id 
-                                        ++ ", a template should describe eonly one property.\n"
+                                        ++ ", it should describe only one property.\n"
                                    else ""
                       temptrs = splitOnIdentifier "," $ s ^. _1
                   in if ((not.null) s')
                      then fail s'
                      else do put env' { actes = actes env' ++ map show (getActEvents ies)}
                              return $ Template { _tempId        = getIdAbs id
-                                               , _tempBinds     = map ((uncurry makeArgs).getArgsAbs) args
+                                               , _tempBinds     = args'
                                                , _tempVars      = getValue $ getVars vars
                                                , _tempActEvents = getActEvents ies
                                                , _tempTriggers  = trigs'
@@ -883,6 +884,22 @@ checkMethodNames targs minfs =
     else writer (False, "Error: In an action create, the method(s) [" 
                         ++ addComma [ x | x <- map showActArgs targs, not (elem x xs)] ++ "] do(es) not exist.\n") 
 
+hasReferenceType :: [Args] -> String -> UpgradePPD [Args]
+hasReferenceType xs id = 
+ case filterReferenceTypes xs of
+      [] -> fail $ "Error: The template " ++ id ++ " does not have any reference type as argument.\n"
+      _  -> return xs
+
+filterReferenceTypes :: [Args] -> [Args]
+filterReferenceTypes []         = []
+filterReferenceTypes (arg:args) = 
+ case getArgsType arg of
+      "Action"     -> filterReferenceTypes args
+      "Condition"  -> filterReferenceTypes args
+      "Trigger"    -> filterReferenceTypes args
+      "MethodName" -> filterReferenceTypes args
+      "HTriple"    -> filterReferenceTypes args
+      _            -> arg:filterReferenceTypes args
 
 -----------------
 -- CInvariants --
