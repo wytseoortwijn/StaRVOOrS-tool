@@ -6,6 +6,7 @@ import UpgradePPDATE
 import qualified Types as T
 import Data.Maybe
 import Control.Lens
+import Java.JavaLanguage
 
 ---------------------------------------------------------------------------------------
 -- Translates actions specific to ppDATEs into Larva artifacts (i.e. DATE's actions) --
@@ -50,4 +51,6 @@ filterRefTypes ((arg,arg'):args) =
       "Trigger"    -> filterRefTypes args
       "MethodName" -> filterRefTypes args
       "HTriple"    -> filterRefTypes args
-      _            -> (arg,arg'):filterRefTypes args
+      xs           -> if elem xs primitiveJavaTypes
+                      then filterRefTypes args
+                      else (arg,arg'):filterRefTypes args

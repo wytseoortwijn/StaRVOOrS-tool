@@ -42,9 +42,7 @@ assocChannel2HTs n (c:cs) = (chGet .~ n $ c):assocChannel2HTs (n+1) cs
 
 writeImports :: Imports -> HTriples -> String
 writeImports xss const = let newImp = "import ppArtifacts.*;\n"
-                         in if null const 
-                            then "IMPORTS {\n" ++ getImports xss ++ "}\n\n"
-                            else "IMPORTS {\n" ++ getImports xss ++ newImp  ++ "}\n\n"
+                         in "IMPORTS {\n" ++ getImports xss ++ newImp  ++ "}\n\n"
 
 --------------------
 -- GLOBAL section --

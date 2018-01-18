@@ -12,6 +12,7 @@ import System.FilePath
 import System.Directory
 import Data.Functor
 import Control.Lens hiding(Context,pre)
+import Java.JavaLanguage
 
 
 lookForEntryTrigger :: [TriggersInfo] -> MethodCN -> Scope -> [Trigger]
@@ -202,7 +203,9 @@ filterRefTypes (arg:args) =
       "Trigger"    -> filterRefTypes args
       "MethodName" -> filterRefTypes args
       "HTriple"    -> filterRefTypes args
-      _            -> arg:filterRefTypes args
+      xs           -> if elem xs primitiveJavaTypes
+                      then filterRefTypes args
+                      else arg:filterRefTypes args
 
 --Maps translated template scope in Date to the scope of the template in the ppDATE
 normaliseScope :: Scope -> Scope
