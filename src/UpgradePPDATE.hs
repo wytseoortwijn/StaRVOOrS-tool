@@ -857,10 +857,10 @@ checkTempArgsHTriples targs hts =
     else writer (False, "Error: In an action create, the Hoare triple(s) [" ++ addComma xs ++ "] do(es) not exist.\n")
 
 showActArgs :: Act.Args -> String
-showActArgs (Act.ArgsId (Act.IdAct id))                  = id
-showActArgs (Act.ArgsS s)                                = s
-showActArgs (Act.ArgsNew (Act.Prog (Act.IdAct id) args)) = "new " ++ id ++ PrintAct.printTree args
-showActArgs act                                          = PrintAct.printTree act
+showActArgs (Act.ArgsId (Act.IdAct id))                        = id
+showActArgs (Act.ArgsS s)                                      = s
+showActArgs (Act.ArgsNew (Act.Prog (Act.IdAct id) args inner)) = "new " ++ id ++ PrintAct.printTree args ++ PrintAct.printTree inner
+showActArgs act                                                = PrintAct.printTree act
 
 checkTempArgsConditions :: [Act.Args] -> Writer String Bool 
 checkTempArgsConditions targs = 

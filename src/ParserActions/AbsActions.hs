@@ -23,7 +23,10 @@ data Action
     | ActAssig Ass
   deriving (Eq, Ord, Show, Read)
 
-data Program = Prog IdAct [Args]
+data Program = Prog IdAct [Args] InnerProg
+  deriving (Eq, Ord, Show, Read)
+
+data InnerProg = IProg IdAct [Args] InnerProg | IPNil
   deriving (Eq, Ord, Show, Read)
 
 data Ass = Ass IdAct Val | AssInc IdAct Val | AssDec IdAct Val
@@ -52,7 +55,7 @@ data Args
     | ArgsNew Program
     | ArgsActLog String Params
     | ArgsActIF [IdAct] Action
-    | ArgsActProg Program
+    | ArgsInner Program
     | ArgsActBang IdAct
     | ArgsActAss Ass
     | ArgsActBlock Actions

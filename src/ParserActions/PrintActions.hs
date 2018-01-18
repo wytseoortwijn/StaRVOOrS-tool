@@ -123,7 +123,7 @@ instance Print Action where
     ActBlock actions -> prPrec i 0 (concatD [doc (showString "{"), prt 0 actions, doc (showString "}")])
     ActCreate template argss -> prPrec i 0 (concatD [doc (showString "\\create"), doc (showString "("), prt 0 template, doc (showString ","), prt 0 argss, doc (showString ")")])
     ActBang idact -> prPrec i 0 (concatD [doc (showString "\\gen"), doc (showString "("), prt 0 idact, doc (showString ")")])
-    ActCond conds action -> prPrec i 0 (concatD [doc (showString "if"), doc (showString "("), prt 0 conds, doc (showString ")"), doc (showString ""), prt 0 action])
+    ActCond conds action -> prPrec i 0 (concatD [doc (showString "IF"), doc (showString "("), prt 0 conds, doc (showString ")"), doc (showString "THEN"), prt 0 action])
     ActSkip -> prPrec i 0 (concatD [])
     ActLog str params -> prPrec i 0 (concatD [doc (showString "\\log"), doc (showString "("), prt 0 str, prt 0 params, doc (showString ")")])
     ActArith arith -> prPrec i 0 (concatD [prt 0 arith])
@@ -132,7 +132,12 @@ instance Print Action where
   prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ";"), prt 0 xs])
 instance Print Program where
   prt i e = case e of
-    Prog idact argss -> prPrec i 0 (concatD [prt 0 idact, doc (showString "("), prt 0 argss, doc (showString ")")])
+    Prog idact argss innerprog -> prPrec i 0 (concatD [prt 0 idact, doc (showString "("), prt 0 argss, doc (showString ")"), prt 0 innerprog])
+
+instance Print InnerProg where
+  prt i e = case e of
+    IProg idact argss innerprog -> prPrec i 0 (concatD [prt 0 idact, doc (showString "("), prt 0 argss, doc (showString ")"), prt 0 innerprog])
+    IPNil -> prPrec i 0 (concatD [])
 
 instance Print Ass where
   prt i e = case e of
@@ -167,8 +172,8 @@ instance Print Args where
     ArgsS str -> prPrec i 0 (concatD [prt 0 str])
     ArgsNew program -> prPrec i 0 (concatD [doc (showString "new"), prt 0 program])
     ArgsActLog str params -> prPrec i 0 (concatD [doc (showString "\\log"), doc (showString "("), prt 0 str, prt 0 params, doc (showString ")")])
-    ArgsActIF idacts action -> prPrec i 0 (concatD [doc (showString "if"), doc (showString "("), prt 0 idacts, doc (showString ")"), doc (showString ""), prt 0 action])
-    ArgsActProg program -> prPrec i 0 (concatD [prt 0 program])
+    ArgsActIF idacts action -> prPrec i 0 (concatD [doc (showString "IF"), doc (showString "("), prt 0 idacts, doc (showString ")"), doc (showString "THEN"), prt 0 action])
+    ArgsInner program -> prPrec i 0 (concatD [prt 0 program])
     ArgsActBang idact -> prPrec i 0 (concatD [doc (showString "\\gen"), doc (showString "("), prt 0 idact, doc (showString ")")])
     ArgsActAss ass -> prPrec i 0 (concatD [prt 0 ass])
     ArgsActBlock actions -> prPrec i 0 (concatD [doc (showString "{"), prt 0 actions, doc (showString "}")])

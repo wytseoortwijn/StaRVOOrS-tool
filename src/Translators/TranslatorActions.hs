@@ -20,14 +20,14 @@ translateAct (Actions acts) env = Actions $ map (translateAction' env) acts
 translateAction' :: Env -> Action -> Action
 translateAction' env (ActCond conds act)                    = ActCond conds (translateAction' env act)
 translateAction' env (ActBlock acts)                        = ActBlock (translateAct acts env)
-translateAction' _ (ActBang (IdAct id))                     = ActProg (Prog (IdAct (id++".send")) [])
-translateAction' _ (ActLog s parms)                         = ActProg (Prog (IdAct "System.out.printf") (ArgsS s:fromParm2Arg parms))
+translateAction' _ (ActBang (IdAct id))                     = ActProg (Prog (IdAct (id++".send")) [] IPNil)
+translateAction' _ (ActLog s parms)                         = ActProg (Prog (IdAct "System.out.printf") (ArgsS s:fromParm2Arg parms) IPNil)
 translateAction' env act@(ActCreate (Temp (IdAct id)) args) = 
  let creates = allCreateAct env    
      ch      = (fromJust $ getChannel act creates) ^. T.caiCh
      args'   = head [xs | (id',xs) <- tempsInfo env, id == id']
      fargs   = map fst $ filterRefTypes $ zip args args'
- in ActProg (Prog (IdAct (ch++".send")) ([ArgsNew (Prog (IdAct ("Tmp_"++id)) fargs)]))
+ in ActProg (Prog (IdAct (ch++".send")) ([ArgsNew (Prog (IdAct ("Tmp_"++id)) fargs IPNil)]) IPNil)
 translateAction' _ act                                      = act
 
 fromParm2Arg :: Params -> [Args]

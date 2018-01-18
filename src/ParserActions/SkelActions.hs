@@ -28,7 +28,11 @@ transAction x = case x of
   ActAssig ass -> failure x
 transProgram :: Program -> Result
 transProgram x = case x of
-  Prog idact argss -> failure x
+  Prog idact argss innerprog -> failure x
+transInnerProg :: InnerProg -> Result
+transInnerProg x = case x of
+  IProg idact argss innerprog -> failure x
+  IPNil -> failure x
 transAss :: Ass -> Result
 transAss x = case x of
   Ass idact val -> failure x
@@ -58,7 +62,7 @@ transArgs x = case x of
   ArgsNew program -> failure x
   ArgsActLog string params -> failure x
   ArgsActIF idacts action -> failure x
-  ArgsActProg program -> failure x
+  ArgsInner program -> failure x
   ArgsActBang idact -> failure x
   ArgsActAss ass -> failure x
   ArgsActBlock actions -> failure x
