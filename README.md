@@ -1,5 +1,5 @@
 
-# StaRVOOrS (v1.6.3.8)
+# StaRVOOrS (v1.6.3.9)
 
 In order to compile StaRVOOrS you must have installed a Haskell compiler: ghc-7.8.3 or later recommended.
 

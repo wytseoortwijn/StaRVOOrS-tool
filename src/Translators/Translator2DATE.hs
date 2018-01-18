@@ -134,7 +134,7 @@ writeTriggers es consts acts env =
 writeTriggersActs :: [Id] -> String
 writeTriggersActs []         = "" 
 writeTriggersActs (act:acts) =
- 'r':show act ++ "() = {" ++ act ++ ".receive()}" ++ "\n" ++ writeTriggersActs acts 
+ 'r': act ++ "() = {" ++ act ++ ".receive()}" ++ "\n" ++ writeTriggersActs acts 
 
 
 writeAllTriggers :: Triggers -> String

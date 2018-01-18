@@ -22,6 +22,7 @@ import Data.Either
 import Data.Maybe
 import Translators.PPDATE2Script
 import Control.Lens hiding(Context,pre)
+import Java.JavaLanguage
 
 
 upgradePPD :: Abs.AbsPPDATE -> UpgradePPD PPDATE
@@ -899,7 +900,9 @@ filterReferenceTypes (arg:args) =
       "Trigger"    -> filterReferenceTypes args
       "MethodName" -> filterReferenceTypes args
       "HTriple"    -> filterReferenceTypes args
-      _            -> arg:filterReferenceTypes args
+      xs           -> if elem xs primitiveJavaTypes
+                      then filterRefTypes args
+                      else arg:filterRefTypes args
 
 -----------------
 -- CInvariants --
