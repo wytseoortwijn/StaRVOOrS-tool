@@ -11,30 +11,37 @@ import UpgradePPDATE
 import ErrM
 import CommonFunctions
 import Control.Lens hiding(Context,pre,Empty)
+import System.Directory
 
 -----------------------------------
 -- Static analysis of java files --
 -----------------------------------
 
-javaStaticAnalysis :: UpgradePPD T.PPDATE -> FilePath -> IO (UpgradePPD T.PPDATE)
-javaStaticAnalysis ppd jpath = 
- do let imports = T._importsGet (fst . fromOK $ runStateT ppd emptyEnv)
-    info <- sequence [ getJavaInfo i jpath
+javaStaticAnalysis :: UpgradePPD T.PPDATE -> FilePath -> [T.Flag] -> IO (UpgradePPD T.PPDATE)
+javaStaticAnalysis ppd jpath flags = 
+ do let b = elem T.OnlyRV flags
+    let imports = T._importsGet (fst . fromOK $ runStateT ppd emptyEnv)
+    info <- sequence [ getJavaInfo i jpath b
                      | i <- imports, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
                      ] 
     return $ ppd >>= (\x -> do env <- get ; checkMethodsExistance info (T._htsGet x) ; put (env { javaFilesInfo = info }) ; return x)
 
-getJavaInfo :: T.Import -> FilePath -> IO (T.JPath, T.ClassInfo,T.JavaFilesInfo)
-getJavaInfo i jpath = 
+getJavaInfo :: T.Import -> FilePath -> Bool -> IO (T.JPath, T.ClassInfo,T.JavaFilesInfo)
+getJavaInfo i jpath flagRV = 
  do (main, cl) <- makeAddFile i
     let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")
-    r <- readFile file_add
-    let java     = (\(Right x) -> x) $ parseJavaFile r
-    let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
-    let vars     = getVariables java_aux
-    let methods  = getMethods java_aux
-    let jinfo    = T.JavaFilesInfo vars methods
-    return (main, cl, jinfo)
+    b <- doesFileExist file_add
+    if b     
+    then do r <- readFile file_add
+            let java     = (\(Right x) -> x) $ parseJavaFile r
+            let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
+            let vars     = getVariables java_aux
+            let methods  = getMethods java_aux
+            let jinfo    = T.JavaFilesInfo vars methods
+            return (main, cl, jinfo)
+    else if flagRV
+         then return (main, cl, T.JavaFilesInfo [] [])
+         else error $ "StaRVOOrS: The file " ++ file_add ++ " does not exist.\n"
 
 --
 -- Checks if the methods associated to the Hoare triples exists in the corresponding Java files.

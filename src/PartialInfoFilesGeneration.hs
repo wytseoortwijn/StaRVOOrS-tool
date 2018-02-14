@@ -18,8 +18,8 @@ import Control.Lens hiding(Context,pre)
 -- Instrumented Java files generation --
 ----------------------------------------
 
-javaFilesGen :: UpgradePPD PPDATE -> FilePath -> FilePath -> IO (UpgradePPD PPDATE)
-javaFilesGen ppdate jpath output_addr = 
+javaFilesGen :: UpgradePPD PPDATE -> FilePath -> FilePath -> [Flag] -> IO (UpgradePPD PPDATE)
+javaFilesGen ppdate jpath output_addr flags = 
  do putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
     oldExpTypes <- inferTypesOldExprs ppdate jpath (output_addr ++ "workspace/")
     let ppdate'' = operationalizeOldResultBind ppdate oldExpTypes
@@ -34,7 +34,7 @@ javaFilesGen ppdate jpath output_addr =
     templatesFileGen add ppdate''
     messagesFileGen add (getEnvVal ppdate'')
     copyFiles jpath (output_addr ++ annotated_add)
-    methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add)
+    methodsInstrumentation ppdate'' jpath (output_addr ++ annotated_add) flags
     return ppdate''
 
 

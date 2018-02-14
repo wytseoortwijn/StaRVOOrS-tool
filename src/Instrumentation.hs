@@ -8,47 +8,52 @@ import UpgradePPDATE
 import ErrM
 import Java.JavaLanguage
 import Control.Lens hiding(Context,pre)
+import System.Directory
 
 --------------------------
 -- Code Instrumentation --
 --------------------------
 
 -- creates new files with methods instrumented
-methodsInstrumentation :: UpgradePPD T.PPDATE -> FilePath -> FilePath -> IO ()
-methodsInstrumentation ppd jpath output_add =
+methodsInstrumentation :: UpgradePPD T.PPDATE -> FilePath -> FilePath -> [T.Flag] -> IO ()
+methodsInstrumentation ppd jpath output_add flags =
  do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
     let consts        = T._htsGet ppdate
     if (null consts)
     then return ()
-    else methodsInstrumentation' ppd jpath output_add
+    else methodsInstrumentation' ppd jpath output_add (elem T.OnlyRV flags)
 
-methodsInstrumentation' :: UpgradePPD T.PPDATE -> FilePath -> FilePath -> IO ()
-methodsInstrumentation' ppd jpath output_add =
+methodsInstrumentation' :: UpgradePPD T.PPDATE -> FilePath -> FilePath -> Bool -> IO ()
+methodsInstrumentation' ppd jpath output_add flagRV =
   do let (ppdate, env) = fromOK $ runStateT ppd emptyEnv
      let consts        = ppdate ^. T.htsGet
      let imp           = ppdate ^. T.importsGet
-     sequence [ instrumentFile i consts jpath output_add
+     sequence [ instrumentFile i consts jpath output_add flagRV
               | i <- imp, not (elem ((\ (T.Import s) -> s) i) importsInKeY)
               ]
      putStrLn "Java files generation completed."
 
 
-instrumentFile :: T.Import -> T.HTriples -> FilePath -> FilePath -> IO ()
-instrumentFile i consts jpath output_add =
+instrumentFile :: T.Import -> T.HTriples -> FilePath -> FilePath -> Bool -> IO ()
+instrumentFile i consts jpath output_add flagRV =
  do (main, cl) <- makeAddFile i
     let file_add = jpath ++ main ++ "/" ++ (cl ++ ".java")
-    r <- readFile file_add
-    let java = (\(Right x) -> x) $ parseJavaFile r
-    let mns  = removeDuplicates $ getMethodsNames cl consts
-    let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
-    let decls  = (getDecls.getClassBody) java_aux
-    let decls' = instrumentMethodMemberDecl' decls mns
-    let output_add' = output_add ++ main
-    let r'  = unlines $ addInstrumentedMethodsInFile (lines r) decls'
-    let r'' = addNewImportInfo r' decls' cl mns
-    createDirectoryIfMissing True output_add'
-    writeFile (output_add' ++ "/" ++ (cl ++ ".java")) r''
-
+    b <- doesFileExist file_add
+    if b   
+    then do r <- readFile file_add
+            let java = (\(Right x) -> x) $ parseJavaFile r
+            let mns  = removeDuplicates $ getMethodsNames cl consts
+            let java_aux = lookForCTD cl $ map getClassDecls $ getClassTypeDecls java
+            let decls  = (getDecls.getClassBody) java_aux
+            let decls' = instrumentMethodMemberDecl' decls mns
+            let output_add' = output_add ++ main
+            let r'  = unlines $ addInstrumentedMethodsInFile (lines r) decls'
+            let r'' = addNewImportInfo r' decls' cl mns
+            createDirectoryIfMissing True output_add'
+            writeFile (output_add' ++ "/" ++ (cl ++ ".java")) r''
+    else if flagRV
+         then return ()
+         else error $ "StaRVOOrS: The file " ++ file_add ++ " does not exist.\n"
 
 addNewImportInfo :: String -> [(String,String,String)] -> T.ClassInfo -> [T.MethodName] -> String
 addNewImportInfo s [] _ _       = s
