@@ -172,15 +172,19 @@ getCpeCompoundTrigger (NormalEvent bind id bs ev)    = "{" ++ getBinding bind ++
 getCpeCompoundTrigger _                              = ""
 
 getBindArgs :: [Bind] -> String
-getBindArgs []                 = ""
-getBindArgs [BindId id]        = id
-getBindArgs ((BindId id):y:ys) = id ++ "," ++ getBindArgs (y:ys)
-getBindArgs (BindStar:ys)      = "*," ++ getBindArgs ys
+getBindArgs []                     = ""
+getBindArgs [BindId id]            = id
+getBindArgs [BindIdExec id]        = id
+getBindArgs [BindIdCall id]        = id
+getBindArgs ((BindId id):y:ys)     = id ++ "," ++ getBindArgs (y:ys)
+getBindArgs ((BindIdExec id):y:ys) = id ++ "," ++ getBindArgs (y:ys)
+getBindArgs ((BindIdCall id):y:ys) = id ++ "," ++ getBindArgs (y:ys)
+getBindArgs (BindStar:ys)          = "*," ++ getBindArgs ys
+getBindArgs (BindStarExec:ys)      = "*," ++ getBindArgs ys
+getBindArgs (BindStarCall:ys)      = "*," ++ getBindArgs ys
 
 getBinding :: Binding -> String
-getBinding (BindingVar BindStar)        = "*."
-getBinding (BindingVar (BindType t id)) = t ++ " " ++ id ++ "."
-getBinding (BindingVar (BindId id))     = id ++ "."
+getBinding (BindingVar bind) = show bind ++ "."
 
 getTriggerVariation' :: TriggerVariation -> String
 getTriggerVariation' EVEntry      = ""
@@ -584,6 +588,16 @@ instantiateCE (NormalEvent (BindingVar (BindId id')) id bs tv) mp =
  in if nid == id' 
     then (NormalEvent (BindingVar (BindId nid)) (instantiateArg mp id) bs tv,Nothing)
     else (NormalEvent (BindingVar (BindId (nid++"_tmp"))) (instantiateArg mp id) bs tv, Just $ nid++"_tmp")
+instantiateCE (NormalEvent (BindingVar (BindIdExec id')) id bs tv) mp = 
+ let nid = instantiateArg mp id'
+ in if nid == id' 
+    then (NormalEvent (BindingVar (BindIdExec nid)) (instantiateArg mp id) bs tv,Nothing)
+    else (NormalEvent (BindingVar (BindIdExec (nid++"_tmp"))) (instantiateArg mp id) bs tv, Just $ nid++"_tmp")
+instantiateCE (NormalEvent (BindingVar (BindIdCall id')) id bs tv) mp = 
+ let nid = instantiateArg mp id'
+ in if nid == id' 
+    then (NormalEvent (BindingVar (BindIdCall nid)) (instantiateArg mp id) bs tv,Nothing)
+    else (NormalEvent (BindingVar (BindIdCall (nid++"_tmp"))) (instantiateArg mp id) bs tv, Just $ nid++"_tmp")
 instantiateCE (NormalEvent bind id bs tv) mp = (NormalEvent bind (instantiateArg mp id) bs tv, Nothing)
 instantiateCE (ClockEvent id n) mp           = (ClockEvent (instantiateArg mp id) n, Nothing)
 instantiateCE (OnlyId id) mp                 = (OnlyId (instantiateArg mp id),Nothing)
@@ -611,7 +625,7 @@ adaptTrigger tr targs mp ci =
       NormalEvent bind _ _ _ -> 
          case bind of 
               BindingVar (BindId id)     -> 
-                   let xs = [ arg | arg <- tr ^. args, ci == getBindTypeType arg, id == getBindTypeId arg]
+                   let xs = [ arg | arg <- tr ^. args, ci == getBindTypeType arg, id == getIdBind arg]
                        ys = [ arg | arg <- tr ^. args, not (elem arg xs) ]
                        zs = [ getArgsId (fst targ) | arg <- xs, targ <- targs, getArgsType (fst targ) == getBindTypeType arg ]
                    in if null zs 
@@ -619,13 +633,43 @@ adaptTrigger tr targs mp ci =
                       else let tr' = tr & args .~ ys 
                                         & compTrigger %~ \ ct -> updCEne ct (BindingVar (BindId (head zs)))
                            in head $ instantiateTrs [tr'] mp
+              BindingVar (BindIdExec id)     -> 
+                   let xs = [ arg | arg <- tr ^. args, ci == getBindTypeType arg, id == getIdBind arg]
+                       ys = [ arg | arg <- tr ^. args, not (elem arg xs) ]
+                       zs = [ getArgsId (fst targ) | arg <- xs, targ <- targs, getArgsType (fst targ) == getBindTypeType arg ]
+                   in if null zs 
+                      then tr & whereClause .~ ""
+                      else let tr' = tr & args .~ ys 
+                                        & compTrigger %~ \ ct -> updCEne ct (BindingVar (BindIdExec (head zs)))
+                           in head $ instantiateTrs [tr'] mp
+              BindingVar (BindIdCall id)     -> 
+                   let xs = [ arg | arg <- tr ^. args, ci == getBindTypeType arg, id == getIdBind arg]
+                       ys = [ arg | arg <- tr ^. args, not (elem arg xs) ]
+                       zs = [ getArgsId (fst targ) | arg <- xs, targ <- targs, getArgsType (fst targ) == getBindTypeType arg ]
+                   in if null zs 
+                      then tr & whereClause .~ ""
+                      else let tr' = tr & args .~ ys 
+                                        & compTrigger %~ \ ct -> updCEne ct (BindingVar (BindIdCall (head zs)))
+                           in head $ instantiateTrs [tr'] mp
               BindingVar (BindType t id) -> 
                    let xs = [ getArgsId arg | arg <- map fst targs, t == getArgsType arg]
                    in if null xs 
                       then tr & whereClause .~ ""
                       else let tr' = tr & compTrigger %~ \ ct -> updCEne ct (BindingVar (BindId (head xs)))
+                           in head $ instantiateTrs [tr'] mp      
+              BindingVar (BindTypeExec t id) -> 
+                   let xs = [ getArgsId arg | arg <- map fst targs, t == getArgsType arg]
+                   in if null xs 
+                      then tr & whereClause .~ ""
+                      else let tr' = tr & compTrigger %~ \ ct -> updCEne ct (BindingVar (BindIdExec (head xs)))
                            in head $ instantiateTrs [tr'] mp                           
-              BindingVar BindStar        -> tr & whereClause .~ ""
+              BindingVar (BindTypeCall t id) -> 
+                   let xs = [ getArgsId arg | arg <- map fst targs, t == getArgsType arg]
+                   in if null xs 
+                      then tr & whereClause .~ ""
+                      else let tr' = tr & compTrigger %~ \ ct -> updCEne ct (BindingVar (BindIdCall (head xs)))
+                           in head $ instantiateTrs [tr'] mp                                                
+              BindingVar _               -> tr & whereClause .~ ""
       _                      -> tr & whereClause .~ ""
 
 instantiateProp :: Property -> [Args] -> CreateActInfo -> Property

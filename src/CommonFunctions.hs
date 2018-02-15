@@ -14,7 +14,6 @@ import Data.Functor
 import Control.Lens hiding(Context,pre)
 import Java.JavaLanguage
 
-
 lookForEntryTrigger :: [TriggersInfo] -> MethodCN -> Scope -> [Trigger]
 lookForEntryTrigger [] _ _                 = []
 lookForEntryTrigger tinfs mnc (InTemp xs)  = 

@@ -58,7 +58,6 @@ render d = rend 0 (map ($ "") $ d []) "" where
   new i   = showChar '\n' . replicateS (2*i) (showChar ' ') . dropWhile isSpace
   space t = showString t . (\s -> if null s then "" else (' ':s))
 
-
 parenth :: Doc -> Doc
 parenth ss = doc (showChar '(') . ss . doc (showChar ')')
 
@@ -207,6 +206,12 @@ instance Print Bind where
     BindStar -> prPrec i 0 (concatD [doc (showString "*")])
     BindType type_ id -> prPrec i 0 (concatD [prt 0 type_, prt 0 id])
     BindId id -> prPrec i 0 (concatD [prt 0 id])
+    BindStarExec -> prPrec i 0 (concatD [doc (showString "execution"), doc (showString "*")])
+    BindStarCall -> prPrec i 0 (concatD [doc (showString "call"), doc (showString "*")])
+    BindTypeExec type_ id -> prPrec i 0 (concatD [doc (showString "execution"), prt 0 type_, prt 0 id])
+    BindTypeCall type_ id -> prPrec i 0 (concatD [doc (showString "call"), prt 0 type_, prt 0 id])
+    BindIdExec id -> prPrec i 0 (concatD [doc (showString "execution"), prt 0 id])
+    BindIdCall id -> prPrec i 0 (concatD [doc (showString "call"), prt 0 id])
   prtList _ [] = (concatD [])
   prtList _ [x] = (concatD [prt 0 x])
   prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])

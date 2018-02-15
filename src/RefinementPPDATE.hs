@@ -215,7 +215,7 @@ filterTriggers :: Triggers -> HT -> TriggerVariation -> Triggers
 filterTriggers [] _ _      = []
 filterTriggers (e:es) c ev = 
  case (e ^. compTrigger) of
-      NormalEvent (BindingVar b) id _ ev' -> 
+      NormalEvent (BindingVar _) id _ ev' -> 
            let mn = _methodCN c ^. mname 
                ov = _methodCN c ^. overl
            in if (id == mn && compareEV ev ev'
@@ -230,10 +230,9 @@ getGeneratedExTr (tr:trs) c =
   case (tr ^. compTrigger) of
       NormalEvent (BindingVar b) id _ ev' -> 
                   if (isInfixOf "_ppdex" (tr ^. tName) && checkArgsOver (tr ^. args) (getCTArgs (tr ^. compTrigger)) (_methodCN c ^. overl)) 
-                  then case b of
-                            BindStar      -> []
-                            BindType _ id -> [id]
-                            BindId id     -> [id]
+                  then case getIdBind b of
+                            "" -> []
+                            id -> [id]
                   else getGeneratedExTr trs c
 
 getExTr :: Triggers -> HT -> TriggerVariation -> String
@@ -242,10 +241,7 @@ getExTr (e:es) c ev =
  case (e ^. compTrigger) of
       NormalEvent (BindingVar b) id _ ev' -> 
                   if (id == (_methodCN c ^. mname) && compareEV ev ev')
-                  then case b of
-                            BindStar      -> ""
-                            BindType _ id -> id
-                            BindId id     -> id
+                  then getIdBind b
                   else getExTr es c ev
       _                                   -> getExTr es c ev
 
@@ -373,6 +369,15 @@ updateWhereTr (TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id'
  if t == cn
  then TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) (id ++ " = " ++ cl ++ ";")
  else TriggerDef tn args (NormalEvent (BindingVar (BindType cn cl)) id' xs v) (id ++ " = null ;")
+updateWhereTr (TriggerDef tn args (NormalEvent (BindingVar (BindTypeExec cn cl)) id' xs v) w) (Args t id) = 
+ if t == cn
+ then TriggerDef tn args (NormalEvent (BindingVar (BindTypeExec cn cl)) id' xs v) (id ++ " = " ++ cl ++ ";")
+ else TriggerDef tn args (NormalEvent (BindingVar (BindTypeExec cn cl)) id' xs v) (id ++ " = null ;")
+updateWhereTr (TriggerDef tn args (NormalEvent (BindingVar (BindTypeCall cn cl)) id' xs v) w) (Args t id) = 
+ if t == cn
+ then TriggerDef tn args (NormalEvent (BindingVar (BindTypeCall cn cl)) id' xs v) (id ++ " = " ++ cl ++ ";")
+ else TriggerDef tn args (NormalEvent (BindingVar (BindTypeCall cn cl)) id' xs v) (id ++ " = null ;")
+
 
 makeBind :: String -> Bind
 makeBind [] = error "Cannot make bind\n."
