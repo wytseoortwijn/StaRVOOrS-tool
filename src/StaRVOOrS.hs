@@ -21,7 +21,8 @@ import MonitorGeneration
 -------------
 
 version :: String
-version = "StaRVOOrS 1.6.3.9"
+version = "StaRVOOrS 1.6.4.11"
+
 
 -- version meaning   +--------- version ID
 --                   | +------- version ID
@@ -102,11 +103,11 @@ run flags java_fn_add ppdate_fn output_add =
                          let ppd  = upgradePPD absppdate
                          case runStateT ppd emptyEnv of
                               Bad s -> putStrLn s
-                              Ok _  -> do ppdate <- javaStaticAnalysis ppd java_fn_add'
+                              Ok _  -> do ppdate <- javaStaticAnalysis ppd java_fn_add' flags
                                           if null (wellFormedActions ppdate)
                                           then do proofs <- staticAnalysis java_fn_add' ppdate output_add' flags
                                                   ppdate' <- specRefinement ppdate proofs ppdate_fn output_add'
-                                                  ppdate'' <- javaFilesGen ppdate' java_fn_add' output_add'
+                                                  ppdate'' <- javaFilesGen ppdate' java_fn_add' output_add' flags
                                                   monitorGen output_addr ppdate_fn ppdate'' flags 
                                                   removeDirectoryRecursive (output_add' ++ "workspace") 
                                                   putStrLn "StaRVOOrS has finished successfully.\n"

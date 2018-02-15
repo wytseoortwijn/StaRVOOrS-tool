@@ -58,6 +58,7 @@ render d = rend 0 (map ($ "") $ d []) "" where
   new i   = showChar '\n' . replicateS (2*i) (showChar ' ') . dropWhile isSpace
   space t = showString t . (\s -> if null s then "" else (' ':s))
 
+
 parenth :: Doc -> Doc
 parenth ss = doc (showChar '(') . ss . doc (showChar ')')
 
@@ -121,6 +122,7 @@ instance Print AbsPPDATE where
 instance Print Imports where
   prt i e = case e of
     Imports imports -> prPrec i 0 (concatD [doc (showString "IMPORTS"), doc (showString "{"), prt 0 imports, doc (showString "}")])
+    ImportsNil -> prPrec i 0 (concatD [])
 
 instance Print Import where
   prt i e = case e of

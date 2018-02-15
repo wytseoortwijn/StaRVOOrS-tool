@@ -21,6 +21,7 @@ transAbsPPDATE x = case x of
 transImports :: Imports -> Result
 transImports x = case x of
   Imports imports -> failure x
+  ImportsNil -> failure x
 transImport :: Import -> Result
 transImport x = case x of
   Import javafiless -> failure x

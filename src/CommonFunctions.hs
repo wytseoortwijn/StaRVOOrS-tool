@@ -55,6 +55,12 @@ args2Str (bn:bns) = case bn of
                          BindType t id -> t ++ " " ++ id ++ "," ++ args2Str bns
                          _ -> error "argst2Str: A trigger has a wrongly defined argument.\n"
 
+getDuplicates :: Eq a => [a] -> [a]
+getDuplicates []     = []
+getDuplicates (x:xs) = if elem x xs 
+                       then x:getDuplicates xs
+                       else getDuplicates xs   
+
 removeDuplicates :: Eq a => [a] -> [a]
 removeDuplicates []     = []
 removeDuplicates (x:xs) = if (elem x xs)

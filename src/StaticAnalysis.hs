@@ -42,7 +42,7 @@ runAnalysis jpath ppd output_addr flags =
                let xml     = ParserXMLKeYOut.parse xml_to_parse
                let cns     = getHTNamesEnv ppd
                let xml'    = removeNoneHTs xml cns
-               if (not (elem XML flags)) then removeFile xml_add else return ()               
+               if (not (elem XML flags)) then removeFile xml_add else return ()
                generateReport xml' output_addr
                return $ Right xml'
        else do generateReportFailure output_addr flags

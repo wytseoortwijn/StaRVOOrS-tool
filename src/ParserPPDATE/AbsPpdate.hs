@@ -13,7 +13,7 @@ data AbsPPDATE
     = AbsPPDATE Imports Global Templates CInvariants HTriples Methods
   deriving (Eq, Ord, Show, Read)
 
-data Imports = Imports [Import]
+data Imports = Imports [Import] | ImportsNil
   deriving (Eq, Ord, Show, Read)
 
 data Import = Import [JavaFiles]
