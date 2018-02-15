@@ -205,7 +205,7 @@ alex_action_7 =  tok (\p s -> PT p (TD $ share s))
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 {-# LINE 1 "<built-in>" #-}
 {-# LINE 1 "<command-line>" #-}
-{-# LINE 8 "<command-line>" #-}
+{-# LINE 10 "<command-line>" #-}
 # 1 "/usr/include/stdc-predef.h" 1 3 4
 
 # 17 "/usr/include/stdc-predef.h" 3 4
@@ -252,7 +252,7 @@ alex_action_7 =  tok (\p s -> PT p (TD $ share s))
 
 
 
-{-# LINE 8 "<command-line>" #-}
+{-# LINE 10 "<command-line>" #-}
 {-# LINE 1 "/usr/lib/ghc/include/ghcversion.h" #-}
 
 
@@ -271,7 +271,7 @@ alex_action_7 =  tok (\p s -> PT p (TD $ share s))
 
 
 
-{-# LINE 8 "<command-line>" #-}
+{-# LINE 10 "<command-line>" #-}
 {-# LINE 1 "templates/GenericTemplate.hs" #-}
 -- -----------------------------------------------------------------------------
 -- ALEX TEMPLATE

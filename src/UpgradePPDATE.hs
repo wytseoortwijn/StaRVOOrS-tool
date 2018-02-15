@@ -40,13 +40,22 @@ chainExec ppdatep ppd env errs n =
  case n of
       1 -> let ppd'  = importsGet .~ genImports (ppdatep ^. _1) $ ppd
                ppd'' = methodsGet .~ genMethods (ppdatep ^. _6) $ ppd' 
-           in chainExec ppdatep ppd'' env errs 2
-      2 -> case runStateT (genHTs (ppdatep ^. _5) (ppd ^. importsGet)) env of
-                Bad s              -> chainExec ppdatep ppd env (s:errs) 3
-                Ok (consts', env') -> let dcs = getDuplicate $ htsNames env'
-                                      in if not (null dcs)
-                                         then chainExec ppdatep ppd env' (duplicateHT dcs:errs) 3
-                                         else chainExec ppdatep (htsGet .~ consts' $ ppd) env' errs 3
+           in let imps  = ppd' ^. importsGet
+                  imps' = getDuplicates imps
+              in if (null imps') 
+                 then chainExec ppdatep ppd'' env errs 2
+                 else chainExec ppdatep ppd'' env (errs ++ (duplicateImps imps')) 2
+      2 -> case runWriter (genHTs (ppdatep ^. _5) (ppd ^. importsGet)) of
+                (consts', []) -> let dcs  = getDuplicate $ map (^. htName) consts'
+                                     env' = env { htsNames = map (^. htName) consts' }
+                                 in if not (null dcs)
+                                    then chainExec ppdatep (htsGet .~ consts' $ ppd) env' (duplicateHT dcs:errs) 3
+                                    else chainExec ppdatep (htsGet .~ consts' $ ppd) env' errs 3
+                (consts', err) -> let dcs  = getDuplicate $ map (^. htName) consts'
+                                      env' = env { htsNames = map (^. htName) consts' }
+                                  in if not (null dcs)
+                                     then chainExec ppdatep (htsGet .~ consts' $ ppd) env' (duplicateHT dcs:err:errs) 3
+                                     else chainExec ppdatep (htsGet .~ consts' $ ppd) env' (err:errs) 3
       3 -> case runStateT (genTemplates (ppdatep ^. _3)) env of
                 Bad s            -> chainExec ppdatep ppd env (s:errs) 4
                 Ok (temps',env') -> chainExec ppdatep (templatesGet .~ temps' $ ppd) env' errs 4
@@ -57,37 +66,18 @@ chainExec ppdatep ppd env errs n =
                 Bad s            -> chainExec ppdatep ppd env (s:errs) 6
                 Ok (cinvs',env') -> chainExec ppdatep (cinvariantsGet .~ cinvs' $ ppd) env' errs 6
 
-
---Deprecated
-upgradePPD' :: Abs.AbsPPDATE -> UpgradePPD PPDATE
-upgradePPD' (Abs.AbsPPDATE imports global temps cinvs consts methods) =
- do let imports' = genImports imports
-    let methods' = genMethods methods
-    case runStateT (genHTs consts imports') emptyEnv of
-         Bad s             -> fail s
-         Ok (consts', env) ->
-            let dcs = getDuplicate $ htsNames env
-            in if not (null dcs) then fail $ duplicateHT dcs
-               else case runStateT (genTemplates temps) env of
-                    Bad s             -> fail s
-                    Ok (temps',env') ->
-                       case runStateT (genGlobal global) env' of
-                            Bad s               -> fail $ s
-                            Ok (global', env'') -> 
-                               case runStateT (genClassInvariants cinvs) env'' of
-                                    Bad s              -> fail s
-                                    Ok (cinvs',env''') -> 
-                                             do put env'''
-                                                return (PPDATE imports' global' temps' cinvs' consts' methods')
-   
 -------------
 -- Imports --
 -------------
 
 genImports :: Abs.Imports -> Imports
+genImports (Abs.ImportsNil)   = []
 genImports (Abs.Imports imps) =
  let jfss = map getImportAbs imps
  in map (Import . joinImport . map (getIdAbs.getJFAbs)) jfss
+
+duplicateImps :: Imports -> [String]
+duplicateImps = map (\imp -> "Error: Multiple imports for " ++ (\(Import s) -> s) imp ++ ".\n")                    
 
 ------------
 -- Global --
@@ -931,32 +921,62 @@ getCInv (Abs.CI cn jml) =
 -- Hoare Triples --
 -------------------
 
-genHTs :: Abs.HTriples -> Imports -> UpgradePPD HTriples
+genHTs :: Abs.HTriples -> Imports -> Writer String HTriples
 genHTs Abs.HTempty _          = return []
 genHTs (Abs.HTriples cs) imps = checkOverl $ sequence $ map (getHT imps) cs
 
-getHT :: Imports -> Abs.HT -> UpgradePPD HT
+getHT :: Imports -> Abs.HT -> Writer String HT
 getHT imps (Abs.HT id pre' method post' ass) =
- do let mcn = MCN { _clinf = getMethodClassInfo method, _mname = getMethodMethodName method, _overl = getMethodOverloading method }
-    env <- get
+ do let mcn = MCN { _clinf = getMethodClassInfo method
+                  , _mname = getMethodMethodName method
+                  , _overl = getMethodOverloading method }
     case checkImports (mcn ^. clinf) imps of
-         []     -> fail $ "Error: Hoare triple " ++ getIdAbs id ++ " is associated to class " 
-                          ++ mcn ^. clinf ++ ", but the class is not imported.\n"
-         (x:xs) -> if (not.null) xs 
-                   then fail $ "Error: Multiple imports for class " ++ mcn ^. clinf
-                   else do let cns = htsNames env
-                           let ys  = map checkJML $ [getPre pre',getPost post'] ++ checkAssig ass
-                           joinErrorJML ys (getIdAbs id)
-                           put env { htsNames = (getIdAbs id):(htsNames env) }
-                           return (HT { _htName   = getIdAbs id
-                                  , _methodCN     = mcn
-                                  , _pre          = genPre pre'
-                                  , _post         = genPost post'
-                                  , _assignable   = genAssig ass
-                                  , _newPRe       = []
-                                  , _chGet        = 0
-                                  , _path2it      = ""
-                                  })
+         []    -> do tell $ "Error: Hoare triple " ++ getIdAbs id ++ " is associated to class the " 
+                            ++ mcn ^. clinf ++ ", but it is not imported.\n"
+                     let ys  = map checkJML $ [getPre pre',getPost post'] ++ checkAssig ass
+                     case runWriter (joinErrorJML' ys (getIdAbs id)) of
+                         (_,s) -> if not (null s)
+                                  then do tell s 
+                                          return (HT { _htName     = getIdAbs id
+                                                     , _methodCN   = mcn
+                                                     , _pre        = ""
+                                                     , _post       = ""
+                                                     , _assignable = ""
+                                                     , _newPRe     = []
+                                                     , _chGet      = 0
+                                                     , _path2it    = ""
+                                                     })
+                                  else return (HT { _htName       = getIdAbs id
+                                                  , _methodCN     = mcn
+                                                  , _pre          = genPre pre'
+                                                  , _post         = genPost post'
+                                                  , _assignable   = genAssig ass
+                                                  , _newPRe       = []
+                                                  , _chGet        = 0
+                                                  , _path2it      = ""
+                                                  })
+         (x:_) -> do let ys  = map checkJML $ [getPre pre',getPost post'] ++ checkAssig ass
+                     case runWriter (joinErrorJML' ys (getIdAbs id)) of
+                          (_,s) -> if not (null s)
+                                   then do tell s 
+                                           return (HT { _htName     = getIdAbs id
+                                                      , _methodCN   = mcn
+                                                      , _pre        = ""
+                                                      , _post       = ""
+                                                      , _assignable = ""
+                                                      , _newPRe     = []
+                                                      , _chGet      = 0
+                                                      , _path2it    = ""
+                                                      })
+                                   else return (HT { _htName       = getIdAbs id
+                                                   , _methodCN     = mcn
+                                                   , _pre          = genPre pre'
+                                                   , _post         = genPost post'
+                                                   , _assignable   = genAssig ass
+                                                   , _newPRe       = []
+                                                   , _chGet        = 0
+                                                   , _path2it      = ""
+                                                   })
 
 genPre :: Abs.Pre -> Pre
 genPre Abs.PreNil = "true"
@@ -989,6 +1009,13 @@ joinErrorJML xs str =
     then return ()
     else fail $ concatMap (\s -> s ++ " of Hoare triple " ++ str ++ ".\n") ys 
 
+joinErrorJML' :: [Either JMLExp String] -> String -> Writer String ()
+joinErrorJML' xs str = 
+ do let ys = rights xs 
+    if null ys 
+    then return ()
+    else writer ((),concatMap (\s -> s ++ " of Hoare triple " ++ str ++ ".\n") ys)
+
 checkAssig :: Abs.Assignable -> [Writer String JMLExp]
 checkAssig Abs.AssigNil         = [return "\\everything"]
 checkAssig (Abs.Assignable ass) = map assig ass
@@ -1009,18 +1036,18 @@ checkImports cn (Import s:xs) =
     then (Import s):checkImports cn xs
     else checkImports cn xs
 
-checkOverl :: UpgradePPD HTriples -> UpgradePPD HTriples
+checkOverl :: Writer String HTriples -> Writer String HTriples
 checkOverl hts = 
- case runStateT hts emptyEnv of
-      Bad s         -> fail s
-      Ok (hts',env) -> let ys  = zip (map (^. htName) hts') (map _methodCN hts')
-                           ys' = [(htn,mnc') | (htn,mnc') <- ys, (mnc' ^. overl) /= OverNil]
-                       in if null ys'
-                          then hts
-                          else case runWriter $ sequence $ map (checkOV ys') [p | p <- ys, not (elem p ys')] of
-                                    (b,s) -> if and b
-                                             then hts
-                                             else fail s
+ case runWriter hts of      
+      (hts',s) -> let ys  = zip (map (^. htName) hts') (map _methodCN hts')
+                      ys' = [(htn,mnc') | (htn,mnc') <- ys, (mnc' ^. overl) /= OverNil]
+                  in if null ys'
+                     then hts
+                     else case runWriter $ sequence $ map (checkOV ys') [p | p <- ys, not (elem p ys')] of
+                               (b,s') -> if and b
+                                         then hts
+                                         else writer (hts', s' ++ s)
+
 
 checkOV :: [(HTName,MethodCN)] -> (HTName,MethodCN) -> Writer String Bool
 checkOV xs (htn,mnc) =
@@ -1126,8 +1153,8 @@ getJML :: Abs.JML -> String -> Writer String JMLExp
 getJML jml str = 
  let jml' = printTree jml in
  case ParJML.parse jml' of
-      Bad s -> do tell $ "Parse error on the \n" ++ jml'
-                  return "Parse error"
+      Bad s -> do tell $ "Error: Parse error on the " ++ str
+                  return "Error: Parse error "
       Ok _  -> return jml' 
 
 getJava :: Abs.Java -> Java
