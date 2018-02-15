@@ -64,7 +64,7 @@ instance Eq Overriding where
  _ == _                 = False
 
 instance Show Overriding where
- show OverNil   = "nil"
+ show OverNil   = ""
  show (Over []) = "()"
  show (Over xs) = "(" ++ foldr1 (\x xs -> x ++ "," ++ xs) xs ++ ")"
 
