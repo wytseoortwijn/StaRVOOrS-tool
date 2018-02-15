@@ -1,9 +1,6 @@
 
-<<<<<<< HEAD
 # StaRVOOrS (v1.6.4.11)
-=======
-# StaRVOOrS (v1.6.3.10)
->>>>>>> d2930933c2d680514162206475e6e9bbefc94256
+
 
 In order to compile StaRVOOrS you must have installed a Haskell compiler: ghc-7.8.3 or later recommended.
 
