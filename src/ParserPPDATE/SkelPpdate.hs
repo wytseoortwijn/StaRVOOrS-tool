@@ -83,6 +83,12 @@ transBind x = case x of
   BindStar -> failure x
   BindType type_ id -> failure x
   BindId id -> failure x
+  BindStarExec -> failure x
+  BindStarCall -> failure x
+  BindTypeExec type_ id -> failure x
+  BindTypeCall type_ id -> failure x
+  BindIdExec id -> failure x
+  BindIdCall id -> failure x
 transWhereClause :: WhereClause -> Result
 transWhereClause x = case x of
   WhereClauseNil -> failure x

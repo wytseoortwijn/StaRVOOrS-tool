@@ -419,24 +419,39 @@ instance Show TriggerList where
  show (CECollection xs) = foldr (\x xs -> "{" ++ x ++ "}" ++ " | " ++ xs) [] (map show xs)
 
 data Bind =
-   BindStar
- | BindType Type Id
- | BindId Id
+      BindStar
+    | BindType Type Id
+    | BindId Id
+    | BindStarExec
+    | BindStarCall
+    | BindTypeExec Type Id
+    | BindTypeCall Type Id
+    | BindIdExec Id
+    | BindIdCall Id
   deriving (Eq,Read)
 
-instance Show Bind where
- show BindStar        = "*"
- show (BindType t id) = t ++ " " ++ id
- show (BindId id)     = id
+getIdBind :: Bind -> Id
+getIdBind (BindId id)         = id
+getIdBind (BindIdExec id)     = id
+getIdBind (BindIdCall id)     = id
+getIdBind (BindType _ id)     = id
+getIdBind (BindTypeExec _ id) = id
+getIdBind (BindTypeCall _ id) = id
+getIdBind _                   = ""
 
-getBindTypeId :: Bind -> Id
-getBindTypeId (BindType t id) = id
+instance Show Bind where
+ show BindStar            = "*"
+ show (BindType t id)     = t ++ " " ++ id
+ show (BindId id)         = id
+ show BindStarExec        = "execution *"
+ show BindStarCall        = "call *"
+ show (BindTypeExec t id) = "execution " ++ t ++ " " ++ id
+ show (BindTypeCall t id) = "call " ++ t ++ " " ++ id
+ show (BindIdExec id)     = "execution " ++ id
+ show (BindIdCall id)     = "call " ++ id
 
 getBindTypeType :: Bind -> Type
 getBindTypeType (BindType t id) = t
-
-getBindIdId :: Bind -> Id
-getBindIdId (BindId id) = id
 
 data Binding =
    BindingVar Bind

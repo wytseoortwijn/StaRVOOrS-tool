@@ -215,10 +215,10 @@ getTrigger' scope (Abs.Trigger id binds ce wc) args =
                then err0 ++ ("Error: Trigger declaration [" ++ id'' 
                     ++ "] uses wrong argument(s) [" ++ s' ++ "] in the method component.\n")
                else err0
-    let argss = map getBindTypeId bs
+    let argss = map getIdBind bs
     case ce' of
          NormalEvent (BindingVar bind) mn args' eventv
-            -> let allArgs = map getBindIdId (filter (\ c -> c /= BindStar) args') in
+            -> let allArgs = map getIdBind (filter (\ c -> not (isBindStar c)) args') in
                case eventv of
                     EVEntry  ->
                        let id  = getIdBind bind
@@ -290,6 +290,13 @@ getTypeForOverLoading :: [Bind] -> Id -> Type
 getTypeForOverLoading [] _                     = ""
 getTypeForOverLoading ((BindType t id):bs) id' = if id == id' then t else getTypeForOverLoading bs id'
 
+
+isBindStar :: Bind -> Bool
+isBindStar BindStar     = True
+isBindStar BindStarExec = True
+isBindStar BindStarCall = True
+isBindStar _            = False
+
 --Method handling the special cases of the use of new and channels
 checkSpecialCases :: Bool -> MethodName -> Bind -> [Bind] -> [Bind] -> [String] -> Trigger -> Env -> Scope -> Writer String Bool
 checkSpecialCases b mn bind bs rs zs id env scope = 
@@ -314,7 +321,7 @@ checkMNforNew mn bind bs rs id zs =
                    then return False
                    else if null rs
                         then writer (False,"Error: new cannot be associated to an entry trigger.\n")
-                        else if elem (BindType id (getBindIdId (head rs))) bs
+                        else if elem (BindType id (getIdBind (head rs))) bs
                              then if null zs 
                                   then return True
                                   else writer (False, "Error: Trigger declaration [" ++ id 
@@ -358,23 +365,18 @@ checkArgs argss (a:allArgs) =
 checkRetVar :: [Bind] -> [Id] -> Bool
 checkRetVar xs ids = case length xs of
                           0 -> True
-                          1 -> elem (getBindIdId (head xs)) ids
+                          1 -> elem (getIdBind (head xs)) ids
                           _ -> False
 
 getVarsWC :: Abs.WhereClause -> [Id]
 getVarsWC Abs.WhereClauseNil      = []
-getVarsWC (Abs.WhereClauseDef xs) = map (\ (Abs.WhereExp bind _) -> (getBindIdId.getBind_) bind) xs
+getVarsWC (Abs.WhereClauseDef xs) = map (\ (Abs.WhereExp bind _) -> (getIdBind.getBind_) bind) xs
 
 checkVarsInitialisation :: [Id] -> [Id] -> [Id]
 checkVarsInitialisation [] _      = []
 checkVarsInitialisation (x:xs) wc = if (elem x wc)
                                     then checkVarsInitialisation xs wc
                                     else x:checkVarsInitialisation xs wc
-
-getIdBind :: Bind -> Id
-getIdBind (BindType _ id) = id
-getIdBind (BindId id)     = id
-getIdBind _               = ""
 
 getCompTrigger :: Abs.CompoundTrigger -> Writer String CompoundTrigger
 getCompTrigger ce =
@@ -424,9 +426,16 @@ getBindsBody (b:bs) =
                                            return xs
 
 getBind_ :: Abs.Bind -> Bind
-getBind_ Abs.BindStar        = BindStar
-getBind_ (Abs.BindType t id) = BindType (getTypeAbs t) (getIdAbs id)
-getBind_ (Abs.BindId id)     = BindId (getIdAbs id)
+getBind_ Abs.BindStar            = BindStar
+getBind_ (Abs.BindType t id)     = BindType (getTypeAbs t) (getIdAbs id)
+getBind_ (Abs.BindId id)         = BindId (getIdAbs id)
+getBind_ Abs.BindStarExec        = BindStarExec
+getBind_ Abs.BindStarCall        = BindStarCall
+getBind_ (Abs.BindTypeExec t id) = BindTypeExec (getTypeAbs t) (getIdAbs id)
+getBind_ (Abs.BindTypeCall t id) = BindTypeCall (getTypeAbs t) (getIdAbs id)
+getBind_ (Abs.BindIdExec id)     = BindIdExec (getIdAbs id)
+getBind_ (Abs.BindIdCall id)     = BindIdCall (getIdAbs id)
+
 
 getTriggerVariation :: Abs.TriggerVariation -> TriggerVariation
 getTriggerVariation Abs.EVEntry        = EVEntry
@@ -773,7 +782,19 @@ getExitTrsInfo ((TriggerDef tr args (NormalEvent (BindingVar (BindId id)) id' _ 
  case runStateT (getClassVarArgs args id) emptyEnv of
       Bad s    -> error $ "Error: In trigger " ++ tr ++ ", " ++ s
       Ok (t,_) -> (t,id'):getExitTrsInfo ts
+getExitTrsInfo ((TriggerDef tr args (NormalEvent (BindingVar (BindIdExec id)) id' _ (EVExit _)) _):ts) = 
+ case runStateT (getClassVarArgs args id) emptyEnv of
+      Bad s    -> error $ "Error: In trigger " ++ tr ++ ", " ++ s
+      Ok (t,_) -> (t,id'):getExitTrsInfo ts
+getExitTrsInfo ((TriggerDef tr args (NormalEvent (BindingVar (BindIdCall id)) id' _ (EVExit _)) _):ts) = 
+ case runStateT (getClassVarArgs args id) emptyEnv of
+      Bad s    -> error $ "Error: In trigger " ++ tr ++ ", " ++ s
+      Ok (t,_) -> (t,id'):getExitTrsInfo ts
 getExitTrsInfo ((TriggerDef _ _ (NormalEvent (BindingVar (BindType t _)) id _ (EVExit _)) _):ts) = 
+ (t,id):getExitTrsInfo ts
+getExitTrsInfo ((TriggerDef _ _ (NormalEvent (BindingVar (BindTypeCall t _)) id _ (EVExit _)) _):ts) = 
+ (t,id):getExitTrsInfo ts
+getExitTrsInfo ((TriggerDef _ _ (NormalEvent (BindingVar (BindTypeExec t _)) id _ (EVExit _)) _):ts) = 
  (t,id):getExitTrsInfo ts
 getExitTrsInfo (_:ts) = getExitTrsInfo ts
 
@@ -1281,10 +1302,15 @@ emptyEnv = Env { allTriggers     = []
                }
 
 getClassVarName :: Trigger -> MethodName -> [Bind] -> Bind -> String -> Scope -> [Args] -> UpgradePPD (ClassInfo,String)
-getClassVarName _ _ args BindStar _ _ _                 = return ("*","")
-getClassVarName _ _ args (BindType t id) _ _ _          = return (t,id)
-getClassVarName tr mn args (BindId id) s scope argsTemp = 
- let ts' = [getBindTypeType arg | arg <- args, getBindTypeId arg == id ]
+getClassVarName _ _ args BindStar _ _ _                     = return ("*","")
+getClassVarName _ _ args BindStarExec _ _ _                 = return ("*","")
+getClassVarName _ _ args BindStarCall _ _ _                 = return ("*","")
+getClassVarName _ _ args (BindType t id) _ _ _              = return (t,id)
+getClassVarName _ _ args (BindTypeExec t id) _ _ _          = return (t,id)
+getClassVarName _ _ args (BindTypeCall t id) _ _ _          = return (t,id)
+getClassVarName tr mn args bindid s scope argsTemp = 
+ let id  = getIdBind bindid 
+     ts' = [getBindTypeType arg | arg <- args, getIdBind arg == id ]
      ts  = if (null ts') then prepareValUpd mn s id s else ts'
  in if (length ts /= 1)
     then if tempScope scope
@@ -1308,6 +1334,7 @@ updateInfo m mn einfo =
  case Map.lookup mn m of
       Nothing -> Map.insert mn [einfo] m
       Just xs -> Map.insert mn (einfo:xs) m
+
 
 ----------------------------
 -- Monad State operations --

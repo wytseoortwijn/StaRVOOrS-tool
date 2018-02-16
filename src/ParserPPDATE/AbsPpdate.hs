@@ -68,7 +68,16 @@ data TriggerVariation
 data Binding = BindingVar Bind
   deriving (Eq, Ord, Show, Read)
 
-data Bind = BindStar | BindType Type Id | BindId Id
+data Bind
+    = BindStar
+    | BindType Type Id
+    | BindId Id
+    | BindStarExec
+    | BindStarCall
+    | BindTypeExec Type Id
+    | BindTypeCall Type Id
+    | BindIdExec Id
+    | BindIdCall Id
   deriving (Eq, Ord, Show, Read)
 
 data WhereClause = WhereClauseNil | WhereClauseDef [WhereExp]
