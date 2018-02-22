@@ -94,7 +94,7 @@ data Properties
   deriving (Eq, Ord, Show, Read)
 
 data PropKind
-    = PropKindNormal States Transitions | PropKindPinit Id [Id]
+    = PropKindNormal States Transitions | PropKindPinit Id Id
   deriving (Eq, Ord, Show, Read)
 
 data States = States Starting Accepting Bad Normal
@@ -215,7 +215,7 @@ data Type = Type TypeDef
   deriving (Eq, Ord, Show, Read)
 
 data TypeDef
-    = TypeDef Id | TypeGen Id Symbols Id Symbols | TypeArray Id
+    = TypeDef Id | TypeGen Id Symbols [Id] Symbols | TypeArray Id
   deriving (Eq, Ord, Show, Read)
 
 data Args = Args Type Id

@@ -107,7 +107,8 @@ instance Print Double where
 instance Print Id where
   prt _ (Id i) = doc (showString ( i))
   prtList _ [] = (concatD [])
-  prtList _ (x:xs) = (concatD [prt 0 x, prt 0 xs])
+  prtList _ [x] = (concatD [prt 0 x])
+  prtList _ (x:xs) = (concatD [prt 0 x, doc (showString ","), prt 0 xs])
 
 instance Print Symbols where
   prt _ (Symbols i) = doc (showString ( i))
@@ -239,7 +240,7 @@ instance Print Properties where
 instance Print PropKind where
   prt i e = case e of
     PropKindNormal states transitions -> prPrec i 0 (concatD [prt 0 states, prt 0 transitions])
-    PropKindPinit id ids -> prPrec i 0 (concatD [doc (showString "PINIT"), doc (showString "{"), doc (showString "("), prt 0 id, doc (showString ","), prt 0 ids, doc (showString ")"), doc (showString "}")])
+    PropKindPinit id1 id2 -> prPrec i 0 (concatD [doc (showString "PINIT"), doc (showString "{"), doc (showString "("), prt 0 id1, doc (showString ","), prt 0 id2, doc (showString ")"), doc (showString "}")])
 
 instance Print States where
   prt i e = case e of
@@ -429,7 +430,7 @@ instance Print Type where
 instance Print TypeDef where
   prt i e = case e of
     TypeDef id -> prPrec i 0 (concatD [prt 0 id])
-    TypeGen id1 symbols1 id2 symbols2 -> prPrec i 0 (concatD [prt 0 id1, prt 0 symbols1, prt 0 id2, prt 0 symbols2])
+    TypeGen id symbols1 ids symbols2 -> prPrec i 0 (concatD [prt 0 id, prt 0 symbols1, prt 0 ids, prt 0 symbols2])
     TypeArray id -> prPrec i 0 (concatD [prt 0 id, doc (showString "["), doc (showString "]")])
 
 instance Print Args where

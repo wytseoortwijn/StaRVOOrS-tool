@@ -106,7 +106,7 @@ transProperties x = case x of
 transPropKind :: PropKind -> Result
 transPropKind x = case x of
   PropKindNormal states transitions -> failure x
-  PropKindPinit id ids -> failure x
+  PropKindPinit id1 id2 -> failure x
 transStates :: States -> Result
 transStates x = case x of
   States starting accepting bad normal -> failure x
@@ -246,7 +246,7 @@ transType x = case x of
 transTypeDef :: TypeDef -> Result
 transTypeDef x = case x of
   TypeDef id -> failure x
-  TypeGen id1 symbols1 id2 symbols2 -> failure x
+  TypeGen id symbols1 ids symbols2 -> failure x
   TypeArray id -> failure x
 transArgs :: Args -> Result
 transArgs x = case x of
