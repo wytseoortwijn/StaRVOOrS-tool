@@ -65,7 +65,7 @@ writePPDProps :: Property -> String
 writePPDProps PNIL                    = ""
 writePPDProps (PINIT nm tmp bds prop) = 
  "PROPERTY " ++ nm ++ " {\n"
- ++ "PINIT { (" ++ tmp ++ "," ++ addComma bds ++ ") }\n"
+ ++ "PINIT { (" ++ tmp ++ "," ++ bds ++ ") }\n"
  ++ "}\n\n"
  ++ writePPDProps prop
 writePPDProps (Property nm sts trans prop) = 

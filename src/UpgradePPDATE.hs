@@ -454,11 +454,11 @@ getWhereClause (Abs.WhereClauseDef wexp) = (concat.lines.printTree) wexp
 
 getProperty :: Abs.Properties -> [Id] -> Env -> Scope -> Writer (String,String,String) (Property,Env)
 getProperty Abs.PropertiesNil _ env _                                               = return (PNIL,env)
-getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' ids') props) enms env scope = 
+getProperty (Abs.ProperiesDef id (Abs.PropKindPinit id' id'') props) enms env scope = 
  do (p,env') <- getProperty props enms env scope
     return (PINIT { piName  = getIdAbs id
                   , tmpId   = getIdAbs id'
-                  , bounds  = map getIdAbs ids'
+                  , bounds  = getIdAbs id''
                   , piProps = p
                   }, env')
 getProperty (Abs.ProperiesDef id (Abs.PropKindNormal states trans) props) enms env scope =
@@ -1151,7 +1151,7 @@ getIdAbs (Abs.Id s) = s
 
 getTypeAbs :: Abs.Type -> String
 getTypeAbs (Abs.Type (Abs.TypeDef (Abs.Id id))) = id
-getTypeAbs (Abs.Type (Abs.TypeGen (Abs.Id id) (Abs.Symbols s1) (Abs.Id id') (Abs.Symbols s2))) = id ++ s1 ++ id' ++ s2
+getTypeAbs (Abs.Type (Abs.TypeGen (Abs.Id id) (Abs.Symbols s1) xs (Abs.Symbols s2))) = id ++ s1 ++ addComma (map getIdAbs xs) ++ s2
 getTypeAbs (Abs.Type (Abs.TypeArray (Abs.Id id))) = id
 
 getJFAbs :: Abs.JavaFiles -> Abs.Id

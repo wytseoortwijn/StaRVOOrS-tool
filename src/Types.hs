@@ -332,7 +332,7 @@ data Property = Property
   } | PNIL 
     | PINIT { piName  :: PropertyName 
             , tmpId   :: Id 
-            , bounds  :: [Id]
+            , bounds  :: Id
             , piProps :: Property
             }
          deriving (Show, Eq,Read)
