@@ -374,7 +374,7 @@ showWhere xs = " where { " ++ xs ++ " }"
 
 data CompoundTrigger =
    NormalEvent Binding Id [Bind] TriggerVariation
- | ClockEvent Id Integer
+ | ClockEvent Id Timeout Integer
  | OnlyId Id
  | OnlyIdPar Id
  | Collection TriggerList
@@ -385,7 +385,7 @@ updCEne (NormalEvent bind id bs tv) bind' = NormalEvent bind' id bs tv
 
 instance Show CompoundTrigger where
  show (NormalEvent b id binds tv) = show b ++ "." ++ id ++ "(" ++ intercalate "," (map show binds) ++ ")" ++ show tv
- show (ClockEvent id n)           = id ++ "@" ++ show n
+ show (ClockEvent id t n)         = id ++ show t ++ show n
  show (OnlyId id)                 = id
  show (OnlyIdPar id)              = id ++ "()"
  show (Collection tls)            = show tls
@@ -395,6 +395,13 @@ getCTVariation (NormalEvent _ _ _ tv) = tv
 
 getCTArgs :: CompoundTrigger -> [Bind]
 getCTArgs (NormalEvent _ _ bs _) = bs
+
+data Timeout = At | AtRep
+  deriving (Eq,Read)
+
+instance Show Timeout where
+ show At    = "@"
+ show AtRep = "@%"
 
 data TriggerVariation =
    EVEntry

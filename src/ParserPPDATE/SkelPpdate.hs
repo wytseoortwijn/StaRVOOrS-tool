@@ -63,9 +63,13 @@ transCompoundTrigger :: CompoundTrigger -> Result
 transCompoundTrigger x = case x of
   Collection triggerlist -> failure x
   NormalEvent binding id varss triggervariation -> failure x
-  ClockEvent id integer -> failure x
+  ClockEvent id timeout integer -> failure x
   OnlyId id -> failure x
   OnlyIdPar id -> failure x
+transTimeout :: Timeout -> Result
+transTimeout x = case x of
+  At -> failure x
+  AtRep -> failure x
 transTriggerList :: TriggerList -> Result
 transTriggerList x = case x of
   CECollection compoundtriggers -> failure x
