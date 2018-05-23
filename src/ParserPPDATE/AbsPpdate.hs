@@ -53,9 +53,12 @@ data Trigger = Trigger Id [Bind] CompoundTrigger WhereClause
 data CompoundTrigger
     = Collection TriggerList
     | NormalEvent Binding Id [Vars] TriggerVariation
-    | ClockEvent Id Integer
+    | ClockEvent Id Timeout Integer
     | OnlyId Id
     | OnlyIdPar Id
+  deriving (Eq, Ord, Show, Read)
+
+data Timeout = At | AtRep
   deriving (Eq, Ord, Show, Read)
 
 data TriggerList = CECollection [CompoundTrigger]

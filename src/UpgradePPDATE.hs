@@ -387,8 +387,9 @@ getCompTrigger ce =
                            let trv' = getTriggerVariation trv
                            tell s
                            return (NormalEvent (BindingVar (getBind_ bind)) id' bs trv')
-     Abs.ClockEvent id int -> do let id' = getIdAbs id
-                                 return (ClockEvent id' int)
+     Abs.ClockEvent id at int -> do let id' = getIdAbs id
+                                    let at' = getTimeout at 
+                                    return (ClockEvent id' at' int)
      Abs.OnlyId id         -> do let id' = getIdAbs id
                                  return (OnlyId id')
      Abs.OnlyIdPar id      -> do let id' = getIdAbs id
@@ -400,6 +401,10 @@ getCompTriggers (Abs.Collection (Abs.CECollection esl)) =
     ce <- sequence xs
     return (Collection (CECollection ce))
 getCompTriggers ce                                      = getCompTrigger ce
+
+getTimeout :: Abs.Timeout -> Timeout
+getTimeout Abs.At = At
+getTimeout Abs.AtRep = AtRep
 
 --Checks if the arguments in the triggers have the right form
 getBindsArgs :: [Abs.Bind] -> Writer String [Bind]

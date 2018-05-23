@@ -181,12 +181,17 @@ instance Print CompoundTrigger where
   prt i e = case e of
     Collection triggerlist -> prPrec i 0 (concatD [prt 0 triggerlist])
     NormalEvent binding id varss triggervariation -> prPrec i 0 (concatD [doc (showString "{"), prt 0 binding, prt 0 id, doc (showString "("), prt 0 varss, doc (showString ")"), prt 0 triggervariation, doc (showString "}")])
-    ClockEvent id n -> prPrec i 0 (concatD [doc (showString "{"), prt 0 id, doc (showString "@"), prt 0 n, doc (showString "}")])
+    ClockEvent id timeout n -> prPrec i 0 (concatD [doc (showString "{"), prt 0 id, prt 0 timeout, prt 0 n, doc (showString "}")])
     OnlyId id -> prPrec i 0 (concatD [doc (showString "{"), prt 0 id, doc (showString "}")])
     OnlyIdPar id -> prPrec i 0 (concatD [doc (showString "{"), prt 0 id, doc (showString "("), doc (showString ")"), doc (showString "}")])
   prtList _ [] = (concatD [])
   prtList _ [x] = (concatD [prt 0 x])
   prtList _ (x:xs) = (concatD [prt 0 x, doc (showString "|"), prt 0 xs])
+instance Print Timeout where
+  prt i e = case e of
+    At -> prPrec i 0 (concatD [doc (showString "@")])
+    AtRep -> prPrec i 0 (concatD [doc (showString "@%")])
+
 instance Print TriggerList where
   prt i e = case e of
     CECollection compoundtriggers -> prPrec i 0 (concatD [doc (showString "{"), prt 0 compoundtriggers, doc (showString "}")])

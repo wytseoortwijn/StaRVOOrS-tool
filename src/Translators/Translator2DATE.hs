@@ -153,7 +153,7 @@ getCpe :: CompoundTrigger -> String
 getCpe (Collection (CECollection xs)) = "{" ++ getCollectionCpeCompoundTrigger xs ++ "}"
 getCpe ce@(OnlyIdPar _)               = getCpeCompoundTrigger ce
 getCpe ce@(OnlyId _)                  = getCpeCompoundTrigger ce
-getCpe ce@(ClockEvent _ _)            = getCpeCompoundTrigger ce
+getCpe ce@(ClockEvent _ _ _)          = getCpeCompoundTrigger ce
 getCpe ce@(NormalEvent _ _ _ _)       = getCpeCompoundTrigger ce
 
 
@@ -165,7 +165,7 @@ getCollectionCpeCompoundTrigger (ce:y:ys) = getCpeCompoundTrigger ce ++ " | " ++
 getCpeCompoundTrigger :: CompoundTrigger -> String
 getCpeCompoundTrigger (OnlyIdPar id)                 = "{" ++ id ++ "()" ++ "}"
 getCpeCompoundTrigger (OnlyId id)                    = "{" ++ id ++ "}"
-getCpeCompoundTrigger (ClockEvent id n)              = "{" ++ id ++ "@" ++ show n ++ "}"
+getCpeCompoundTrigger (ClockEvent id at n)           = "{" ++ id ++ show at ++ show n ++ "}"
 getCpeCompoundTrigger (NormalEvent bind id bs ev)    = "{" ++ getBinding bind ++ id 
                                                         ++ "(" ++ getBindArgs bs ++ ")"
                                                         ++ getTriggerVariation' ev ++ "}"
@@ -599,7 +599,7 @@ instantiateCE (NormalEvent (BindingVar (BindIdCall id')) id bs tv) mp =
     then (NormalEvent (BindingVar (BindIdCall nid)) (instantiateArg mp id) bs tv,Nothing)
     else (NormalEvent (BindingVar (BindIdCall (nid++"_tmp"))) (instantiateArg mp id) bs tv, Just $ nid++"_tmp")
 instantiateCE (NormalEvent bind id bs tv) mp = (NormalEvent bind (instantiateArg mp id) bs tv, Nothing)
-instantiateCE (ClockEvent id n) mp           = (ClockEvent (instantiateArg mp id) n, Nothing)
+instantiateCE (ClockEvent id at n) mp        = (ClockEvent (instantiateArg mp id) at n, Nothing)
 instantiateCE (OnlyId id) mp                 = (OnlyId (instantiateArg mp id),Nothing)
 instantiateCE (OnlyIdPar id) mp              = (OnlyIdPar (instantiateArg mp id),Nothing)
 
