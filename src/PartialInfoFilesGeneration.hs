@@ -18,7 +18,7 @@ import Control.Lens hiding(Context,pre)
 -- Instrumented Java files generation --
 ----------------------------------------
 
-javaFilesGen :: UpgradePPD PPDATE -> FilePath -> FilePath -> [Flag] -> IO (UpgradePPD PPDATE)
+javaFilesGen :: UpgradePPD PPDATE -> FilePath -> FilePath -> Flags -> IO (UpgradePPD PPDATE)
 javaFilesGen ppdate jpath output_addr flags = 
  do putStrLn "Generating Java files to control the (partially proven) Hoare triple(s)."
     oldExpTypes <- inferTypesOldExprs ppdate jpath (output_addr ++ "workspace/")
@@ -28,7 +28,7 @@ javaFilesGen ppdate jpath output_addr flags =
     createDirectoryIfMissing True add
     createDirectoryIfMissing True (output_addr ++ annotated_add)
     htsJavaFileGen ppdate'' add
-    idFileGen add
+    idFileGen add flags
     cloningFileGen add
     oldExprFileGen add ppdate''
     templatesFileGen add ppdate''
@@ -170,14 +170,15 @@ lookforArgs (x:xs) e = if (fst x==e)
 -- IdPPD.java --
 ----------------
 
-idFileGen :: FilePath -> IO ()
-idFileGen output_add = writeFile (output_add ++ "IdPPD.java") idGen
-    
-idGen :: String
-idGen =
+idFileGen :: FilePath -> Flags -> IO ()
+idFileGen output_add flags = writeFile (output_add ++ "IdPPD.java") (idGen flags)
+     
+idGen :: Flags -> String
+idGen flags =
  "package ppArtifacts;\n\n"
-  ++ "public class IdPPD {\n\n"
-  ++ "  private static int count = 0; \n\n"
+  ++ importsID flags
+  ++ "public class IdPPD " ++ serialisedID flags
+  ++ "  private int count = 0; \n\n"
   ++ "  public IdPPD () { }\n\n"
   ++ "public Integer getNewId() {\n"
   ++ "  Integer r = new Integer(count);\n"
@@ -187,6 +188,19 @@ idGen =
   ++ "  return r;\n"
   ++ "}\n\n"
   ++ "}\n"
+
+importsID :: Flags -> String
+importsID flags = 
+ if elem Distributed flags
+ then "import java.io.Serializable;\n\n"
+ else ""
+
+serialisedID :: Flags -> String
+serialisedID flags = 
+ if elem Distributed flags
+ then "implements Serializable {\n\n"
+       ++ "  private static final long serialVersionUID = 1L;\n\n"
+ else "{\n\n"
 
 -------------------
 -- OldExpr Files --
